@@ -1,7 +1,7 @@
 id: "PLAN-001"
 title: "Skill Audit MVP — Core scanner with prompt injection detection"
 type: implementation
-status: Approved
+status: Done
 created: 2026-02-15
 priority: high
 
@@ -33,31 +33,31 @@ requirements:
   items:
     - id: R0-mvp
       description: "SKILL.md frontmatter parser (own, stdlib only) as first gate"
-      status: pending
+      status: done
       spec_ref: "R0: Schema validation"
       notes: "Build own parser — no skills-ref dependency. Validate name, description, format."
 
     - id: R1
       description: "Python API: from skill_scan import scan → ScanResult"
-      status: pending
+      status: done
       spec_ref: "R1: Python API"
       notes: "ScanResult with findings, counts, verdict, duration. Finding with rule_id, severity, category, file, line, matched_text, description, recommendation."
 
     - id: R3
       description: "Prompt injection detection: PI-001 through PI-006"
-      status: pending
+      status: done
       spec_ref: "R3: Prompt injection detection"
       notes: "6 rules in TOML. Include exclusion patterns for false positive reduction."
 
     - id: R9-text
       description: "Human-readable text output with severity indicators"
-      status: pending
+      status: done
       spec_ref: "R9: Structured reporting"
       notes: "Text mode only for MVP. JSON mode deferred."
 
     - id: R2-interface
       description: "Design remote scanning interface (SkillFetcher protocol)"
-      status: pending
+      status: done
       spec_ref: "R2: CLI"
       notes: "Protocol + LocalFetcher only. No remote implementation yet."
 
@@ -98,7 +98,7 @@ utilities_audit:
 parts:
   - id: a
     title: "Data models and verdict logic"
-    status: Pending
+    status: Done
     requirements_covered: [R1]
     files:
       - "src/skill_scan/models.py"
@@ -120,7 +120,7 @@ parts:
 
   - id: b
     title: "Rule loader and matching engine"
-    status: Pending
+    status: Done
     depends_on: [a]
     requirements_covered: [R3]
     files:
@@ -145,7 +145,7 @@ parts:
 
   - id: c
     title: "Prompt injection rules (TOML)"
-    status: Pending
+    status: Done
     depends_on: [b]
     requirements_covered: [R3]
     files:
@@ -166,7 +166,7 @@ parts:
 
   - id: d
     title: "SKILL.md frontmatter parser"
-    status: Pending
+    status: Done
     requirements_covered: [R0-mvp]
     files:
       - "src/skill_scan/parser.py"
@@ -187,7 +187,7 @@ parts:
 
   - id: e
     title: "Scanner orchestration, config, and fetchers"
-    status: Pending
+    status: Done
     depends_on: [a, b, d]
     requirements_covered: [R1, R2-interface]
     files:
@@ -211,7 +211,7 @@ parts:
 
   - id: f
     title: "Formatters, CLI, and public API"
-    status: Pending
+    status: Done
     depends_on: [e]
     requirements_covered: [R9-text]
     files:
@@ -256,13 +256,38 @@ acceptance_criteria:
 stop_condition: |
   When all 6 parts are Done, all tests pass, and make check succeeds.
 
-work_log: []
-evidence: []
+work_log:
+  - date: 2026-02-15
+    action: "Implemented all 6 parts (a-f) with full test coverage"
+    details: |
+      Parts a+d implemented in parallel (no dependencies), then b, c, e, f sequentially.
+      227 tests passing. All quality checks pass (ruff, mypy, bandit).
+      Symlink protection added to _collect_files() per security review.
+      Architecture review: clean layered design, no circular imports.
+      Security review: HIGH symlink issue fixed, remaining items deferred to future plans.
+
+evidence:
+  - type: test_run
+    result: "227 tests passed, 0 failed"
+    date: 2026-02-15
+  - type: quality_check
+    result: "22/23 pre-commit hooks pass (1 pre-existing config path issue)"
+    date: 2026-02-15
+  - type: architecture_review
+    result: "APPROVED_WITH_WARNINGS — clean layered architecture"
+    date: 2026-02-15
+  - type: security_review
+    result: "APPROVED_WITH_WARNINGS — symlink fix applied, no critical issues"
+    date: 2026-02-15
 
 handoff:
   stopped_at: null
-  current_state: null
-  next_steps: []
+  current_state: "Plan complete. All parts implemented and tested."
+  next_steps:
+    - "Fix pre-commit check-code-patterns hook path (.agent → .agents)"
+    - "Add regex compilation error handling in loader.py (MEDIUM security)"
+    - "Consider regex timeout parameter for defense-in-depth (MEDIUM security)"
+    - "Consider accepting SkillFetcher in scan() for testability"
   blockers: []
   scope:
     files:

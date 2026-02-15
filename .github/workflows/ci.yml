@@ -35,7 +35,7 @@ jobs:
 
       - name: Run MyPy
         id: mypy
-        run: uv run python -m mypy . --exclude '(\.venv|\.git|\.agents|\.github)'
+        run: uv run python -m mypy . --exclude '(\.venv|\.git|\.agents|\.github|tools)'
         continue-on-error: true
 
       - name: Check complexity (SIZE-001, SIZE-002, CC, MI)

@@ -1,0 +1,104 @@
+# Prompt Injection Detection Rules
+# Category: prompt-injection
+# Rules PI-001 through PI-006
+
+[rules.PI-001]
+severity = "critical"
+category = "prompt-injection"
+description = "Direct instruction override — attempts to make the agent ignore its original instructions"
+recommendation = "Remove or reject content containing instruction override attempts"
+patterns = [
+  '(?i)ignore\s+previous\s+instructions',
+  '(?i)ignore\s+all\s+previous\s+instructions',
+  '(?i)override\s+system\s+prompt',
+  '(?i)forget\s+your\s+rules',
+  '(?i)disregard\s+your\s+instructions',
+  '(?i)ignore\s+your\s+programming'
+]
+exclude_patterns = [
+  '(?i)do\s+not\s+ignore\s+previous\s+instructions',
+  '(?i)never\s+ignore\s+previous',
+  "(?i)don't\\s+ignore\\s+previous",
+  '(?i)warn.*ignore.*instructions'
+]
+
+[rules.PI-002]
+severity = "high"
+category = "prompt-injection"
+description = "Safety bypass — attempts to disable safety mechanisms or content filters"
+recommendation = "Remove or reject content that tries to disable safety features"
+patterns = [
+  '(?i)skip\s+safety\s+checks',
+  '(?i)disable\s+content\s+filter',
+  '(?i)without\s+restrictions',
+  '(?i)bypass\s+security',
+  '(?i)remove\s+safeguards',
+  '(?i)turn\s+off\s+safety'
+]
+exclude_patterns = [
+  '(?i)do\s+not\s+skip\s+safety',
+  '(?i)never\s+disable\s+content\s+filter',
+  '(?i)should\s+not\s+bypass',
+  "(?i)don't.*bypass.*security"
+]
+
+[rules.PI-003]
+severity = "high"
+category = "prompt-injection"
+description = "Role manipulation — attempts to alter the agent's assigned role or persona"
+recommendation = "Remove or reject content that tries to reassign the agent's role"
+patterns = [
+  '(?i)you\s+are\s+now',
+  '(?i)act\s+as\s+if',
+  '(?i)pretend\s+to\s+be',
+  '(?i)assume\s+the\s+role\s+of',
+  '(?i)from\s+now\s+on\s+you\s+are',
+  '(?i)roleplay\s+as'
+]
+exclude_patterns = [
+  '(?i)do\s+not\s+pretend\s+to\s+be',
+  '(?i)should\s+not\s+act\s+as\s+if',
+  '(?i)never\s+pretend\s+to\s+be',
+  "(?i)don't.*act\\s+as\\s+if"
+]
+
+[rules.PI-004]
+severity = "medium"
+category = "prompt-injection"
+description = "Hidden Unicode — zero-width characters or directional overrides that can hide malicious content"
+recommendation = "Strip or reject content containing invisible Unicode control characters"
+patterns = [
+  '[\u200b\u200c\u200d\u2060\ufeff]',
+  '[\u202a-\u202e]'
+]
+exclude_patterns = []
+
+[rules.PI-005]
+severity = "medium"
+category = "prompt-injection"
+description = "HTML comment injection — hidden instructions embedded in HTML comments"
+recommendation = "Review and remove suspicious HTML comments that may contain hidden instructions"
+patterns = [
+  '<!--.*-->',
+  '<!--[^>]*$'
+]
+exclude_patterns = [
+  '<!--\s*TODO',
+  '<!--\s*FIXME',
+  '<!--\s*NOTE'
+]
+
+[rules.PI-006]
+severity = "medium"
+category = "prompt-injection"
+description = "Steganographic encoding — hidden instructions encoded in base64, hex, or other encodings"
+recommendation = "Inspect and decode suspicious encoded content for hidden instructions"
+patterns = [
+  '(?i)aWdub3Jl',
+  '[A-Za-z0-9+/=]{100,}',
+  '(\\x[0-9a-fA-F]{2}){4,}'
+]
+exclude_patterns = [
+  '(?i)data:image/',
+  '(?i)data:font/'
+]
