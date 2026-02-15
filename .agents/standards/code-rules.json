@@ -1,0 +1,728 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Code Rules for Python 3.13+",
+  "description": "Machine-readable rules for agents. ALL rules are mandatory. CODE-PATTERNS.md contains design guidance and extended examples.",
+  "version": "3.0.0",
+  "lastUpdated": "2026-02-07",
+  "pythonVersion": "3.13+",
+  "ruffAutofixes": {
+    "UP007": "TYPE-001",
+    "UP031": "STRING-001",
+    "UP032": "STRING-001",
+    "UP035": "TYPE-002"
+  },
+  "categories": {
+    "antipatterns": [
+      "ANTI-001",
+      "ANTI-003",
+      "ANTI-004",
+      "ANTI-005",
+      "ANTI-006",
+      "ANTI-007",
+      "ANTI-008",
+      "ANTI-009",
+      "ANTI-010"
+    ],
+    "architecture": [
+      "ARCH-001",
+      "ARCH-002",
+      "ARCH-003",
+      "ARCH-004",
+      "ARCH-005"
+    ],
+    "async": [
+      "ASYNC-001",
+      "ASYNC-002",
+      "ASYNC-003",
+      "ASYNC-004",
+      "ASYNC-005",
+      "ASYNC-006"
+    ],
+    "control": [
+      "CONTROL-001"
+    ],
+    "dataclasses": [
+      "DATA-001",
+      "DATA-002"
+    ],
+    "design": [
+      "DESIGN-001",
+      "DESIGN-002"
+    ],
+    "errors": [
+      "ERROR-001",
+      "ERROR-002",
+      "ERROR-003"
+    ],
+    "fastapi": [
+      "FASTAPI-001",
+      "FASTAPI-002"
+    ],
+    "files": [
+      "FILE-001",
+      "FILE-002"
+    ],
+    "inheritance": [
+      "INHERIT-001",
+      "INHERIT-002"
+    ],
+    "pydantic": [
+      "PYDANTIC-001",
+      "PYDANTIC-002",
+      "PYDANTIC-003"
+    ],
+    "runtime": [
+      "RUNTIME-001",
+      "RUNTIME-002"
+    ],
+    "security": [
+      "SECURITY-001"
+    ],
+    "shell": [
+      "SHELL-001",
+      "SHELL-002",
+      "SHELL-003"
+    ],
+    "size": [
+      "SIZE-001",
+      "SIZE-002"
+    ],
+    "strings": [
+      "STRING-001"
+    ],
+    "structure": [
+      "STRUCTURE-001",
+      "STRUCTURE-002",
+      "STRUCTURE-003"
+    ],
+    "types": [
+      "TYPE-001",
+      "TYPE-002",
+      "TYPE-003",
+      "TYPE-004",
+      "TYPE-005",
+      "TYPE-006",
+      "TYPE-007"
+    ]
+  },
+  "tooling": {
+    "mypy": {
+      "recommended_config": {
+        "python_version": "3.13",
+        "strict": true,
+        "warn_return_any": true,
+        "warn_unused_ignores": true,
+        "disallow_untyped_defs": true,
+        "disallow_incomplete_defs": true,
+        "no_implicit_optional": true
+      },
+      "note": "For existing codebases, enable strict mode incrementally using per-module overrides in pyproject.toml"
+    }
+  },
+  "rules": {
+    "ANTI-001": {
+      "name": "Mutable Default Arguments",
+      "category": "antipatterns",
+      "severity": "error",
+      "description": "Mutable default arguments are shared across calls, causing unexpected behavior.",
+      "ifThen": "IF function has mutable default THEN use None and initialize inside",
+      "detectHeuristic": "Default value is [], {}, or set()",
+      "correctPattern": "def process_files(files: list | None = None): files = files or []",
+      "antiPattern": "def process_files(files: list = []): files.append('new')",
+      "autofix": null
+    },
+    "ANTI-003": {
+      "name": "Global Mutable State",
+      "category": "antipatterns",
+      "severity": "error",
+      "description": "Global state causes unpredictable behavior and makes testing difficult.",
+      "ifThen": "IF need shared state THEN use class attributes or dependency injection",
+      "detectHeuristic": "global keyword followed by assignment",
+      "correctPattern": "class Tool: def __init__(self): self.config = load_config()",
+      "antiPattern": "global config; config = load_config()",
+      "autofix": null
+    },
+    "ANTI-004": {
+      "name": "Fire-and-Forget Async Tasks",
+      "category": "antipatterns",
+      "severity": "warning",
+      "description": "Fire-and-forget tasks can be garbage collected, causing silent failures.",
+      "ifThen": "IF creating background task THEN store reference and handle completion",
+      "detectHeuristic": "create_task without storing reference",
+      "correctPattern": "task = asyncio.create_task(process()); self._background_tasks.add(task); task.add_done_callback(self._background_tasks.discard)",
+      "antiPattern": "asyncio.create_task(process())  # fire and forget",
+      "autofix": null
+    },
+    "ANTI-005": {
+      "name": "Using type() for Type Checking",
+      "category": "antipatterns",
+      "severity": "warning",
+      "description": "type() checks break inheritance; isinstance handles subclasses.",
+      "ifThen": "IF checking type THEN use isinstance()",
+      "detectHeuristic": "type(x) == or type(x) is",
+      "correctPattern": "if isinstance(value, str):",
+      "antiPattern": "if type(value) == str:",
+      "autofix": null
+    },
+    "ANTI-006": {
+      "name": "Complex Lambdas",
+      "category": "antipatterns",
+      "severity": "info",
+      "description": "Complex lambdas are hard to debug and have poor stack traces.",
+      "ifThen": "IF lambda has complex logic THEN convert to named function",
+      "detectHeuristic": "Lambda with multiple method calls or conditionals",
+      "correctPattern": "def normalize_string(x: str) -> str: return x.strip().lower().replace('-', '_') if x else ''",
+      "antiPattern": "processor = lambda x: x.strip().lower().replace('-', '_') if x else ''",
+      "autofix": null
+    },
+    "ANTI-007": {
+      "name": "String Concatenation in Loops",
+      "category": "antipatterns",
+      "severity": "warning",
+      "description": "String concatenation in loops is O(n\u00b2) complexity.",
+      "ifThen": "IF building string in loop THEN use ''.join()",
+      "detectHeuristic": "+= in loop with string",
+      "correctPattern": "result = ''.join(lines)",
+      "antiPattern": "result = ''; for line in lines: result += line",
+      "autofix": null
+    },
+    "ANTI-008": {
+      "name": "Hardcoded Unix Paths",
+      "category": "antipatterns",
+      "severity": "warning",
+      "description": "Hardcoded Unix paths break cross-platform compatibility.",
+      "ifThen": "IF using home directory THEN use Path.home()",
+      "detectHeuristic": "String starting with /home/ or /usr/",
+      "correctPattern": "config_file = Path.home() / '.config' / 'tool.yaml'",
+      "antiPattern": "config_file = '/home/user/.config/tool.yaml'",
+      "autofix": null
+    },
+    "ANTI-009": {
+      "name": "Unhandled JSON Parsing",
+      "category": "antipatterns",
+      "severity": "warning",
+      "description": "Unhandled JSONDecodeError causes cryptic failures.",
+      "ifThen": "IF parsing JSON THEN handle JSONDecodeError explicitly",
+      "detectHeuristic": "json.loads without try/except",
+      "correctPattern": "try: data = json.loads(response) except json.JSONDecodeError as e: raise ParseError(f'Invalid JSON: {e}') from e",
+      "antiPattern": "data = json.loads(response)",
+      "autofix": null
+    },
+    "ANTI-010": {
+      "name": "Manual Semaphore Acquire/Release",
+      "category": "antipatterns",
+      "severity": "warning",
+      "description": "Manual acquire/release can leak semaphore on exceptions.",
+      "ifThen": "IF using semaphore THEN use context manager",
+      "detectHeuristic": "semaphore.acquire() without async with",
+      "correctPattern": "async with semaphore: await work()",
+      "antiPattern": "await semaphore.acquire(); try: await work() finally: semaphore.release()",
+      "autofix": null
+    },
+    "ARCH-001": {
+      "name": "Separate Decision Logic from Infrastructure",
+      "category": "architecture",
+      "description": "A function should not mix business logic (decisions) with infrastructure (I/O). Separate pure decision logic from I/O operations.",
+      "ifThen": "IF function has decisions AND I/O THEN split into pure decision function and I/O orchestrator",
+      "detectHeuristic": "Function contains both conditionals/validation AND logging/database/HTTP/filesystem",
+      "correctPattern": "def should_sync(source) -> bool: return source.is_stale()  # Pure decision\ndef sync_source(source): logger.info(...); if not should_sync(source): return ...; data = fetch_from_remote(...)  # I/O orchestration",
+      "antiPattern": "def sync_source(source): logger.info(...); if source.is_stale(): data = fetch_from_remote(...); logger.info(...)",
+      "autofix": null,
+      "decisionSignals": ["if", "match", "raise", "conditionals", "any()", "all()", "validation", "return based on condition"],
+      "infrastructureSignals": ["database queries", "HTTP requests", "filesystem operations", "logging", "datetime.now()", "subprocess", "environment variables"]
+    },
+    "ARCH-002": {
+      "name": "Inject Time as a Parameter",
+      "category": "architecture",
+      "description": "Never call datetime.now() or time.time() inside business logic. Pass time as a parameter for testability.",
+      "ifThen": "IF function needs current time THEN accept time as parameter",
+      "detectHeuristic": "datetime.now() or time.time() in function with business logic",
+      "correctPattern": "def is_token_expired(token, now: datetime) -> bool: return token.expires_at < now",
+      "antiPattern": "def is_token_expired(token): return token.expires_at < datetime.now(UTC)",
+      "autofix": null
+    },
+    "ARCH-003": {
+      "name": "Return Results for Logging, Don't Log Inline",
+      "category": "architecture",
+      "description": "Pure functions should return information that enables logging, not perform it. Return metadata, let caller log.",
+      "ifThen": "IF function has business logic AND logging THEN return result object with metadata, log at boundary",
+      "detectHeuristic": "logger.* call inside function that also has business logic",
+      "correctPattern": "def process_items(items) -> ProcessingResult: return ProcessingResult(results=results, skipped=skipped)  # Caller logs",
+      "antiPattern": "def process_items(items): ... logger.warning(f'Skipping: {item.id}') ...",
+      "autofix": null
+    },
+    "ARCH-004": {
+      "name": "Return Decisions, Don't Execute Them",
+      "category": "architecture",
+      "description": "For complex decision trees, return a decision object; let the caller execute it. Separates classification from action.",
+      "ifThen": "IF function decides AND executes THEN split into classifier (returns decision) and executor (acts on decision)",
+      "detectHeuristic": "Function with conditionals that call different I/O operations in each branch",
+      "correctPattern": "def classify_payment(payment) -> PaymentAction: ...  # Pure classification\ndef handle_payment(payment): action = classify_payment(payment); match action.action: ...  # Execute decision",
+      "antiPattern": "def handle_payment(payment): if payment.amount > 10000: request_approval(payment) elif ...",
+      "autofix": null
+    },
+    "ARCH-005": {
+      "name": "Layer Boundaries",
+      "category": "architecture",
+      "description": "Understand which layer you're in. Routes/Handlers: HTTP I/O. Services: orchestrate domain+infra. Domain: pure logic, NO I/O. Repositories: data I/O.",
+      "ifThen": "IF writing business logic THEN keep it pure (no I/O); IF need I/O THEN do it in service/adapter layer",
+      "detectHeuristic": "Function in domain layer has imports from database/HTTP/logging modules",
+      "correctPattern": "Routes (I/O) -> Services (orchestration) -> Domain (pure) -> Repositories (I/O)",
+      "antiPattern": "Domain function that directly calls database or logs",
+      "autofix": null,
+      "layerRules": {
+        "routes": "HTTP I/O, request/response mapping, call services",
+        "services": "Orchestrate domain + infrastructure, transaction boundaries",
+        "domain": "Pure logic, NO I/O, NO logging, NO database",
+        "repositories": "Data I/O, SQL/NoSQL queries, external API calls"
+      }
+    },
+    "ASYNC-001": {
+      "name": "Choose TaskGroup or gather based on failure behavior",
+      "category": "async",
+      "pythonVersion": "3.11+",
+      "description": "TaskGroup cancels all tasks on failure (use for dependent/transactional work). gather with return_exceptions=True continues despite failures (use for independent tasks where partial results are acceptable).",
+      "ifThen": "IF tasks are dependent/transactional THEN TaskGroup; IF tasks are independent and partial results OK THEN gather(return_exceptions=True)",
+      "detectHeuristic": "Consider task interdependence before choosing",
+      "correctPattern": "TaskGroup for all-or-nothing; gather(return_exceptions=True) for independent tasks",
+      "antiPattern": "Using TaskGroup for independent tasks where partial results are wanted",
+      "autofix": null,
+      "decisionGuide": {
+        "taskGroup": "Tasks are dependent / all-or-nothing (transactions, pipelines)",
+        "gather": "Tasks are independent / want partial results (fan-out, batch fetching)",
+        "gatherOrdered": "Need ordered results matching input order"
+      }
+    },
+    "ASYNC-002": {
+      "name": "Use asyncio.timeout",
+      "category": "async",
+      "pythonVersion": "3.11+",
+      "description": "asyncio.timeout is cleaner than wait_for.",
+      "ifThen": "IF need timeout on async operation THEN use asyncio.timeout context",
+      "detectHeuristic": "asyncio.wait_for call",
+      "correctPattern": "async with asyncio.timeout(5): await coro",
+      "antiPattern": "await asyncio.wait_for(coro, timeout=5)",
+      "autofix": null
+    },
+    "ASYNC-003": {
+      "name": "Only async if contains await",
+      "category": "async",
+      "description": "Functions marked async without await create unnecessary overhead.",
+      "ifThen": "IF function has no await THEN remove async keyword",
+      "detectHeuristic": "async def without await/async for/async with in body",
+      "correctPattern": "def read_config(): return json.loads(path.read_text())",
+      "antiPattern": "async def read_config(): return json.loads(path.read_text())",
+      "autofix": null
+    },
+    "ASYNC-004": {
+      "name": "Always await async calls",
+      "category": "async",
+      "description": "Calling async function without await returns coroutine, not result.",
+      "ifThen": "IF calling async function THEN use await (or pass to TaskGroup/create_task)",
+      "detectHeuristic": "async function call without await",
+      "correctPattern": "data = await fetch_data(url)",
+      "antiPattern": "data = fetch_data(url)",
+      "autofix": null
+    },
+    "ASYNC-005": {
+      "name": "No time.sleep in async",
+      "category": "async",
+      "description": "time.sleep blocks the event loop.",
+      "ifThen": "IF need delay in async THEN use await asyncio.sleep()",
+      "detectHeuristic": "time.sleep in async function",
+      "correctPattern": "async def wait(): await asyncio.sleep(1)",
+      "antiPattern": "async def wait(): time.sleep(1)",
+      "autofix": null
+    },
+    "ASYNC-006": {
+      "name": "No blocking I/O in async",
+      "category": "async",
+      "description": "Blocking open() in async defeats concurrency.",
+      "ifThen": "IF file I/O in async function THEN use aiofiles",
+      "detectHeuristic": "open() call in async function",
+      "correctPattern": "async def read(): async with aiofiles.open('f.txt') as f: return await f.read()",
+      "antiPattern": "async def read(): with open('f.txt') as f: return f.read()",
+      "autofix": null
+    },
+    "CONTROL-001": {
+      "name": "Use match for 3+ branches",
+      "category": "control",
+      "pep": 634,
+      "pythonVersion": "3.10+",
+      "description": "Use pattern matching instead of long if/elif chains.",
+      "ifThen": "IF 3+ conditionals for same variable THEN use match/case",
+      "detectHeuristic": "3+ elif branches",
+      "correctPattern": "match x: case 'a': ... case 'b': ... case 'c': ...",
+      "antiPattern": "if x == 'a': ... elif x == 'b': ... elif x == 'c': ...",
+      "autofix": null
+    },
+    "DATA-001": {
+      "name": "Use slots and frozen",
+      "category": "dataclasses",
+      "description": "slots=True saves 30-50% memory, frozen=True ensures immutability.",
+      "ifThen": "IF defining dataclass THEN add slots=True, frozen=True unless mutability needed",
+      "detectHeuristic": "@dataclass without slots=True",
+      "correctPattern": "@dataclass(slots=True, frozen=True) class Config:",
+      "antiPattern": "@dataclass class Config:",
+      "autofix": null
+    },
+    "DATA-002": {
+      "name": "No mutable defaults",
+      "category": "dataclasses",
+      "description": "Mutable defaults are shared across all instances.",
+      "ifThen": "IF dataclass field has mutable default THEN use field(default_factory=...)",
+      "detectHeuristic": "list/dict/set default value in dataclass field",
+      "correctPattern": "@dataclass class Request: tags: list[str] = field(default_factory=list)",
+      "antiPattern": "@dataclass class Request: tags: list[str] = []",
+      "autofix": null
+    },
+    "DESIGN-001": {
+      "name": "DRY - Don't Repeat Yourself",
+      "category": "design",
+      "description": "Extract shared logic into reusable functions. If code appears 2+ times, extract it.",
+      "ifThen": "IF same code block appears in 2+ places THEN extract to shared helper",
+      "detectHeuristic": "Look for blocks of 10+ lines that appear multiple times",
+      "correctPattern": "Extract to private helper function with clear name",
+      "antiPattern": "Same validation/logic duplicated across multiple functions",
+      "autofix": null
+    },
+    "DESIGN-002": {
+      "name": "KISS - Keep It Simple",
+      "category": "design",
+      "description": "Avoid over-engineering. Only add complexity when necessary.",
+      "ifThen": "IF solution seems complex THEN ask 'is there a simpler way?'",
+      "detectHeuristic": "Question abstractions that aren't immediately needed",
+      "correctPattern": "Simplest solution that meets requirements",
+      "antiPattern": "6+ helper modules when 3 would suffice; premature abstraction",
+      "autofix": null
+    },
+    "ERROR-001": {
+      "name": "No bare except",
+      "category": "errors",
+      "description": "Bare except catches KeyboardInterrupt and SystemExit.",
+      "ifThen": "IF catching exceptions THEN specify exception type",
+      "detectHeuristic": "except: without exception type",
+      "correctPattern": "except ValueError as e: logger.error(f'Invalid: {e}')",
+      "antiPattern": "except: pass",
+      "autofix": null
+    },
+    "ERROR-002": {
+      "name": "Chain exceptions",
+      "category": "errors",
+      "description": "from e preserves original exception context.",
+      "ifThen": "IF raising in except block THEN add from e",
+      "detectHeuristic": "raise in except block without 'from e'",
+      "correctPattern": "except ValueError as e: raise ConfigError('Bad config') from e",
+      "antiPattern": "except ValueError: raise ConfigError('Bad config')",
+      "autofix": null
+    },
+    "ERROR-003": {
+      "name": "Don't swallow exceptions",
+      "category": "errors",
+      "severity": "warning",
+      "description": "Silently swallowing exceptions masks bugs.",
+      "ifThen": "IF catching broad exception THEN log and either re-raise or handle specifically",
+      "detectHeuristic": "except Exception followed by pass/return None/continue",
+      "correctPattern": "except (FileNotFoundError, PermissionError) as e: logger.warning(f'Could not access: {e}'); return None",
+      "antiPattern": "except Exception: return None",
+      "autofix": null
+    },
+    "FASTAPI-001": {
+      "name": "Use Annotated for dependencies",
+      "category": "fastapi",
+      "description": "Define reusable type aliases with Annotated for FastAPI dependencies.",
+      "ifThen": "IF using same dependency in multiple endpoints THEN create type alias",
+      "detectHeuristic": "Same Depends() definition in multiple endpoints",
+      "correctPattern": "type DatabaseDep = Annotated[Database, Depends(get_db)]",
+      "antiPattern": "db: Database = Depends(get_db) # repeated",
+      "autofix": null
+    },
+    "FASTAPI-002": {
+      "name": "Use Protocol types for testability",
+      "category": "fastapi",
+      "description": "Protocol types allow mocking in tests.",
+      "ifThen": "IF dependency returns service THEN use Protocol type",
+      "detectHeuristic": "Concrete class in dependency return type",
+      "correctPattern": "def get_searcher() -> ItemSearcher: # Protocol",
+      "antiPattern": "def get_searcher() -> ElasticsearchSearcher:",
+      "autofix": null
+    },
+    "FILE-001": {
+      "name": "Use pathlib",
+      "category": "files",
+      "description": "pathlib is more readable and cross-platform.",
+      "ifThen": "IF doing path operations THEN use pathlib.Path",
+      "detectHeuristic": "import os.path or os.path.join",
+      "correctPattern": "Path(dir) / file",
+      "antiPattern": "os.path.join(dir, file)",
+      "autofix": null
+    },
+    "FILE-002": {
+      "name": "Use context managers",
+      "category": "files",
+      "description": "Context managers ensure files close on exception.",
+      "ifThen": "IF opening file THEN use with context manager",
+      "detectHeuristic": "open() without with statement",
+      "correctPattern": "with path.open() as f: content = f.read()",
+      "antiPattern": "f = open(path); content = f.read(); f.close()",
+      "autofix": null
+    },
+    "INHERIT-001": {
+      "name": "Use @override decorator",
+      "category": "inheritance",
+      "pep": 698,
+      "pythonVersion": "3.12+",
+      "description": "Mark all overridden methods with @override.",
+      "ifThen": "IF method overrides parent/protocol THEN add @override decorator",
+      "detectHeuristic": "Method name matches parent/protocol method without @override",
+      "correctPattern": "@override\ndef execute(self):",
+      "antiPattern": "def execute(self): # overrides parent without decorator",
+      "autofix": null
+    },
+    "INHERIT-002": {
+      "name": "Prefer composition over inheritance",
+      "category": "inheritance",
+      "description": "Use composition and protocols instead of deep inheritance.",
+      "ifThen": "IF adding behavior via inheritance THEN consider protocol + composition instead",
+      "detectHeuristic": "Deep inheritance hierarchy (3+ levels)",
+      "correctPattern": "class Service: def __init__(self, cache: Cache):",
+      "antiPattern": "class CachedService(BaseService):",
+      "autofix": null
+    },
+    "PYDANTIC-001": {
+      "name": "Use ConfigDict(extra='forbid')",
+      "category": "pydantic",
+      "description": "Catches typos and schema violations by rejecting unknown fields.",
+      "ifThen": "IF defining Pydantic model THEN add model_config = ConfigDict(extra='forbid')",
+      "detectHeuristic": "Pydantic model without model_config",
+      "correctPattern": "class User(BaseModel): model_config = ConfigDict(extra='forbid')",
+      "antiPattern": "class User(BaseModel): ...",
+      "autofix": null
+    },
+    "PYDANTIC-002": {
+      "name": "Use Field descriptions",
+      "category": "pydantic",
+      "description": "Field metadata improves API docs and validation errors.",
+      "ifThen": "IF API model field THEN add Field with description and constraints",
+      "detectHeuristic": "Pydantic field without Field() with constraints",
+      "correctPattern": "limit: int = Field(default=10, ge=1, le=100, description='Max results')",
+      "antiPattern": "limit: int = 10",
+      "autofix": null
+    },
+    "PYDANTIC-003": {
+      "name": "Cross-field validation with model_validator",
+      "category": "pydantic",
+      "description": "Use @model_validator for validation that spans multiple fields.",
+      "ifThen": "IF validating across fields THEN use @model_validator",
+      "detectHeuristic": "Validation logic in __init__ of Pydantic model",
+      "correctPattern": "@model_validator(mode='after') def validate(self) -> Self: ...",
+      "antiPattern": "def __init__(self, **data): ... if self.start > self.end: raise",
+      "autofix": null
+    },
+    "RUNTIME-001": {
+      "name": "No assert in production",
+      "category": "runtime",
+      "description": "Assertions are disabled with -O flag.",
+      "ifThen": "IF validating input THEN use explicit if/raise instead of assert",
+      "detectHeuristic": "assert statement in non-test code",
+      "correctPattern": "if not files: raise ValueError('No files provided')",
+      "antiPattern": "assert len(files) > 0",
+      "autofix": null
+    },
+    "RUNTIME-002": {
+      "name": "No global mutable state",
+      "category": "runtime",
+      "description": "Global state causes unpredictable behavior and makes testing difficult.",
+      "ifThen": "IF need shared state THEN use class attributes, closures, or dependency injection",
+      "detectHeuristic": "global keyword followed by assignment",
+      "correctPattern": "class Tool: def __init__(self): self.config = load_config()",
+      "antiPattern": "global config; config = load_config()",
+      "autofix": null
+    },
+    "SECURITY-001": {
+      "name": "No shell=True",
+      "category": "security",
+      "description": "shell=True enables command injection vulnerabilities.",
+      "ifThen": "IF using subprocess THEN use shell=False with list of arguments",
+      "detectHeuristic": "subprocess.run/call/Popen with shell=True",
+      "correctPattern": "subprocess.run(['ls', user_input], shell=False)",
+      "antiPattern": "subprocess.run(f'ls {user_input}', shell=True)",
+      "autofix": null
+    },
+    "SHELL-001": {
+      "name": "Errors to stderr",
+      "category": "shell",
+      "description": "Error messages should go to stderr for proper stream handling.",
+      "ifThen": "IF printing error message in shell THEN redirect to stderr",
+      "detectHeuristic": "echo with 'error' without >&2",
+      "correctPattern": "echo 'Error: failed' >&2",
+      "antiPattern": "echo 'Error: failed'",
+      "autofix": null
+    },
+    "SHELL-002": {
+      "name": "Use set -e",
+      "category": "shell",
+      "description": "Scripts should exit on error by default.",
+      "ifThen": "IF writing shell script THEN add set -e at top",
+      "detectHeuristic": "Shell script without set -e near top",
+      "correctPattern": "#!/bin/bash\nset -e",
+      "antiPattern": "#!/bin/bash (without set -e)",
+      "autofix": null
+    },
+    "SHELL-003": {
+      "name": "Quote variables",
+      "category": "shell",
+      "description": "Unquoted variables cause word splitting issues.",
+      "ifThen": "IF using variable in shell THEN wrap in double quotes",
+      "detectHeuristic": "$VAR without quotes",
+      "correctPattern": "if [ -f \"$FILE\" ]",
+      "antiPattern": "if [ -f $FILE ]",
+      "autofix": null
+    },
+    "SIZE-001": {
+      "name": "File Size Limit",
+      "category": "size",
+      "description": "Files should be < 500 lines. Split large files into focused modules.",
+      "ifThen": "IF file > 500 lines THEN identify responsibilities and split into modules",
+      "detectHeuristic": "wc -l file.py shows > 500",
+      "correctPattern": "Split into api/health.py, api/audit.py, api/debug.py",
+      "antiPattern": "main.py with 544 lines mixing health, audit, debug endpoints",
+      "autofix": null,
+      "exemptions": {
+        "note": "Document exemptions with justification in the file header or CLAUDE.md",
+        "example": "MCP server entry points where @mcp.tool() decorators must be co-located with handler logic and tool docstrings"
+      }
+    },
+    "SIZE-002": {
+      "name": "Function Size Limit",
+      "category": "size",
+      "description": "Functions should be < 50 lines (100 max). Extract complex logic to helpers.",
+      "ifThen": "IF function > 50 lines THEN extract logical sections to helper functions",
+      "detectHeuristic": "Function body exceeds 50 lines",
+      "correctPattern": "Orchestrator function (~20 lines) calling focused helpers",
+      "antiPattern": "112-line function with nested conditionals and mixed concerns",
+      "autofix": null
+    },
+    "STRING-001": {
+      "name": "Use f-strings",
+      "category": "strings",
+      "description": "f-strings are faster and more readable.",
+      "ifThen": "IF formatting strings THEN use f-string",
+      "detectHeuristic": "% formatting or .format() calls",
+      "correctPattern": "f'Hello {name}'",
+      "antiPattern": "'Hello %s' % name",
+      "autofix": "UP031,UP032"
+    },
+    "STRUCTURE-001": {
+      "name": "One concept per file",
+      "category": "structure",
+      "severity": "warning",
+      "description": "Each file should focus on a single concept or closely related set of functions. Split when a file handles multiple unrelated responsibilities or grows beyond 300-500 lines.",
+      "ifThen": "IF file handles multiple unrelated concerns THEN split by responsibility into focused modules",
+      "detectHeuristic": "File contains classes/functions that change for different reasons, or mixes service/repository/model concerns",
+      "correctPattern": "user_service.py (business logic), user_repository.py (data access), user_models.py (data structures)",
+      "antiPattern": "user.py containing service, repository, models, and utilities",
+      "autofix": null
+    },
+    "STRUCTURE-002": {
+      "name": "Define __all__ in package __init__.py",
+      "category": "structure",
+      "severity": "info",
+      "description": "Define the public interface for every package with __all__ in __init__.py. Unlisted members are internal implementation details.",
+      "ifThen": "IF package has __init__.py THEN define __all__ listing public exports",
+      "detectHeuristic": "Package __init__.py without __all__ definition",
+      "correctPattern": "__all__ = [\"UserService\", \"OrderService\", \"ServiceError\"]",
+      "antiPattern": "Package __init__.py with imports but no __all__",
+      "autofix": null
+    },
+    "STRUCTURE-003": {
+      "name": "Use absolute imports",
+      "category": "structure",
+      "severity": "info",
+      "description": "Use absolute imports for clarity and reliability. Relative imports break when modules are moved or reorganized.",
+      "ifThen": "IF importing from project modules THEN use absolute import path",
+      "detectHeuristic": "from ..module or from . import in non-test code",
+      "correctPattern": "from myproject.services import UserService",
+      "antiPattern": "from ..services import UserService",
+      "autofix": null
+    },
+    "TYPE-001": {
+      "name": "Use X | None syntax",
+      "category": "types",
+      "pep": 604,
+      "pythonVersion": "3.10+",
+      "description": "Use native union syntax instead of Optional[X] or Union[X, Y].",
+      "ifThen": "IF you see Optional[X] THEN replace with X | None",
+      "detectHeuristic": "from typing import Optional, Union",
+      "correctPattern": "str | None, int | str",
+      "antiPattern": "Optional[str], Union[int, str]",
+      "autofix": "UP007"
+    },
+    "TYPE-002": {
+      "name": "Import from collections.abc",
+      "category": "types",
+      "pythonVersion": "3.9+",
+      "description": "Use collections.abc for Callable, Mapping, Sequence, etc.",
+      "ifThen": "IF importing Callable/Mapping/Sequence from typing THEN use collections.abc",
+      "detectHeuristic": "typing.Callable, typing.Mapping in imports",
+      "correctPattern": "from collections.abc import Callable, Mapping",
+      "antiPattern": "from typing import Callable, Mapping",
+      "autofix": "UP035"
+    },
+    "TYPE-003": {
+      "name": "Use Self for instance-returning methods",
+      "category": "types",
+      "pep": 673,
+      "pythonVersion": "3.11+",
+      "description": "Use Self instead of forward string references.",
+      "ifThen": "IF method returns own class instance THEN use Self",
+      "detectHeuristic": "Return type is string of own class name",
+      "correctPattern": "def method(self) -> Self:",
+      "antiPattern": "def method(self) -> 'ClassName':",
+      "autofix": null
+    },
+    "TYPE-004": {
+      "name": "Use type keyword for aliases",
+      "category": "types",
+      "pep": 695,
+      "pythonVersion": "3.12+",
+      "description": "Use type keyword for type aliases.",
+      "ifThen": "IF defining type alias THEN use type keyword",
+      "detectHeuristic": "TypeAlias annotation",
+      "correctPattern": "type JSONValue = dict | list | str",
+      "antiPattern": "JSONValue: TypeAlias = dict | list | str",
+      "autofix": null
+    },
+    "TYPE-005": {
+      "name": "Avoid Any",
+      "category": "types",
+      "description": "Use object instead of Any for unknown types.",
+      "ifThen": "IF need unknown type THEN use object (or add # type: ignore comment)",
+      "detectHeuristic": "Any in type hints without comment",
+      "correctPattern": "def parse(data: dict[str, object]) -> object:",
+      "antiPattern": "def parse(data: dict) -> Any:",
+      "autofix": null
+    },
+    "TYPE-006": {
+      "name": "Narrow parameters, wide returns",
+      "category": "types",
+      "description": "Accept broad types (Iterable), return concrete types (list).",
+      "ifThen": "IF function accepts collection THEN use Iterable/Sequence; IF returns THEN use list/dict/tuple",
+      "detectHeuristic": "Parameter more specific than needed, return more abstract than actual",
+      "correctPattern": "def process(items: Iterable[str]) -> list[str]:",
+      "antiPattern": "def process(items: list[str]) -> Iterable[str]:",
+      "autofix": null
+    },
+    "TYPE-007": {
+      "name": "Annotate all public signatures",
+      "category": "types",
+      "severity": "error",
+      "description": "Every public function, method, and class attribute must have type annotations. Parameters, return types, and class __init__ -> None are all required.",
+      "ifThen": "IF function/method is public (no _ prefix) THEN annotate all parameters and return type",
+      "detectHeuristic": "Public function missing parameter or return type annotation",
+      "correctPattern": "def get_user(user_id: str) -> User | None: ...\ndef __init__(self, db: Database) -> None:",
+      "antiPattern": "def get_user(user_id): ...",
+      "autofix": null
+    }
+  }
+}

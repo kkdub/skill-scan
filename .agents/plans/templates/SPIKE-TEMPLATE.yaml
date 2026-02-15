@@ -1,0 +1,38 @@
+# Spike Template
+# ==============
+# File naming: SPIKE-{NNN}-{short-slug}.yaml
+# Spikes are time-boxed research. They produce KNOWLEDGE, not code.
+
+id: "SPIKE-XXX"
+title: "Spike: Brief research question"
+type: spike
+status: Proposed
+created: 2026-XX-XX
+priority: medium
+
+description: |
+  Why this research is needed. What decision depends on the outcome.
+
+timebox: 4h
+
+questions:
+  - "Question 1 to answer"
+  - "Question 2 to answer"
+
+deliverable: |
+  What to produce (usually a decision document or recommendation).
+
+allowed_files:
+  - "docs/**"
+
+forbidden:
+  - "src/**"
+
+stop_condition: |
+  Done when all questions are answered OR timebox expires.
+
+findings: []
+
+recommendation: null
+
+next_steps: []

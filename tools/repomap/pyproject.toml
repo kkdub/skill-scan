@@ -1,0 +1,61 @@
+[build-system]
+requires = ["setuptools>=69.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[dependency-groups]
+dev = [
+  "pytest-cov>=7.0.0"
+]
+
+[project]
+name = "repomap"
+version = "0.1.0"
+description = "Portable Python package for generating agent-friendly codebase structure maps."
+requires-python = ">=3.10"
+dependencies = [
+  "diskcache>=5.6.0",
+  "grep-ast>=0.3.0",
+  "networkx>=3.0",
+  "pygments>=2.14.0",
+  "tree-sitter>=0.20.0"
+]
+
+[project.optional-dependencies]
+tiktoken = ["tiktoken>=0.5.0"]
+mcp = ["fastmcp>=2.11.3"]
+dev = [
+  "bandit>=1.7.0",
+  "mypy>=1.0",
+  "pytest>=7.0",
+  "pytest-cov>=4.0",
+  "radon>=6.0",
+  "ruff>=0.4.0"
+]
+
+[project.scripts]
+repomap = "repomap.cli:main"
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = false
+check_untyped_defs = true
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+
+[tool.setuptools.package-data]
+repomap = ["queries/**/*.scm", "queries/**/*.md"]
+
+[tool.setuptools.packages.find]
+where = ["src"]

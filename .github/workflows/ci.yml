@@ -1,0 +1,159 @@
+---
+name: CI
+
+"on":
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  quality:
+    name: Quality Checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98  # v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Set up Python
+        run: uv python install 3.13
+
+      - name: Install dependencies
+        run: uv sync --frozen --group dev
+
+      - name: Run Ruff linter
+        id: ruff-lint
+        run: uv run ruff check
+        continue-on-error: true
+
+      - name: Run Ruff formatter check
+        id: ruff-format
+        run: uv run ruff format --check
+        continue-on-error: true
+
+      - name: Run MyPy
+        id: mypy
+        run: uv run python -m mypy . --exclude '(\.venv|\.git|\.agents|\.github)'
+        continue-on-error: true
+
+      - name: Check complexity (SIZE-001, SIZE-002, CC, MI)
+        id: complexity
+        run: uv run python -m scripts.complexity
+        continue-on-error: true
+
+      - name: Generate reports
+        if: always()
+        run: |
+          echo "## Quality Checks Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Cyclomatic Complexity (C-grade and above)" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          uv run radon cc src/ -a -s -n C >> $GITHUB_STEP_SUMMARY || true
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Check for failures
+        if: always()
+        run: |
+          if [ "${{ steps.ruff-lint.outcome }}" == "failure" ] || \
+             [ "${{ steps.ruff-format.outcome }}" == "failure" ] || \
+             [ "${{ steps.mypy.outcome }}" == "failure" ] || \
+             [ "${{ steps.complexity.outcome }}" == "failure" ]; then
+            echo "One or more quality checks failed"
+            exit 1
+          fi
+
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98  # v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Set up Python
+        run: uv python install 3.13
+
+      - name: Install dependencies
+        run: uv sync --frozen --group dev
+
+      - name: Install Semgrep
+        run: uv pip install semgrep
+
+      - name: Run Semgrep
+        id: semgrep
+        timeout-minutes: 10
+        run: |
+          uv run semgrep scan \
+            --config=p/python \
+            --config=p/security-audit \
+            --sarif-output=semgrep-results.sarif \
+            --error \
+            --severity ERROR \
+            --timeout=300 \
+            src/ scripts/
+        continue-on-error: true
+
+      - name: Run Bandit
+        id: bandit
+        timeout-minutes: 5
+        run: |
+          rm -f bandit-report.json
+          uv run bandit -r src/ scripts/ \
+            --skip B101,B311 -f json -o bandit-report.json || true
+        continue-on-error: true
+
+      - name: Check for high severity issues
+        id: bandit-check
+        run: |
+          if [ -f bandit-report.json ]; then
+            HIGH_COUNT=$(cat bandit-report.json | python3 -c "import sys,json; print(len([r for r in json.load(sys.stdin).get('results',[]) if r.get('issue_severity')=='HIGH']))")
+            if [ "$HIGH_COUNT" -gt 0 ]; then
+              echo "Found $HIGH_COUNT high severity security issues!"
+              exit 1
+            fi
+          fi
+        continue-on-error: true
+
+      - name: Check for failures
+        if: always()
+        run: |
+          if [ "${{ steps.semgrep.outcome }}" == "failure" ] || \
+             [ "${{ steps.bandit-check.outcome }}" == "failure" ]; then
+            echo "One or more security checks failed"
+            exit 1
+          fi
+
+  test:
+    name: Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98  # v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Set up Python
+        run: uv python install 3.13
+
+      - name: Install dependencies
+        run: uv sync --frozen --group dev
+
+      - name: Run tests with coverage
+        run: |
+          uv run pytest \
+            --cov=src \
+            --cov-fail-under=85 \
+            --cov-report=xml \
+            -m "not e2e"
+
+      - name: Upload coverage to Codecov
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de  # v4
+        with:
+          files: ./coverage.xml
+          fail_ci_if_error: false

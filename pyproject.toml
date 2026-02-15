@@ -1,0 +1,67 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[dependency-groups]
+dev = [
+  "bandit>=1.9.3,<2.0",
+  "mypy>=1.19.1,<2.0",
+  "pre-commit>=4.5.1,<5.0",
+  "pytest>=9.0.2,<10.0",
+  "pytest-cov>=7.0.0,<8.0",
+  "radon>=6.0.1,<7.0",
+  "respx>=0.22.0,<1.0",
+  "ruff>=0.14.14,<1.0"
+]
+
+[project]
+name = "skill-scan"
+version = "0.1.0"
+description = "Security scanner for agent skills — detect prompt injection, malicious code, and data exfiltration before installation."
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+  "click>=8.1.0,<9.0"
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/skill_scan"]
+
+[tool.mypy]
+python_version = "3.13"
+strict = true
+warn_return_any = true
+warn_unused_ignores = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+no_implicit_optional = true
+exclude = ['\.venv', '\.git', '\.agents', '\.github']
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py313"
+line-length = 110
+include = ["src/**/*.py", "scripts/**/*.py", "tests/**/*.py"]
+
+[tool.ruff.lint]
+select = [
+  "B", # flake8-bugbear
+  "E", # pycodestyle errors
+  "F", # pyflakes
+  "RUF", # Ruff-specific
+  "S", # flake8-bandit
+  "UP", # pyupgrade
+  "W" # pycodestyle warnings
+]
+ignore = [
+  "E501", # Line too long - handled by formatter
+  "S101", # Allow assert - handled per-file
+  "S105", # Hardcoded passwords - false positives in tests
+  "S603" # subprocess calls - safe hardcoded commands
+]
+
+[tool.ruff.lint.per-file-ignores]
+"scripts/**/*.py" = ["S603", "S607"]
+"tests/**/*.py" = ["S101", "S105", "S106", "S108"]

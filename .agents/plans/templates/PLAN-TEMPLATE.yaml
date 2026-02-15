@@ -1,0 +1,87 @@
+# Plan File Template
+# ===================
+# File naming: PLAN-{NNN}-{short-slug}.yaml
+# Example: PLAN-001-add-github-search.yaml
+
+id: "PLAN-XXX"
+title: "Brief descriptive title"
+type: implementation  # implementation | spike
+status: Proposed  # Proposed | Approved | In Progress | Blocked | Done | Dropped
+created: 2026-XX-XX
+priority: medium  # low | medium | high | critical
+
+linked_spec: null  # e.g., "specs/feature-x.md"
+
+description: |
+  What this plan accomplishes and why it matters.
+
+requirements:
+  extraction_status: pending
+  extracted_at: null
+  spec_hash: null
+  items: []
+  uncovered: []
+
+utilities_audit:
+  status: pending
+  search_performed: []
+  categories:
+    error_handling:
+      needed: false
+    validation:
+      needed: false
+    types:
+      needed: false
+    configuration:
+      needed: false
+    http_client:
+      needed: false
+  infrastructure_parts: []
+
+parts:
+  - id: a
+    title: "First part"
+    status: Pending
+    requirements_covered: []
+    criteria:
+      - "Specific, verifiable condition"
+
+  - id: b
+    title: "Second part"
+    status: Pending
+    depends_on: [a]
+    requirements_covered: []
+    criteria:
+      - "Condition that verifier can check"
+
+allowed_files:
+  - "src/**"
+  - "tests/**"
+
+forbidden:
+  - ".env*"
+
+acceptance_criteria:
+  - "All requirements have status: done"
+  - "All parts have status: Done"
+  - "All tests pass"
+
+stop_condition: |
+  When all requirements are verified and all parts are complete.
+
+work_log: []
+evidence: []
+
+handoff:
+  stopped_at: null
+  current_state: null
+  next_steps: []
+  blockers: []
+  scope:
+    files: []
+    functions: []
+    components: []
+  decisions: []
+  open_questions: []
+
+errors: []

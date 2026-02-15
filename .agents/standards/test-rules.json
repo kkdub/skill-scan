@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Test Rules for pytest + Python 3.13+",
+  "description": "Machine-readable test rules for agents. ALL rules are mandatory.",
+  "version": "1.0.0",
+  "lastUpdated": "2026-02-14",
+  "framework": "pytest",
+  "dependencies": ["respx"],
+  "categories": {
+    "assertions": ["TEST-001", "TEST-005", "TEST-006", "TEST-010"],
+    "mocking": ["TEST-004", "TEST-008"],
+    "naming": ["TEST-007"],
+    "parametrize": ["PARAM-001"]
+  },
+  "rules": {
+    "TEST-001": {
+      "name": "Use HTTPStatus Constants",
+      "severity": "error",
+      "ifThen": "IF asserting HTTP status code THEN use named constant from tests/constants.py",
+      "correctPattern": "assert response.status_code == HTTP_OK",
+      "antiPattern": "assert response.status_code == 200"
+    },
+    "TEST-004": {
+      "name": "Use respx for HTTP Mocking",
+      "severity": "error",
+      "ifThen": "IF mocking external HTTP calls THEN use @respx.mock + respx.get/post().mock()",
+      "correctPattern": "@respx.mock; respx.get(url).mock(return_value=Response(200, json={...}))",
+      "antiPattern": "@patch('httpx.AsyncClient.get')"
+    },
+    "TEST-005": {
+      "name": "Use pytest.approx for Floats",
+      "severity": "warning",
+      "ifThen": "IF comparing float values THEN use pytest.approx()"
+    },
+    "TEST-006": {
+      "name": "Specific Exception Types in pytest.raises",
+      "severity": "error",
+      "ifThen": "IF testing exception THEN use pytest.raises(SpecificError, match='pattern')"
+    },
+    "TEST-007": {
+      "name": "Behavior-Driven Test Names",
+      "severity": "warning",
+      "ifThen": "IF naming test function THEN use test_<unit>_<behavior>_<condition> pattern"
+    },
+    "TEST-008": {
+      "name": "Mock Dependencies, Not Code Under Test",
+      "severity": "error",
+      "ifThen": "IF isolating code under test THEN mock its dependencies, not itself"
+    },
+    "TEST-010": {
+      "name": "Every Test Must Have Assertions",
+      "severity": "error",
+      "ifThen": "IF writing test THEN include at least one assert"
+    },
+    "PARAM-001": {
+      "name": "Use Parametrize for Multiple Inputs",
+      "severity": "info",
+      "ifThen": "IF testing same behavior with multiple inputs THEN use @pytest.mark.parametrize"
+    }
+  },
+  "coverageStrategy": {
+    "perPublicFunction": [
+      "Happy path",
+      "Edge cases",
+      "Error cases"
+    ]
+  },
+  "fileStructure": {
+    "pattern": "Mirror source directory under tests/",
+    "requiredFiles": ["tests/conftest.py", "tests/constants.py"],
+    "namingConvention": "test_<source_module_name>.py"
+  }
+}
