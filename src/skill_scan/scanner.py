@@ -11,7 +11,7 @@ from pathlib import Path
 
 from skill_scan._fetchers import LocalFetcher, SkillFetcher
 from skill_scan.config import ScanConfig, load_config
-from skill_scan.models import Finding, Rule, ScanResult, Verdict
+from skill_scan.models import Finding, Rule, ScanResult, Severity
 from skill_scan.parser import SkillParseError, parse_skill_frontmatter
 from skill_scan.rules import load_default_rules, match_line
 from skill_scan.verdict import calculate_verdict, count_by_severity
@@ -47,31 +47,40 @@ def scan(
     skill_dir = resolved_fetcher.fetch(str(path))
     cfg = config if config is not None else load_config()
 
-    if not cfg.skip_schema_validation:
-        try:
-            parse_skill_frontmatter(skill_dir)
-        except SkillParseError as e:
-            duration = time.monotonic() - start
-            return ScanResult(
-                findings=(),
-                counts={},
-                verdict=Verdict.INVALID,
-                duration=duration,
-                error_message=str(e),
+    schema_findings: list[Finding] = []
+    skill_name: str | None = None
+    try:
+        fields = parse_skill_frontmatter(skill_dir)
+        skill_name = fields.get("name")
+    except SkillParseError as e:
+        severity = Severity.MEDIUM if cfg.strict_schema else Severity.INFO
+        schema_findings.append(
+            Finding(
+                rule_id="SV-001",
+                severity=severity,
+                category="schema-validation",
+                file="SKILL.md",
+                line=None,
+                matched_text="",
+                description=f"Schema validation failed: {e}",
+                recommendation="Fix frontmatter in SKILL.md or use 'skill-scan validate' for details",
             )
+        )
+        skill_name = skill_dir.name
 
     files = _collect_files(skill_dir, cfg)
     rules = load_default_rules()
     findings = _scan_all_files(files, skill_dir, rules)
-
-    findings_tuple = tuple(findings)
+    all_findings = tuple(schema_findings + findings)
     duration = time.monotonic() - start
 
     return ScanResult(
-        findings=findings_tuple,
-        counts=count_by_severity(findings_tuple),
-        verdict=calculate_verdict(findings_tuple),
+        findings=all_findings,
+        counts=count_by_severity(all_findings),
+        verdict=calculate_verdict(all_findings),
         duration=duration,
+        files_scanned=len(files),
+        skill_name=skill_name,
     )
 
 
@@ -137,9 +146,10 @@ def _scan_file(file_path: Path, skill_dir: Path, rules: list[Rule]) -> list[Find
 
     Reads the file as UTF-8, splits into lines, and applies match_line
     to each line with 1-based line numbering. Uses the path relative
-    to the skill directory in findings.
+    to the skill directory in findings (always forward slashes).
 
-    On UnicodeDecodeError, the file is skipped and an empty list is returned.
+    On UnicodeDecodeError, emits an info-level FS-001 finding.
+    On OSError, the file is silently skipped.
 
     Args:
         file_path: Absolute path to the file.
@@ -149,16 +159,37 @@ def _scan_file(file_path: Path, skill_dir: Path, rules: list[Rule]) -> list[Find
     Returns:
         List of findings from this file.
     """
+    relative_path = file_path.relative_to(skill_dir).as_posix()
+
     try:
         content = file_path.read_text(encoding="utf-8")
-    except (UnicodeDecodeError, OSError):
+    except UnicodeDecodeError:
+        return [
+            Finding(
+                rule_id="FS-001",
+                severity=Severity.INFO,
+                category="file-safety",
+                file=relative_path,
+                line=None,
+                matched_text="",
+                description="File is not valid UTF-8 and was skipped.",
+                recommendation="Verify file encoding or exclude from scan.",
+            ),
+        ]
+    except OSError:
         return []
 
-    relative_path = str(file_path.relative_to(skill_dir))
+    applicable_rules = [r for r in rules if not _is_path_excluded(relative_path, r)]
+
     lines = content.split("\n")
     findings: list[Finding] = []
 
     for line_num, line in enumerate(lines, start=1):
-        findings.extend(match_line(line, line_num, relative_path, rules))
+        findings.extend(match_line(line, line_num, relative_path, applicable_rules))
 
     return findings
+
+
+def _is_path_excluded(file_path: str, rule: Rule) -> bool:
+    """Check if a file path matches any of the rule's path exclude patterns."""
+    return any(p.search(file_path) for p in rule.path_exclude_patterns)

@@ -28,11 +28,11 @@ def test_scan_config_has_default_max_file_size() -> None:
     assert config.max_file_size == 500_000
 
 
-def test_scan_config_has_default_skip_schema_validation() -> None:
-    """ScanConfig defaults to skip_schema_validation=False."""
+def test_scan_config_has_default_strict_schema() -> None:
+    """ScanConfig defaults to strict_schema=False."""
     config = ScanConfig()
 
-    assert config.skip_schema_validation is False
+    assert config.strict_schema is False
 
 
 def test_scan_config_is_frozen() -> None:
@@ -55,7 +55,7 @@ def test_load_config_returns_defaults() -> None:
     config = load_config()
 
     assert config.max_file_size == 500_000
-    assert config.skip_schema_validation is False
+    assert config.strict_schema is False
     assert ".md" in config.extensions
 
 
@@ -64,5 +64,5 @@ def test_load_config_with_none_returns_defaults() -> None:
     config = load_config(None)
 
     assert config.max_file_size == 500_000
-    assert config.skip_schema_validation is False
+    assert config.strict_schema is False
     assert ".py" in config.extensions

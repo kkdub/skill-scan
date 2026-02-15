@@ -62,16 +62,26 @@ exclude_patterns = [
   "(?i)don't.*act\\s+as\\s+if"
 ]
 
-[rules.PI-004]
+[rules.PI-004a]
 severity = "medium"
 category = "prompt-injection"
-description = "Hidden Unicode — zero-width characters or directional overrides that can hide malicious content"
-recommendation = "Strip or reject content containing invisible Unicode control characters"
+description = "Directional overrides — Unicode bidi control characters that can reorder visible text"
+recommendation = "Strip or reject content containing directional override characters"
 patterns = [
-  '[\u200b\u200c\u200d\u2060\ufeff]',
   '[\u202a-\u202e]'
 ]
 exclude_patterns = []
+
+[rules.PI-004b]
+severity = "info"
+category = "prompt-injection"
+description = "Zero-width characters — invisible Unicode characters that may hide content"
+recommendation = "Review content for invisible Unicode characters that could conceal instructions"
+patterns = [
+  '[\u200b\u200c\u200d\u2060\ufeff]'
+]
+exclude_patterns = []
+path_exclude_patterns = ['references/']
 
 [rules.PI-005]
 severity = "medium"
@@ -79,14 +89,9 @@ category = "prompt-injection"
 description = "HTML comment injection — hidden instructions embedded in HTML comments"
 recommendation = "Review and remove suspicious HTML comments that may contain hidden instructions"
 patterns = [
-  '<!--.*-->',
-  '<!--[^>]*$'
+  '(?i)<!--.*?(?:instruct|inject|malicious|payload|exploit|exfiltrat|steal\b)'
 ]
-exclude_patterns = [
-  '<!--\s*TODO',
-  '<!--\s*FIXME',
-  '<!--\s*NOTE'
-]
+exclude_patterns = []
 
 [rules.PI-006]
 severity = "medium"
@@ -94,11 +99,26 @@ category = "prompt-injection"
 description = "Steganographic encoding — hidden instructions encoded in base64, hex, or other encodings"
 recommendation = "Inspect and decode suspicious encoded content for hidden instructions"
 patterns = [
-  '(?i)aWdub3Jl',
-  '[A-Za-z0-9+/=]{100,}',
+  '[A-Za-z0-9+/=]{200,}',
   '(\\x[0-9a-fA-F]{2}){4,}'
 ]
 exclude_patterns = [
   '(?i)data:image/',
-  '(?i)data:font/'
+  '(?i)data:font/',
+  '\xef\xbb\xbf',
+  '\xfe\xff',
+  '\xff\xfe'
 ]
+path_exclude_patterns = ['tests?/', 'test_']
+
+[rules.PI-007]
+severity = "medium"
+category = "prompt-injection"
+description = "Script mixing — Cyrillic homoglyphs adjacent to Latin characters (potential homoglyph attack)"
+recommendation = "Inspect for Cyrillic character substitution disguising malicious content as safe text"
+confidence = "stable"
+patterns = [
+  '[a-zA-Z][\u0430\u0441\u0435\u043e\u0440\u0445\u0410\u0421\u0415\u041e\u0420\u0425]',
+  '[\u0430\u0441\u0435\u043e\u0440\u0445\u0410\u0421\u0415\u041e\u0420\u0425][a-zA-Z]'
+]
+exclude_patterns = []

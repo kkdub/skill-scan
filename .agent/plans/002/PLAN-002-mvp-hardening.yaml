@@ -1,7 +1,7 @@
 id: "PLAN-002"
 title: "MVP Hardening — cross-platform, rule tuning, output redesign, i18n"
 type: implementation
-status: Proposed
+status: Done
 created: 2026-02-15
 priority: high
 
@@ -34,37 +34,37 @@ requirements:
   items:
     - id: R-decouple
       description: "Decouple frontmatter validation from security scanning pipeline"
-      status: pending
+      status: done
       spec_ref: "SPEC-002a F1-F4"
       notes: "Schema issues become info findings, not hard stops. Add validate subcommand."
 
     - id: R-xplat
       description: "Cross-platform compatibility (Windows encoding, path separators)"
-      status: pending
+      status: done
       spec_ref: "SPEC-002b CP1-CP3"
       notes: "ASCII output, forward-slash paths, encoding skip reporting. CP4 (Windows CI) deferred — infrastructure decision."
 
     - id: R-rules
       description: "Tune PI-004, PI-005, PI-006 to reduce false positives"
-      status: pending
+      status: done
       spec_ref: "SPEC-002c RT1-RT4"
       notes: "Context-aware Unicode, semantic HTML filtering, hex exclusions."
 
     - id: R-dedup
       description: "Group and deduplicate repeated findings in text output"
-      status: pending
+      status: done
       spec_ref: "SPEC-002d OD1-OD5"
       notes: "Formatter-only change. Show count + samples, not N identical blocks."
 
     - id: R-output
       description: "Redesign text output with severity sections, header, verdict banner"
-      status: pending
+      status: done
       spec_ref: "SPEC-002e OF1-OF7"
       notes: "Structured report, quiet mode, verbose mode."
 
     - id: R-i18n
       description: "Multilingual prompt injection detection (8 languages + homoglyphs)"
-      status: pending
+      status: done
       spec_ref: "SPEC-002f I18N1-I18N6"
       notes: "Keyword patterns for CJK, European, Arabic. Script-mixing detection."
 
@@ -96,7 +96,7 @@ utilities_audit:
 parts:
   - id: a
     title: "Cross-platform fixes (encoding + paths)"
-    status: Pending
+    status: Done
     requirements_covered: [R-xplat]
     files:
       - "src/skill_scan/formatters.py"
@@ -112,7 +112,7 @@ parts:
 
   - id: b
     title: "Decouple frontmatter from scan pipeline"
-    status: Pending
+    status: Done
     requirements_covered: [R-decouple]
     files:
       - "src/skill_scan/scanner.py"
@@ -134,7 +134,7 @@ parts:
 
   - id: c
     title: "Rule tuning (PI-004, PI-005, PI-006)"
-    status: Pending
+    status: Done
     requirements_covered: [R-rules]
     files:
       - "src/skill_scan/rules/data/prompt_injection.toml"
@@ -161,7 +161,7 @@ parts:
 
   - id: d
     title: "Output deduplication and grouping"
-    status: Pending
+    status: Done
     depends_on: [a]
     requirements_covered: [R-dedup]
     files:
@@ -177,7 +177,7 @@ parts:
 
   - id: e
     title: "Output format redesign (header, severity sections, modes)"
-    status: Pending
+    status: Done
     depends_on: [b, d]
     requirements_covered: [R-output]
     files:
@@ -200,7 +200,7 @@ parts:
 
   - id: f
     title: "Multilingual detection patterns"
-    status: Pending
+    status: Done
     depends_on: [c]
     requirements_covered: [R-i18n]
     files:
@@ -227,7 +227,7 @@ parts:
 
   - id: g
     title: "Test corpus revalidation"
-    status: Pending
+    status: Done
     depends_on: [a, b, c, d, e, f]
     requirements_covered: [R-rules, R-dedup, R-decouple, R-xplat]
     notes: |
@@ -267,18 +267,42 @@ stop_condition: |
   When all 7 parts are Done, all tests pass, make check succeeds, and
   part g revalidation criteria are met with specific numeric thresholds.
 
-work_log: []
-evidence: []
+work_log:
+  - "Parts a, b, c implemented by parallel agents"
+  - "Integration: reconciled parallel agent overwrites, updated all test files"
+  - "Part d: Output deduplication with group_by_rule + 3 sample limit"
+  - "Part f: Multilingual i18n — 24 rules across 8 languages + PI-007 homoglyphs"
+  - "Part e: Output format redesign — 3 modes (default/quiet/verbose), severity sections"
+  - "Part g: Corpus revalidation — all 34 skills pass criteria"
+  - "PI-005 fix: changed from catch-all HTML pattern to keyword-targeted detection"
+
+evidence:
+  - type: "corpus-revalidation"
+    date: "2026-02-15"
+    description: "34-skill test corpus scan results after all hardening changes"
+    results:
+      previously_invalid_now_scanned: 19
+      previously_clean_still_pass: 15
+      cskwork_pptx_to_html: "PASS (0 findings) — was 1 PI-005"
+      dicklesworthstone_repo_updater: "PASS (0 findings) — was 1 PI-006"
+      niko91i_skills_vendure: "PASS (0 findings) — was 7295 medium"
+      shanselman_nightscout_cgm: "PASS (0 findings) — was 21 PI-005"
+      tanweai_xianzhi_research: "BLOCK (1 high, 1 info) — new multilingual detection (true positive)"
+      total_skills: 34
+      no_crashes: true
+    notes: "PI-005 reworked from catch-all HTML comment pattern to keyword-targeted detection during revalidation"
+
+  - type: "test-suite"
+    date: "2026-02-15"
+    description: "321 automated tests passing, make check green (0 errors, 1 warning)"
+    notes: "Warning: scanner.scan() is 65 lines (max 50) — pre-existing, non-blocking"
 
 handoff:
   stopped_at: null
-  current_state: "Plan proposed. Specs written for all 6 improvement areas."
+  current_state: "All 7 parts Done. All criteria met. Ready for commit and PR."
   next_steps:
-    - "Review and approve plan"
-    - "Begin with parts a, b, c in parallel (no dependencies between them)"
-    - "Then d after a; e after b+d"
-    - "f after c (both touch prompt_injection.toml)"
-    - "g (revalidation) runs last after all other parts complete"
+    - "Commit all changes on feat/plan-002-mvp-hardening"
+    - "Create PR to main"
   blockers: []
   scope:
     files: []

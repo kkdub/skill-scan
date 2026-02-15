@@ -46,11 +46,8 @@ class TestVerdictEnum:
     def test_verdict_has_block_value(self) -> None:
         assert Verdict.BLOCK.value == "block"
 
-    def test_verdict_has_invalid_value(self) -> None:
-        assert Verdict.INVALID.value == "invalid"
-
-    def test_verdict_has_exactly_four_members(self) -> None:
-        assert len(Verdict) == 4
+    def test_verdict_has_exactly_three_members(self) -> None:
+        assert len(Verdict) == 3
 
 
 class TestFindingDataclass:
@@ -194,12 +191,33 @@ class TestScanResultDataclass:
         result = ScanResult(
             findings=(),
             counts={},
-            verdict=Verdict.INVALID,
+            verdict=Verdict.PASS,
             duration=0.0,
             error_message="Missing SKILL.md",
         )
 
         assert result.error_message == "Missing SKILL.md"
+
+    def test_scan_result_skill_name_defaults_to_none(self) -> None:
+        result = ScanResult(
+            findings=(),
+            counts={},
+            verdict=Verdict.PASS,
+            duration=0.0,
+        )
+
+        assert result.skill_name is None
+
+    def test_scan_result_skill_name_can_be_set(self) -> None:
+        result = ScanResult(
+            findings=(),
+            counts={},
+            verdict=Verdict.PASS,
+            duration=0.0,
+            skill_name="my-skill",
+        )
+
+        assert result.skill_name == "my-skill"
 
     def test_scan_result_is_frozen(self) -> None:
         result = ScanResult(

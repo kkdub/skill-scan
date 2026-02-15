@@ -17,7 +17,7 @@ class ScanConfig:
 
     extensions: frozenset[str] = field(default_factory=lambda: _DEFAULT_EXTENSIONS)
     max_file_size: int = 500_000  # 500KB
-    skip_schema_validation: bool = False
+    strict_schema: bool = False
 
 
 def load_config(path: Path | None = None) -> ScanConfig:

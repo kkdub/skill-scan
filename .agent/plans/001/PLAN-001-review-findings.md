@@ -28,4 +28,3 @@ All items are non-blocking — MVP is complete and functional.
 - **Risk:** Full filesystem paths in error messages. Fine for CLI, would need
   sanitization if the tool is ever wrapped in a web API.
 ---
-
