@@ -24,6 +24,9 @@ dependencies = [
   "click>=8.1.0,<9.0"
 ]
 
+[project.scripts]
+skill-scan = "skill_scan.cli:skill_scan"
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/skill_scan"]
 
