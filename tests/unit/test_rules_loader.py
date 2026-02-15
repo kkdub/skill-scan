@@ -1,7 +1,4 @@
-"""Unit tests for skill_scan.rules.loader — rule loading from TOML files.
-
-Tests TOML parsing, regex compilation, flag handling, and default rule discovery.
-"""
+"""Unit tests for skill_scan.rules.loader -- rule loading from TOML files."""
 
 from __future__ import annotations
 
@@ -40,7 +37,7 @@ def make_simple_rule(
 
 
 class TestLoadRules:
-    """Tests for load_rules function — loading from a single TOML file."""
+    """Tests for load_rules function -- loading from a single TOML file."""
 
     def test_load_rules_with_single_rule(self, tmp_path: Path) -> None:
         toml_path = write_toml(
@@ -181,17 +178,11 @@ class TestLoadRules:
             load_rules(tmp_path / "nonexistent.toml")
 
     def test_load_rules_empty_rules_table_returns_empty_list(self, tmp_path: Path) -> None:
-        toml_path = write_toml(tmp_path / "test.toml", "[rules]")
-
-        rules = load_rules(toml_path)
-
+        rules = load_rules(write_toml(tmp_path / "test.toml", "[rules]"))
         assert rules == []
 
     def test_load_rules_no_rules_table_returns_empty_list(self, tmp_path: Path) -> None:
-        toml_path = write_toml(tmp_path / "test.toml", '[other]\nkey = "value"')
-
-        rules = load_rules(toml_path)
-
+        rules = load_rules(write_toml(tmp_path / "test.toml", '[other]\nkey = "value"'))
         assert rules == []
 
     def test_load_rules_invalid_regex_raises_value_error(self, tmp_path: Path) -> None:
@@ -220,17 +211,37 @@ class TestLoadRules:
         assert rules[0].patterns[0].search("include") is not None
         assert rules[0].exclude_patterns[0].search("exclude") is not None
 
+    def test_load_rules_path_exclude_patterns_are_compiled(self, tmp_path: Path) -> None:
+        toml_path = write_toml(
+            tmp_path / "test.toml",
+            """
+            [rules.TEST-001]
+            severity = "info"
+            category = "test"
+            description = "Test"
+            recommendation = "Test"
+            patterns = ["pattern"]
+            path_exclude_patterns = ["tests?/", "vendor/"]
+            """,
+        )
+
+        rules = load_rules(toml_path)
+
+        assert len(rules[0].path_exclude_patterns) == 2
+        assert rules[0].path_exclude_patterns[0].search("tests/unit") is not None
+        assert rules[0].path_exclude_patterns[1].search("vendor/lib") is not None
+
+    def test_load_rules_path_exclude_patterns_defaults_to_empty(self, tmp_path: Path) -> None:
+        rules = load_rules(write_toml(tmp_path / "test.toml", make_simple_rule()))
+        assert rules[0].path_exclude_patterns == ()
+
 
 class TestLoadDefaultRules:
-    """Tests for load_default_rules function — discovering built-in rules."""
+    """Tests for load_default_rules function -- discovering built-in rules."""
 
     def test_load_default_rules_returns_list(self) -> None:
-        rules = load_default_rules()
-
-        assert isinstance(rules, list)
+        assert isinstance(load_default_rules(), list)
 
     def test_load_default_rules_all_items_are_rule_objects(self) -> None:
-        rules = load_default_rules()
-
-        for rule in rules:
+        for rule in load_default_rules():
             assert isinstance(rule, Rule)

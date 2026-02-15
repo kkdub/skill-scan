@@ -137,7 +137,9 @@ repos:
         name: Check Spelling
         args:
           - --skip
-          - "*.lock,*.json"
+          - "*.lock,*.json,src/skill_scan/rules/data/prompt_injection_*.toml"
+          - --ignore-words-list
+          - "ignora,ist,als,alle,deine"
 
   - repo: https://github.com/abravalheri/validate-pyproject
     rev: v0.23

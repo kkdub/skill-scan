@@ -26,7 +26,6 @@ class Verdict(Enum):
     PASS = "pass"
     FLAG = "flag"
     BLOCK = "block"
-    INVALID = "invalid"
 
 
 @dataclass(slots=True, frozen=True)
@@ -54,6 +53,8 @@ class Rule:
     recommendation: str
     patterns: tuple[re.Pattern[str], ...]
     exclude_patterns: tuple[re.Pattern[str], ...]
+    path_exclude_patterns: tuple[re.Pattern[str], ...] = ()
+    confidence: str = "stable"
 
 
 @dataclass(slots=True, frozen=True)
@@ -64,4 +65,6 @@ class ScanResult:
     counts: dict[str, int]
     verdict: Verdict
     duration: float
+    files_scanned: int = 0
+    skill_name: str | None = None
     error_message: str | None = None

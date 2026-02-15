@@ -1,0 +1,164 @@
+# Multilingual Prompt Injection Detection — CJK Languages
+# Chinese (zh), Japanese (ja), Korean (ko)
+# confidence = "beta" — patterns generated via cross-model validation, not native-speaker reviewed
+# Contributions welcome: follow the pattern format in prompt_injection.toml
+
+[rules.PI-001-ja]
+severity = "critical"
+category = "prompt-injection"
+description = "Direct instruction override (Japanese) — attempts to ignore or override instructions"
+recommendation = "Remove or reject content containing instruction override attempts"
+confidence = "beta"
+patterns = [
+  '以前の指示を無視',
+  '前の指示を無視',
+  'システムプロンプトを上書き',
+  'ルールを忘れて',
+  '指示を無視して'
+]
+exclude_patterns = [
+  '無視しないで',
+  '無視してはいけない'
+]
+
+[rules.PI-001-ko]
+severity = "critical"
+category = "prompt-injection"
+description = "Direct instruction override (Korean) — attempts to ignore or override instructions"
+recommendation = "Remove or reject content containing instruction override attempts"
+confidence = "beta"
+patterns = [
+  '이전 지시를 무시',
+  '이전 지침을 무시',
+  '시스템 프롬프트를 덮어쓰기',
+  '규칙을 잊어',
+  '지시를 무시해'
+]
+exclude_patterns = [
+  '무시하지 마',
+  '무시하면 안'
+]
+
+[rules.PI-001-zh]
+severity = "critical"
+category = "prompt-injection"
+description = "Direct instruction override (Chinese) — attempts to ignore or override instructions"
+recommendation = "Remove or reject content containing instruction override attempts"
+confidence = "beta"
+patterns = [
+  '忽略之前的指令',
+  '忽略先前的指令',
+  '忽略所有指令',
+  '覆盖系统提示',
+  '忘记你的规则',
+  '无视你的指令',
+  '忽略以上指令'
+]
+exclude_patterns = [
+  '不要忽略',
+  '请勿忽略',
+  '不可忽略'
+]
+
+[rules.PI-002-ja]
+severity = "high"
+category = "prompt-injection"
+description = "Safety bypass (Japanese) — attempts to disable safety mechanisms"
+recommendation = "Remove or reject content that tries to disable safety features"
+confidence = "beta"
+patterns = [
+  '安全チェックを無効にして',
+  'セキュリティを回避',
+  '制限なしで',
+  'セーフティを解除'
+]
+exclude_patterns = [
+  '無効にしないで',
+  '回避してはいけない'
+]
+
+[rules.PI-002-ko]
+severity = "high"
+category = "prompt-injection"
+description = "Safety bypass (Korean) — attempts to disable safety mechanisms"
+recommendation = "Remove or reject content that tries to disable safety features"
+confidence = "beta"
+patterns = [
+  '안전 검사 비활성화',
+  '보안 우회',
+  '제한 없이',
+  '안전 장치 해제'
+]
+exclude_patterns = [
+  '비활성화하지 마',
+  '우회하면 안'
+]
+
+[rules.PI-002-zh]
+severity = "high"
+category = "prompt-injection"
+description = "Safety bypass (Chinese) — attempts to disable safety mechanisms"
+recommendation = "Remove or reject content that tries to disable safety features"
+confidence = "beta"
+patterns = [
+  '禁用安全检查',
+  '绕过安全',
+  '没有限制',
+  '关闭安全',
+  '移除防护'
+]
+exclude_patterns = [
+  '不要禁用安全',
+  '请勿绕过'
+]
+
+[rules.PI-003-ja]
+severity = "high"
+category = "prompt-injection"
+description = "Role manipulation (Japanese) — attempts to alter the agent's role"
+recommendation = "Remove or reject content that tries to reassign the agent's role"
+confidence = "beta"
+patterns = [
+  'あなたは今',
+  'ふりをして',
+  'なりきって',
+  '今からあなたは'
+]
+exclude_patterns = [
+  'ふりをしないで',
+  'なりきらないで'
+]
+
+[rules.PI-003-ko]
+severity = "high"
+category = "prompt-injection"
+description = "Role manipulation (Korean) — attempts to alter the agent's role"
+recommendation = "Remove or reject content that tries to reassign the agent's role"
+confidence = "beta"
+patterns = [
+  '너는 이제',
+  '인 척 해',
+  '역할을 맡아',
+  '지금부터 너는'
+]
+exclude_patterns = [
+  '척 하지 마',
+  '맡지 마'
+]
+
+[rules.PI-003-zh]
+severity = "high"
+category = "prompt-injection"
+description = "Role manipulation (Chinese) — attempts to alter the agent's role"
+recommendation = "Remove or reject content that tries to reassign the agent's role"
+confidence = "beta"
+patterns = [
+  '你现在是',
+  '假装是',
+  '扮演',
+  '从现在起你是'
+]
+exclude_patterns = [
+  '不要假装',
+  '请勿扮演'
+]

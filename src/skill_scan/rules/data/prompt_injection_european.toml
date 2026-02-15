@@ -1,0 +1,169 @@
+# Multilingual Prompt Injection Detection — European Languages
+# Spanish (es), German (de), French (fr)
+# confidence = "beta" — patterns generated via cross-model validation, not native-speaker reviewed
+# Contributions welcome: follow the pattern format in prompt_injection.toml
+
+[rules.PI-001-de]
+severity = "critical"
+category = "prompt-injection"
+description = "Direct instruction override (German) — attempts to ignore or override instructions"
+recommendation = "Remove or reject content containing instruction override attempts"
+confidence = "beta"
+flags = "IGNORECASE"
+patterns = [
+  'ignoriere\s+vorherige\s+Anweisungen',
+  'ignoriere\s+alle\s+Anweisungen',
+  '[uü]berschreibe\s+den\s+Systemprompt',
+  'vergiss\s+deine\s+Regeln',
+  'missachte\s+deine\s+Anweisungen'
+]
+exclude_patterns = [
+  '(?i)ignoriere\s+nicht',
+  '(?i)niemals\s+ignoriere'
+]
+
+[rules.PI-001-es]
+severity = "critical"
+category = "prompt-injection"
+description = "Direct instruction override (Spanish) — attempts to ignore or override instructions"
+recommendation = "Remove or reject content containing instruction override attempts"
+confidence = "beta"
+flags = "IGNORECASE"
+patterns = [
+  'ignora\s+las\s+instrucciones\s+anteriores',
+  'ignora\s+todas\s+las\s+instrucciones',
+  'anula\s+el\s+prompt\s+del\s+sistema',
+  'olvida\s+tus\s+reglas',
+  'ignora\s+tu\s+programaci[oó]n'
+]
+exclude_patterns = [
+  '(?i)no\s+ignores\s+las\s+instrucciones',
+  '(?i)nunca\s+ignores'
+]
+
+[rules.PI-001-fr]
+severity = "critical"
+category = "prompt-injection"
+description = "Direct instruction override (French) — attempts to ignore or override instructions"
+recommendation = "Remove or reject content containing instruction override attempts"
+confidence = "beta"
+flags = "IGNORECASE"
+patterns = [
+  'ignore\s+les\s+instructions\s+pr[eé]c[eé]dentes',
+  'ignore\s+toutes\s+les\s+instructions',
+  'remplace\s+le\s+prompt\s+syst[eè]me',
+  'oublie\s+tes\s+r[eè]gles',
+  'ne\s+tiens\s+pas\s+compte\s+de\s+tes\s+instructions'
+]
+exclude_patterns = [
+  "(?i)n'ignore\\s+pas",
+  '(?i)ne\s+jamais\s+ignorer'
+]
+
+[rules.PI-002-de]
+severity = "high"
+category = "prompt-injection"
+description = "Safety bypass (German) — attempts to disable safety mechanisms"
+recommendation = "Remove or reject content that tries to disable safety features"
+confidence = "beta"
+flags = "IGNORECASE"
+patterns = [
+  'Sicherheitschecks?\s+deaktivieren',
+  'ohne\s+Einschr[aä]nkungen',
+  'Sicherheit\s+umgehen',
+  'Schutzma[sß]nahmen\s+entfernen'
+]
+exclude_patterns = [
+  '(?i)nicht\s+deaktivieren',
+  '(?i)niemals\s+umgehen'
+]
+
+[rules.PI-002-es]
+severity = "high"
+category = "prompt-injection"
+description = "Safety bypass (Spanish) — attempts to disable safety mechanisms"
+recommendation = "Remove or reject content that tries to disable safety features"
+confidence = "beta"
+flags = "IGNORECASE"
+patterns = [
+  'desactivar\s+filtros?\s+de\s+seguridad',
+  'sin\s+restricciones',
+  'evadir\s+seguridad',
+  'eliminar\s+protecci[oó]n'
+]
+exclude_patterns = [
+  '(?i)no\s+desactivar',
+  '(?i)nunca\s+evadir'
+]
+
+[rules.PI-002-fr]
+severity = "high"
+category = "prompt-injection"
+description = "Safety bypass (French) — attempts to disable safety mechanisms"
+recommendation = "Remove or reject content that tries to disable safety features"
+confidence = "beta"
+flags = "IGNORECASE"
+patterns = [
+  'd[eé]sactiver\s+les\s+filtres?\s+de\s+s[eé]curit[eé]',
+  'sans\s+restrictions',
+  'contourner\s+la\s+s[eé]curit[eé]',
+  'supprimer\s+les\s+protections'
+]
+exclude_patterns = [
+  '(?i)ne\s+pas\s+d[eé]sactiver',
+  '(?i)ne\s+jamais\s+contourner'
+]
+
+[rules.PI-003-de]
+severity = "high"
+category = "prompt-injection"
+description = "Role manipulation (German) — attempts to alter the agent's role"
+recommendation = "Remove or reject content that tries to reassign the agent's role"
+confidence = "beta"
+flags = "IGNORECASE"
+patterns = [
+  'du\s+bist\s+jetzt',
+  'tu\s+so\s+als\s+ob',
+  'gib\s+dich\s+aus\s+als',
+  'ab\s+jetzt\s+bist\s+du'
+]
+exclude_patterns = [
+  '(?i)tu\s+nicht\s+so\s+als\s+ob',
+  '(?i)gib\s+dich\s+nicht\s+aus'
+]
+
+[rules.PI-003-es]
+severity = "high"
+category = "prompt-injection"
+description = "Role manipulation (Spanish) — attempts to alter the agent's role"
+recommendation = "Remove or reject content that tries to reassign the agent's role"
+confidence = "beta"
+flags = "IGNORECASE"
+patterns = [
+  'ahora\s+eres',
+  'finge\s+ser',
+  'act[uú]a\s+como\s+si',
+  'asume\s+el\s+rol\s+de'
+]
+exclude_patterns = [
+  '(?i)no\s+finjas',
+  '(?i)nunca\s+finjas'
+]
+
+[rules.PI-003-fr]
+severity = "high"
+category = "prompt-injection"
+description = "Role manipulation (French) — attempts to alter the agent's role"
+recommendation = "Remove or reject content that tries to reassign the agent's role"
+confidence = "beta"
+flags = "IGNORECASE"
+patterns = [
+  'tu\s+es\s+maintenant',
+  'fais\s+semblant\s+d.?[eê]tre',
+  'agis\s+comme\s+si',
+  '[aà]\s+partir\s+de\s+maintenant\s+tu\s+es'
+]
+exclude_patterns = [
+  '(?i)ne\s+fais\s+pas\s+semblant',
+  '(?i)ne\s+jamais\s+agir\s+comme'
+]

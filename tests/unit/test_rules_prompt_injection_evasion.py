@@ -85,9 +85,11 @@ class TestPromptInjectionRulesIntegration:
         assert "PI-001" in rule_ids
         assert "PI-002" in rule_ids
         assert "PI-003" in rule_ids
-        assert "PI-004" in rule_ids
+        assert "PI-004a" in rule_ids
+        assert "PI-004b" in rule_ids
         assert "PI-005" in rule_ids
         assert "PI-006" in rule_ids
+        assert "PI-007" in rule_ids
 
     def test_all_pi_rules_have_correct_category(self, pi_rules: list[Rule]) -> None:
         for rule in pi_rules:

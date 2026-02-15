@@ -1,8 +1,4 @@
-"""Unit tests for prompt injection detection — positive and negative cases.
-
-Tests verify that the 6 prompt injection rules (PI-001 through PI-006)
-detect actual threats and avoid false positives.
-"""
+"""Unit tests for prompt injection detection -- positive and negative cases."""
 
 from __future__ import annotations
 
@@ -20,7 +16,7 @@ def pi_rules() -> list[Rule]:
 
 
 class TestPI001DirectOverride:
-    """Tests for PI-001 — Direct instruction override detection."""
+    """Tests for PI-001 -- Direct instruction override detection."""
 
     @pytest.mark.parametrize(
         "malicious_input",
@@ -37,9 +33,7 @@ class TestPI001DirectOverride:
     )
     def test_pi001_detects_override_attempts(self, pi_rules: list[Rule], malicious_input: str) -> None:
         rule = [r for r in pi_rules if r.rule_id == "PI-001"]
-
         findings = match_line(malicious_input, 1, "test.md", rule)
-
         assert len(findings) == 1
         assert findings[0].rule_id == "PI-001"
         assert findings[0].severity == Severity.CRITICAL
@@ -56,14 +50,12 @@ class TestPI001DirectOverride:
     )
     def test_pi001_excludes_negated_warnings(self, pi_rules: list[Rule], safe_input: str) -> None:
         rule = [r for r in pi_rules if r.rule_id == "PI-001"]
-
         findings = match_line(safe_input, 1, "test.md", rule)
-
         assert findings == []
 
 
 class TestPI002SafetyBypass:
-    """Tests for PI-002 — Safety bypass detection."""
+    """Tests for PI-002 -- Safety bypass detection."""
 
     @pytest.mark.parametrize(
         "malicious_input",
@@ -78,9 +70,7 @@ class TestPI002SafetyBypass:
     )
     def test_pi002_detects_safety_bypass_attempts(self, pi_rules: list[Rule], malicious_input: str) -> None:
         rule = [r for r in pi_rules if r.rule_id == "PI-002"]
-
         findings = match_line(malicious_input, 1, "test.md", rule)
-
         assert len(findings) == 1
         assert findings[0].rule_id == "PI-002"
         assert findings[0].severity == Severity.HIGH
@@ -96,14 +86,12 @@ class TestPI002SafetyBypass:
     )
     def test_pi002_excludes_negated_warnings(self, pi_rules: list[Rule], safe_input: str) -> None:
         rule = [r for r in pi_rules if r.rule_id == "PI-002"]
-
         findings = match_line(safe_input, 1, "test.md", rule)
-
         assert findings == []
 
 
 class TestPI003RoleManipulation:
-    """Tests for PI-003 — Role manipulation detection."""
+    """Tests for PI-003 -- Role manipulation detection."""
 
     @pytest.mark.parametrize(
         "malicious_input",
@@ -120,9 +108,7 @@ class TestPI003RoleManipulation:
         self, pi_rules: list[Rule], malicious_input: str
     ) -> None:
         rule = [r for r in pi_rules if r.rule_id == "PI-003"]
-
         findings = match_line(malicious_input, 1, "test.md", rule)
-
         assert len(findings) == 1
         assert findings[0].rule_id == "PI-003"
         assert findings[0].severity == Severity.HIGH
@@ -138,46 +124,69 @@ class TestPI003RoleManipulation:
     )
     def test_pi003_excludes_negated_warnings(self, pi_rules: list[Rule], safe_input: str) -> None:
         rule = [r for r in pi_rules if r.rule_id == "PI-003"]
-
         findings = match_line(safe_input, 1, "test.md", rule)
-
         assert findings == []
 
 
-class TestPI004HiddenUnicode:
-    """Tests for PI-004 — Hidden Unicode character detection."""
+class TestPI004aDirectionalOverrides:
+    """Tests for PI-004a -- Directional override detection."""
+
+    @pytest.mark.parametrize(
+        "malicious_input",
+        [
+            "text\u202eevil",
+            "rtl\u202aoverride",
+            "embed\u202btext",
+            "override\u202cend",
+            "pop\u202ddirection",
+        ],
+    )
+    def test_pi004a_detects_directional_overrides(self, pi_rules: list[Rule], malicious_input: str) -> None:
+        rule = [r for r in pi_rules if r.rule_id == "PI-004a"]
+        findings = match_line(malicious_input, 1, "test.md", rule)
+        assert len(findings) == 1
+        assert findings[0].rule_id == "PI-004a"
+        assert findings[0].severity == Severity.MEDIUM
+
+    def test_pi004a_allows_normal_text(self, pi_rules: list[Rule]) -> None:
+        findings = match_line(
+            "normal text without overrides", 1, "test.md", [r for r in pi_rules if r.rule_id == "PI-004a"]
+        )
+        assert findings == []
+
+
+class TestPI004bZeroWidthChars:
+    """Tests for PI-004b -- Zero-width character detection."""
 
     @pytest.mark.parametrize(
         "malicious_input",
         [
             "hello\u200bworld",
             "test\u200dvalue",
-            "text\u202eevil",
             "\ufeffBOM marker",
             "zero\u200cwidth",
             "word\u2060joiner",
-            "rtl\u202aoverride",
         ],
     )
-    def test_pi004_detects_hidden_unicode_chars(self, pi_rules: list[Rule], malicious_input: str) -> None:
-        rule = [r for r in pi_rules if r.rule_id == "PI-004"]
-
+    def test_pi004b_detects_zero_width_chars(self, pi_rules: list[Rule], malicious_input: str) -> None:
+        rule = [r for r in pi_rules if r.rule_id == "PI-004b"]
         findings = match_line(malicious_input, 1, "test.md", rule)
-
         assert len(findings) == 1
-        assert findings[0].rule_id == "PI-004"
-        assert findings[0].severity == Severity.MEDIUM
+        assert findings[0].rule_id == "PI-004b"
+        assert findings[0].severity == Severity.INFO
 
-    def test_pi004_allows_normal_text(self, pi_rules: list[Rule]) -> None:
-        rule = [r for r in pi_rules if r.rule_id == "PI-004"]
-
-        findings = match_line("normal text without hidden characters", 1, "test.md", rule)
-
+    def test_pi004b_allows_normal_text(self, pi_rules: list[Rule]) -> None:
+        findings = match_line(
+            "normal text without hidden characters",
+            1,
+            "test.md",
+            [r for r in pi_rules if r.rule_id == "PI-004b"],
+        )
         assert findings == []
 
 
 class TestPI005HTMLComments:
-    """Tests for PI-005 — HTML comment injection detection."""
+    """Tests for PI-005 -- HTML comment injection detection."""
 
     @pytest.mark.parametrize(
         "malicious_input",
@@ -189,9 +198,7 @@ class TestPI005HTMLComments:
     )
     def test_pi005_detects_html_comment_injection(self, pi_rules: list[Rule], malicious_input: str) -> None:
         rule = [r for r in pi_rules if r.rule_id == "PI-005"]
-
         findings = match_line(malicious_input, 1, "test.md", rule)
-
         assert len(findings) == 1
         assert findings[0].rule_id == "PI-005"
         assert findings[0].severity == Severity.MEDIUM
@@ -202,12 +209,24 @@ class TestPI005HTMLComments:
             "<!-- TODO: fix this later -->",
             "<!-- FIXME: needs refactoring -->",
             "<!-- NOTE: important detail -->",
-            "<!-- TODO: add error handling -->",
+            "<!-- Begin Sidebar -->",
+            "<!-- Header -->",
+            "<!-- Footer -->",
+            "<!-- CDN -->",
+            "<!-- Chart -->",
+            "<!-- Generated by tool -->",
+            "<!-- DO NOT EDIT -->",
+            "<!-- Chart.js CDN -->",
+            "<!-- Key Metrics -->",
+            "<!-- Date Range Controls (tally-style) -->",
+            "<!-- Daily Trend -->",
+            "<!-- Heatmap -->",
+            "<!-- will be rendered here by JavaScript -->",
         ],
     )
-    def test_pi005_excludes_standard_code_comments(self, pi_rules: list[Rule], safe_input: str) -> None:
+    def test_pi005_does_not_flag_structural_html_comments(
+        self, pi_rules: list[Rule], safe_input: str
+    ) -> None:
         rule = [r for r in pi_rules if r.rule_id == "PI-005"]
-
         findings = match_line(safe_input, 1, "test.md", rule)
-
         assert findings == []

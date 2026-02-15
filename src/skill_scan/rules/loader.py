@@ -72,6 +72,7 @@ def _parse_rule(rule_id: str, config: dict[str, object]) -> Rule:
 
     patterns = _compile_patterns(config.get("patterns", []), flags)
     exclude_patterns = _compile_patterns(config.get("exclude_patterns", []), flags)
+    path_exclude_patterns = _compile_patterns(config.get("path_exclude_patterns", []), re.RegexFlag(0))
 
     return Rule(
         rule_id=rule_id,
@@ -81,6 +82,8 @@ def _parse_rule(rule_id: str, config: dict[str, object]) -> Rule:
         recommendation=str(config["recommendation"]),
         patterns=patterns,
         exclude_patterns=exclude_patterns,
+        path_exclude_patterns=path_exclude_patterns,
+        confidence=str(config.get("confidence", "stable")),
     )
 
 
