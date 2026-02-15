@@ -8,8 +8,8 @@ PYTEST ?= $(UV) run pytest
 BANDIT ?= $(UV) run bandit
 RADON ?= $(UV) run radon
 
-EXCLUDE_DIRS := .venv,.git,.agents,.github
-MYPY_EXCLUDE := (\.venv|\.git|\.agents|\.github)
+EXCLUDE_DIRS := .venv,.git,.agents,.github,tools
+MYPY_EXCLUDE := (\.venv|\.git|\.agents|\.github|tools)
 
 # Usage:
 # make run RUN=path/to/script.py
