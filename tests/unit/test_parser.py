@@ -87,7 +87,7 @@ def test_parse_skill_frontmatter_preserves_extra_fields(tmp_path: Path) -> None:
 
 def test_parse_skill_frontmatter_raises_when_skill_md_not_found(tmp_path: Path) -> None:
     """Directory with no SKILL.md raises SkillParseError."""
-    with pytest.raises(SkillParseError, match="SKILL.md not found"):
+    with pytest.raises(SkillParseError, match=r"SKILL\.md not found"):
         parse_skill_frontmatter(tmp_path)
 
 
