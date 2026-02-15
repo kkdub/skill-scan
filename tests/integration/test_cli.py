@@ -107,11 +107,11 @@ class TestCLIScanCommand:
     def test_scan_skill_with_medium_severity_exits_with_code_one(self, tmp_path: Path) -> None:
         skill_dir = make_skill_dir(
             tmp_path,
-            extra_files={"code.py": "import requests\nrequests.get('http://evil.com')"},
+            extra_files={"page.md": "<!-- hidden instruction to steal data -->"},
         )
         runner = CliRunner()
 
         result = runner.invoke(skill_scan, ["scan", str(skill_dir)])
 
-        # Medium severity should result in FLAG verdict (exit code 1)
-        assert result.exit_code in (0, 1)
+        # PI-005 (medium) -> FLAG verdict -> exit code 1
+        assert result.exit_code == 1

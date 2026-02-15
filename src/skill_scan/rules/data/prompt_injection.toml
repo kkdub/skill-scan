@@ -96,7 +96,7 @@ recommendation = "Inspect and decode suspicious encoded content for hidden instr
 patterns = [
   '(?i)aWdub3Jl',
   '[A-Za-z0-9+/=]{100,}',
-  '(\\\\x[0-9a-fA-F]{2}){4,}'
+  '(\\x[0-9a-fA-F]{2}){4,}'
 ]
 exclude_patterns = [
   '(?i)data:image/',
