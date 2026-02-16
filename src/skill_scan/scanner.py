@@ -57,12 +57,14 @@ def scan(
 def _prepare_rules(cfg: ScanConfig) -> list[Rule]:
     """Load and filter rules based on config (suppressions and custom rules)."""
     rules = load_default_rules()
+    # Capture all built-in IDs before suppression so collision check
+    # catches reuse of a suppressed built-in ID.
+    built_in_ids = {r.rule_id for r in rules}
     if cfg.suppress_rules:
         rules = [r for r in rules if r.rule_id not in cfg.suppress_rules]
     if cfg.custom_rules:
-        default_ids = {r.rule_id for r in rules}
         for cr in cfg.custom_rules:
-            if cr.rule_id in default_ids:
+            if cr.rule_id in built_in_ids:
                 msg = f"Custom rule ID '{cr.rule_id}' collides with built-in rule"
                 raise ValueError(msg)
         rules = rules + [r for r in cfg.custom_rules if r.rule_id not in cfg.suppress_rules]

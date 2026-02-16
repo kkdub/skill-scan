@@ -68,7 +68,13 @@ def skill_scan() -> None:
     default=None,
     help="Exit 2 if any finding at or above this severity, 0 otherwise",
 )
-@click.option("--config", "config_path", type=click.Path(exists=True), default=None, help="Config file path.")
+@click.option(
+    "--config",
+    "config_path",
+    type=click.Path(exists=True, dir_okay=False),
+    default=None,
+    help="Config file path.",
+)
 def scan_cmd(
     path: str | None,
     repo: str | None,

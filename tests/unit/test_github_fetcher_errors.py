@@ -6,6 +6,7 @@ import builtins
 import os
 import shutil
 import sys
+from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
@@ -14,7 +15,7 @@ import pytest
 import respx
 
 from skill_scan._fetchers import GitHubFetcher
-from skill_scan._github_api import FetchError
+from skill_scan._github_api import FetchError, download_file
 from skill_scan._github_api import validate_download_url, validate_entry_name
 from tests.unit.github_fetcher_helpers import contents_response, file_item
 
@@ -148,6 +149,10 @@ class TestValidateEntryName:
 
     def test_rejects_dotdot(self) -> None:
         with pytest.raises(FetchError, match="Unsafe entry name"):
+            validate_entry_name("..")
+
+    def test_rejects_dotdot_path(self) -> None:
+        with pytest.raises(FetchError, match="Unsafe entry name"):
             validate_entry_name("../etc/passwd")
 
     def test_rejects_slash(self) -> None:
@@ -168,7 +173,12 @@ class TestValidateEntryName:
 
     def test_accepts_normal_name(self) -> None:
         validate_entry_name("SKILL.md")
-        assert True  # no exception raised
+        assert True
+
+    def test_accepts_double_dot_in_filename(self) -> None:
+        """Filenames like 'file..txt' are legitimate and should be accepted."""
+        validate_entry_name("file..txt")
+        assert True
 
 
 class TestValidateDownloadUrl:
@@ -176,15 +186,43 @@ class TestValidateDownloadUrl:
 
     def test_accepts_raw_githubusercontent(self) -> None:
         validate_download_url("https://raw.githubusercontent.com/owner/repo/main/file.md")
-        assert True  # no exception raised
+        assert True
 
     def test_rejects_attacker_host(self) -> None:
         with pytest.raises(FetchError, match="Untrusted download host"):
             validate_download_url("https://evil.com/payload")
 
+    def test_rejects_http_scheme(self) -> None:
+        """HTTP (non-HTTPS) URLs are rejected to prevent MitM attacks."""
+        with pytest.raises(FetchError, match="Untrusted download scheme"):
+            validate_download_url("http://raw.githubusercontent.com/owner/repo/main/file.md")
+
     def test_rejects_localhost(self) -> None:
-        with pytest.raises(FetchError, match="Untrusted download host"):
+        with pytest.raises(FetchError, match="Untrusted download scheme"):
             validate_download_url("http://localhost:8080/secret")
+
+
+@respx.mock
+class TestDownloadFileErrors:
+    """Tests for download_file HTTP error handling."""
+
+    def test_http_error_raises_fetch_error(self, tmp_path: Path) -> None:
+        """HTTP errors during download raise FetchError."""
+        url = "https://raw.githubusercontent.com/owner/repo/main/file.md"
+        respx.get(url).mock(return_value=httpx.Response(404))
+        dest = tmp_path / "file.md"
+        with httpx.Client() as client:
+            with pytest.raises(FetchError, match="HTTP 404"):
+                download_file(client, url, dest)
+
+    def test_success_writes_file(self, tmp_path: Path) -> None:
+        """Successful download writes content to disk."""
+        url = "https://raw.githubusercontent.com/owner/repo/main/file.md"
+        respx.get(url).mock(return_value=httpx.Response(200, content=b"hello"))
+        dest = tmp_path / "file.md"
+        with httpx.Client() as client:
+            download_file(client, url, dest)
+        assert dest.read_bytes() == b"hello"
 
 
 class TestGitHubFetcherMissingHttpx:

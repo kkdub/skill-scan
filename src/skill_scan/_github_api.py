@@ -23,14 +23,17 @@ class FetchError(Exception):
 
 def validate_entry_name(name: str) -> None:
     """Reject path-traversal attempts in file/dir names from the API."""
-    if not name or ".." in name or "/" in name or "\\" in name or name == ".":
+    if not name or name in {".", ".."} or "/" in name or "\\" in name:
         msg = f"Unsafe entry name from API: {name!r}"
         raise FetchError(msg)
 
 
 def validate_download_url(url: str) -> None:
-    """Reject download URLs that don't point to GitHub-owned hosts."""
+    """Reject download URLs that are not HTTPS or not GitHub-owned hosts."""
     parsed = urlparse(url)
+    if parsed.scheme != "https":
+        msg = f"Untrusted download scheme: {parsed.scheme!r}"
+        raise FetchError(msg)
     if parsed.hostname not in _ALLOWED_DOWNLOAD_HOSTS:
         msg = f"Untrusted download host: {parsed.hostname}"
         raise FetchError(msg)
@@ -90,10 +93,14 @@ def api_get(client: Any, url: str, params: dict[str, str]) -> Any:
 
 
 def download_file(client: Any, url: str, dest: Path) -> None:
-    """Download a file from a URL and write it to disk."""
+    """Download a file from a URL and write it to disk.
+
+    Raises:
+        FetchError: If the HTTP request fails (status code >= 400).
+    """
     response = client.get(url)
     if response.status_code >= 400:
-        logger.warning("Failed to download %s: HTTP %d", url, response.status_code)
-        return
+        msg = f"HTTP {response.status_code} downloading {url}"
+        raise FetchError(msg)
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_bytes(response.content)

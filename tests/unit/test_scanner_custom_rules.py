@@ -98,3 +98,16 @@ def test_scan_no_custom_rules_works_normally(tmp_path: Path) -> None:
     result = scan(skill_dir, config=cfg)
 
     assert result.verdict == Verdict.PASS
+
+
+def test_suppressed_builtin_id_still_collides(tmp_path: Path) -> None:
+    """Custom rule reusing a suppressed built-in ID still raises ValueError."""
+    skill_dir = make_skill_dir(tmp_path)
+    colliding = _make_custom_rule(rule_id="PI-001")
+    cfg = ScanConfig(
+        custom_rules=(colliding,),
+        suppress_rules=frozenset({"PI-001"}),
+    )
+
+    with pytest.raises(ValueError, match="collides with built-in rule"):
+        scan(skill_dir, config=cfg)
