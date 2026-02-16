@@ -10,8 +10,6 @@ recommendation = "Remove piped download-to-shell commands; use verified package 
 patterns = [
   '(?i)curl\b.*\|\s*(?:ba)?sh',
   '(?i)wget\b.*\|\s*(?:ba)?sh',
-  '(?i)curl\b.*\|\s*bash',
-  '(?i)wget\b.*\|\s*bash',
   '(?i)iex\s*\(\s*Invoke-WebRequest',
   '(?i)Invoke-Expression\s*\(\s*Invoke-WebRequest',
   '(?i)curl\b.*\|\s*zsh',
