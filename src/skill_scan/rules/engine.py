@@ -6,7 +6,7 @@ ReDoS mitigation:
 - All patterns are author-controlled (not user-supplied)
 - Input is bounded by ScanConfig.max_file_size (default 500KB)
 - Line-by-line processing limits blast radius of any single match
-- No backtracking-heavy patterns in the default rule set
+- Default patterns reviewed to avoid pathological backtracking
 """
 
 from __future__ import annotations

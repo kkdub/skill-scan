@@ -117,7 +117,10 @@ def _check_entry(
     rel = file_path.relative_to(skill_dir).as_posix()
 
     if file_path.is_symlink():
-        return check_symlink_outside(rel, file_path.resolve(), resolved_root), 0
+        resolved = file_path.resolve()
+        if not resolved.is_relative_to(resolved_root):
+            return check_symlink_outside(rel, resolved, resolved_root), 0
+        # Internal symlink: fall through to binary/extension/size checks
 
     if not file_path.is_file() or not file_path.resolve().is_relative_to(resolved_root):
         return None

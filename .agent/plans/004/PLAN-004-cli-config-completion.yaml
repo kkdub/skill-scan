@@ -1,0 +1,363 @@
+id: "PLAN-004"
+title: "CLI Completion & Configurable Rules (R2, R9, R10)"
+type: implementation
+status: Active
+created: 2026-02-15
+priority: high
+
+linked_spec: ".agent/plans/001/SPEC-001-skill-audit.md"
+
+description: |
+  Final implementation plan completing all remaining SPEC-001 requirements.
+  After PLAN-001 (MVP), PLAN-002 (hardening), and PLAN-003 (complete
+  detection), the scanner covers all threat categories (R3-R8) with text
+  output. Four areas remain from the original spec:
+
+  1. JSON output mode (R9) — machine-parseable output for CI/CD integration
+  2. CLI flags: --fail-on, --format, --config, --repo (R2)
+  3. Configurable rules (R10) — rule suppression + custom rules via TOML
+  4. Remote scanning (R2) — --repo to scan GitHub repos without cloning
+
+  When PLAN-004 is done every requirement R0-R10 from SPEC-001 is complete
+  and the tool is feature-complete for v1.0.
+
+requirements:
+  extraction_status: done
+  extracted_at: 2026-02-15
+  spec_hash: null
+  items:
+    - id: R9-json
+      description: "JSON output mode for CI/CD and tooling integration"
+      status: pending
+      spec_ref: "SPEC-001 R9"
+      notes: |
+        Machine-parseable JSON output. Same findings data as text mode,
+        structured as JSON object. Deterministic (no timestamps in findings).
+
+    - id: R2-fail-on
+      description: "--fail-on <severity> exit code threshold override"
+      status: pending
+      spec_ref: "SPEC-001 R2"
+      notes: |
+        Overrides exit code threshold without changing verdict in report.
+        --fail-on medium: exit 0 if all findings below medium, exit 2 if
+        any findings at medium or above. Useful for CI pipelines.
+
+    - id: R10-suppress
+      description: "Rule suppression by ID via config file"
+      status: pending
+      spec_ref: "SPEC-001 R10"
+      notes: |
+        TOML config with [suppress] section listing rule IDs to skip.
+        Also configurable scan settings (extensions, size limits).
+        Config loadable via --config CLI flag or Python API (ScanConfig kwargs).
+
+    - id: R10-custom
+      description: "Custom rules via TOML config"
+      status: pending
+      spec_ref: "SPEC-001 R10"
+      notes: |
+        Config file may contain [rules.*] sections in same format as
+        built-in rules. Custom rules merged with defaults at scan time.
+
+    - id: R2-repo
+      description: "--repo <owner/repo> remote scanning via GitHub API"
+      status: pending
+      spec_ref: "SPEC-001 R2"
+      notes: |
+        Fetch skill from GitHub without cloning. Uses httpx (optional dep).
+        SkillFetcher protocol already in place; needs GitHubFetcher impl.
+
+  uncovered: []
+
+utilities_audit:
+  status: done
+  search_performed:
+    - "SkillFetcher Protocol exists in _fetchers.py — GitHubFetcher plugs in"
+    - "load_config() in config.py returns hardcoded defaults — needs TOML parsing"
+    - "OutputMode enum in formatters.py has DEFAULT/QUIET/VERBOSE — needs JSON"
+    - "scanner.py calls load_default_rules() — needs suppress + merge logic"
+    - "cli.py has scan_cmd with --strict-schema, --quiet, --verbose — needs new flags"
+    - "formatters.py is 205 lines — JSON formatter needs separate file"
+    - "json module is stdlib — no new deps for JSON output"
+    - "httpx needed as optional extra for --repo"
+  categories:
+    error_handling:
+      needed: true
+      notes: "ImportError for missing httpx. ConfigError for invalid config TOML."
+    validation:
+      needed: true
+      notes: "Config file schema validation. --fail-on severity validation."
+    types:
+      needed: true
+      notes: "OutputMode.JSON variant. ScanConfig.suppress_rules field."
+    configuration:
+      needed: true
+      notes: "Full TOML config file parsing in load_config()."
+    http_client:
+      needed: true
+      notes: "httpx for GitHubFetcher. Optional extra in pyproject.toml."
+  infrastructure_parts: []
+
+parts:
+  - id: a
+    title: "JSON output formatter + --format flag (R9)"
+    status: pending
+    requirements_covered: [R9-json]
+    files:
+      - "src/skill_scan/json_formatter.py"
+      - "src/skill_scan/formatters.py"
+      - "src/skill_scan/cli.py"
+      - "src/skill_scan/__init__.py"
+      - "tests/unit/test_json_formatter.py"
+      - "tests/integration/test_cli.py"
+    criteria:
+      - "New json_formatter.py with format_json(result) -> str pure function"
+      - "JSON schema: {skill_name, verdict, files_scanned, duration, counts, findings}"
+      - "Each finding serialized: rule_id, severity, category, file, line, matched_text, description, recommendation"
+      - "Severity values lowercase strings, verdict lowercase string"
+      - "counts includes all 5 severity levels (0 for missing)"
+      - "Deterministic: same ScanResult always produces identical JSON (sorted keys)"
+      - "Uses stdlib json module only (no orjson/ujson)"
+      - "OutputMode enum gains JSON variant"
+      - "CLI --format text|json option (default: text)"
+      - "--format json outputs JSON to stdout; --quiet/--verbose ignored when --format json"
+      - "Exit codes unchanged (still based on verdict)"
+      - "__init__.py exports updated if needed"
+      - "Unit tests verify JSON structure, field presence, determinism"
+      - "Integration test: skill-scan scan --format json <path> produces valid JSON"
+      - "json_formatter.py under 250 lines"
+      - "make check passes"
+
+  - id: b
+    title: "--fail-on severity threshold (R2)"
+    status: pending
+    requirements_covered: [R2-fail-on]
+    files:
+      - "src/skill_scan/cli.py"
+      - "tests/integration/test_cli.py"
+    criteria:
+      - "CLI --fail-on option accepts severity name: critical|high|medium|low|info"
+      - "Case-insensitive input (--fail-on MEDIUM works)"
+      - "Without --fail-on: current exit code behavior (0=pass, 1=flag, 2=block)"
+      - "With --fail-on <sev>: exit 0 if no findings at or above <sev>, exit 2 otherwise"
+      - "Verdict in report output unchanged (still shows actual PASS/FLAG/BLOCK)"
+      - "--fail-on critical: exit 2 only if critical findings, 0 for high/medium/low/info"
+      - "--fail-on medium: exit 2 if any medium+, 0 for low/info only"
+      - "--fail-on info: exit 2 if any findings at all"
+      - "--fail-on works with both --format text and --format json"
+      - "Invalid severity name produces click error message"
+      - "Integration tests for each threshold level"
+      - "make check passes"
+
+  - id: c
+    title: "Config file loading + rule suppression (R10)"
+    status: pending
+    requirements_covered: [R10-suppress]
+    files:
+      - "src/skill_scan/config.py"
+      - "src/skill_scan/scanner.py"
+      - "src/skill_scan/cli.py"
+      - "tests/unit/test_config.py"
+      - "tests/unit/test_scanner.py"
+    criteria:
+      - "load_config(path) reads TOML file when path is not None"
+      - "Config TOML [scan] section: extensions, max_file_size, max_total_size, max_file_count, strict_schema"
+      - "Config TOML [suppress] section: rules = ['PI-004b', 'PI-006'] list of rule IDs"
+      - "ScanConfig gains suppress_rules: frozenset[str] = frozenset()"
+      - "ScanConfig constructable via Python API: ScanConfig(suppress_rules=frozenset({'PI-004b'}))"
+      - "scanner.py filters suppressed rules before scanning (after load, before match)"
+      - "Suppressed rules excluded from findings but noted in JSON metadata if applicable"
+      - "CLI --config <path> option passes config path to load_config()"
+      - "Missing config file raises FileNotFoundError with clear message"
+      - "Invalid TOML raises clear error message"
+      - "Unknown [scan] keys ignored (forward compatibility)"
+      - "Config values override defaults; omitted values keep defaults"
+      - "Unit tests: load valid config, suppress rules, override extensions, missing file, bad TOML"
+      - "Integration test: --config with suppress skips specified rules"
+      - "config.py under 250 lines, scanner.py under 250 lines"
+      - "make check passes"
+
+  - id: d
+    title: "Custom rules via config (R10)"
+    status: pending
+    depends_on: [c]
+    requirements_covered: [R10-custom]
+    files:
+      - "src/skill_scan/config.py"
+      - "src/skill_scan/scanner.py"
+      - "src/skill_scan/rules/loader.py"
+      - "tests/unit/test_config.py"
+      - "tests/unit/test_scanner.py"
+      - "tests/fixtures/configs/"
+    criteria:
+      - "Config TOML [rules.*] sections define custom rules in same format as built-in rules"
+      - "Custom rule format: severity, category, description, recommendation, patterns, exclude_patterns, flags"
+      - "Custom rules parsed by load_rules_from_config(path) function in loader.py or config.py"
+      - "Custom rules merged with default rules in scanner.py (custom rules evaluated alongside defaults)"
+      - "Custom rule IDs must not collide with built-in rule IDs (ValueError if collision)"
+      - "Custom rules also subject to suppress_rules filtering"
+      - "Python API: ScanConfig(custom_rules=(...)) or scan() parameter for programmatic custom rules"
+      - "Unit tests: custom rule loaded, matches content, merged with defaults"
+      - "Unit tests: rule ID collision raises ValueError"
+      - "Test fixture: sample config with custom rule in tests/fixtures/configs/"
+      - "Integration test: --config with custom rule detects custom pattern"
+      - "make check passes"
+
+  - id: e
+    title: "Remote scanning via --repo (R2)"
+    status: pending
+    requirements_covered: [R2-repo]
+    files:
+      - "src/skill_scan/_fetchers.py"
+      - "src/skill_scan/cli.py"
+      - "pyproject.toml"
+      - "tests/unit/test_fetchers.py"
+      - "tests/integration/test_cli.py"
+    criteria:
+      - "GitHubFetcher class implements SkillFetcher protocol"
+      - "Uses GitHub Contents API to fetch only the target directory (not the entire repo)"
+      - "GET /repos/{owner}/{repo}/contents/{path} lists directory, then fetches each file"
+      - "Files written to temporary directory mirroring the remote directory structure"
+      - "Supports --skill-path <path> for skills embedded in larger repos (default: repo root)"
+      - "Temp directory cleaned up after scan completes (context manager or finally block)"
+      - "httpx declared as pip extra in pyproject.toml: [project.optional-dependencies] remote = ['httpx>=0.27']"
+      - "CLI --repo <owner/repo> option, mutually exclusive with positional path argument"
+      - "CLI --skill-path <path> option (only valid with --repo)"
+      - "Missing httpx raises clear error: 'Install httpx for remote scanning: pip install skill-scan[remote]'"
+      - "HTTP errors (404, 403, timeout) raise descriptive errors"
+      - "Respects GITHUB_TOKEN env var for private repos (Authorization header)"
+      - "Handles nested subdirectories (recursive fetch)"
+      - "Respects FS-007 file count limit during fetch (bail early if >100 files)"
+      - "Unit tests mock httpx responses (do not make real HTTP calls)"
+      - "Integration test: --repo without httpx installed shows helpful error"
+      - "_fetchers.py under 250 lines"
+      - "make check passes"
+
+  - id: f
+    title: "Integration tests + final validation"
+    status: pending
+    depends_on: [a, b, c, d, e]
+    requirements_covered: [R9-json, R2-fail-on, R10-suppress, R10-custom, R2-repo]
+    files:
+      - "tests/integration/test_cli.py"
+      - "tests/integration/test_cli_config.py"
+      - "tests/integration/test_cli_json.py"
+    criteria:
+      - "End-to-end: scan with --format json produces valid parseable JSON matching expected schema"
+      - "End-to-end: --fail-on medium with medium findings exits 2"
+      - "End-to-end: --fail-on critical with only medium findings exits 0"
+      - "End-to-end: --config with suppress removes specified rule findings"
+      - "End-to-end: --config with custom rule detects custom pattern"
+      - "End-to-end: --format json + --fail-on combined works correctly"
+      - "End-to-end: --config + --format json combined works correctly"
+      - "Split integration tests across files if needed to stay under 250 lines"
+      - "Corpus revalidation: re-run against skill corpus, no regressions"
+      - "All integration test files under 250 lines"
+      - "make check passes"
+      - "from skill_scan import scan still works"
+
+allowed_files:
+  - "src/skill_scan/**"
+  - "tests/**"
+  - "pyproject.toml"
+  - ".agent/plans/004/**"
+
+forbidden:
+  - ".env*"
+  - "*.pyc"
+
+acceptance_criteria:
+  - "All requirements (R9-json, R2-fail-on, R10-suppress, R10-custom, R2-repo) have status: done"
+  - "All parts (a through f) have status: Done"
+  - "All tests pass (make check)"
+  - "skill-scan scan --format json <path> outputs valid JSON"
+  - "skill-scan scan --fail-on medium <path> returns correct exit code"
+  - "skill-scan scan --config <path> suppresses and adds rules"
+  - "skill-scan scan --repo <owner/repo> fetches and scans (with httpx installed)"
+  - "from skill_scan import scan still works with config kwargs"
+  - "All source files under 250 lines"
+  - "Corpus revalidation: no regressions from PLAN-003 baseline"
+
+stop_condition: |
+  When all requirements are verified done, all parts are Done, make check
+  passes, and corpus revalidation confirms no regressions.
+
+design_decisions:
+  - decision: "JSON formatter in separate file (json_formatter.py)"
+    rationale: "formatters.py is 205 lines; adding JSON formatting would exceed 250-line limit."
+
+  - decision: "suppress_rules on ScanConfig dataclass"
+    rationale: |
+      Keeps config as a single frozen dataclass flowing through the pipeline.
+      Python API: ScanConfig(suppress_rules=frozenset({'PI-004b'})).
+      Config file: [suppress] section parsed into this field.
+
+  - decision: "Custom rules loaded by loader, not config module"
+    rationale: |
+      Rules need regex compilation (loader.py expertise). Config.py reads
+      TOML and delegates [rules.*] parsing to loader's _parse_rule().
+      Avoids config -> rules circular dependency.
+
+  - decision: "--fail-on changes exit code only, not verdict"
+    rationale: "Per spec: 'overrides the exit code threshold but does not change the verdict in the report.'"
+
+  - decision: "httpx as a pip extra (pip install skill-scan[remote])"
+    rationale: |
+      The --repo feature is fully in scope and will be built. However, httpx
+      is declared as a pip extra rather than a hard dependency so that users
+      who only scan local paths don't need it installed. Core engine stays
+      stdlib-only per project conventions. Matches spec Stack section which
+      lists httpx as "optional extra, for --repo remote scanning".
+
+  - decision: "--format json ignores --quiet/--verbose"
+    rationale: "JSON always contains full structured data. Verbosity modes are text-specific."
+
+  - decision: "GitHubFetcher uses Contents API, not tarball or git clone"
+    rationale: |
+      Skills are typically embedded in larger repos (monorepos, project repos
+      with a skill subdirectory). The Contents API fetches only the target
+      directory — no downloading an entire geometry library to scan one skill.
+      For a typical skill (<100 files), this is a handful of small requests
+      well within GitHub's 5000 req/hour authenticated rate limit. Tarball
+      downloads the entire repo which is wasteful; git clone requires git
+      installed. Contents API needs only httpx.
+
+handoff:
+  stopped_at: null
+  current_state: null
+  next_steps: []
+  blockers: []
+  scope:
+    files:
+      - "src/skill_scan/json_formatter.py"
+      - "src/skill_scan/formatters.py"
+      - "src/skill_scan/config.py"
+      - "src/skill_scan/scanner.py"
+      - "src/skill_scan/cli.py"
+      - "src/skill_scan/_fetchers.py"
+      - "src/skill_scan/__init__.py"
+      - "src/skill_scan/rules/loader.py"
+      - "pyproject.toml"
+    functions:
+      - "format_json(result) -> str"
+      - "load_config(path) -> ScanConfig (now reads TOML)"
+      - "load_rules_from_config(path) -> list[Rule]"
+      - "GitHubFetcher.fetch(source) -> Path"
+    components:
+      - "JSON formatter (json_formatter.py)"
+      - "Config file loading (config.py)"
+      - "Rule suppression + custom rules (scanner.py + loader.py)"
+      - "Remote fetching (GitHubFetcher in _fetchers.py)"
+      - "CLI flag additions (cli.py)"
+  decisions: []
+  resolved_questions: []
+  open_questions:
+    - question: "Should custom rules in config support path_exclude_patterns and confidence fields?"
+      context: "Built-in rules use these optional fields. Custom rules from config should probably support the same schema for consistency."
+      default_answer: "Yes, support full rule schema for custom rules."
+    - question: "Should --repo support branch/tag specification?"
+      context: "Spec says --repo <owner/repo>. Could extend to <owner/repo>@<ref> for branches/tags."
+      default_answer: "Accept optional @ref suffix. Default to repo default branch."
+
+errors: []
