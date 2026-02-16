@@ -1,0 +1,6 @@
+[rules.CUSTOM-001]
+severity = "high"
+category = "custom"
+description = "Detects test-marker patterns"
+recommendation = "Remove test markers"
+patterns = ["CUSTOM_MARKER_PATTERN"]

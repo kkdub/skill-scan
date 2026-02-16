@@ -1,12 +1,16 @@
 """Scan configuration — defaults and loading.
 
-Defines ScanConfig and provides a loader that returns defaults for MVP.
+Defines ScanConfig and provides a loader from TOML config files.
 """
 
 from __future__ import annotations
 
+import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
+
+from skill_scan.models import Rule
+from skill_scan.rules.loader import load_rules_from_config
 
 _DEFAULT_EXTENSIONS = frozenset(
     {
@@ -48,17 +52,76 @@ class ScanConfig:
     max_total_size: int = 5_000_000  # 5MB
     max_file_count: int = 100
     strict_schema: bool = False
+    suppress_rules: frozenset[str] = field(default_factory=frozenset)
+    custom_rules: tuple[Rule, ...] = ()
 
 
 def load_config(path: Path | None = None) -> ScanConfig:
     """Load scan config from a TOML file, or return defaults.
 
-    For MVP, always returns defaults. Config file loading deferred.
-
     Args:
-        path: Optional path to a TOML config file (unused for MVP).
+        path: Optional path to a TOML config file.
 
     Returns:
-        A ScanConfig instance with default settings.
+        A ScanConfig instance with settings from the file or defaults.
+
+    Raises:
+        FileNotFoundError: If a path is provided but the file does not exist.
+        tomllib.TOMLDecodeError: If the file contains invalid TOML.
     """
-    return ScanConfig()
+    if path is None:
+        return ScanConfig()
+
+    if not path.exists():
+        msg = f"Config file not found: {path}"
+        raise FileNotFoundError(msg)
+
+    with path.open("rb") as f:
+        data = tomllib.load(f)
+
+    return _build_config(data)
+
+
+def _build_config(data: dict[str, object]) -> ScanConfig:
+    """Build a ScanConfig from parsed TOML data."""
+
+    kwargs: dict[str, object] = {}
+    scan_section = data.get("scan", {})
+
+    if isinstance(scan_section, dict):
+        _apply_scan_settings(scan_section, kwargs)
+
+    suppress_section = data.get("suppress", {})
+    if isinstance(suppress_section, dict):
+        rules_list = suppress_section.get("rules", [])
+        if isinstance(rules_list, list):
+            kwargs["suppress_rules"] = frozenset(str(r) for r in rules_list)
+
+    if "rules" in data:
+        custom = load_rules_from_config(data)
+        if custom:
+            kwargs["custom_rules"] = tuple(custom)
+
+    return ScanConfig(**kwargs)  # type: ignore[arg-type]
+
+
+_SCAN_FIELDS: dict[str, type] = {
+    "max_file_size": int,
+    "max_total_size": int,
+    "max_file_count": int,
+    "strict_schema": bool,
+}
+
+
+def _apply_scan_settings(scan_section: dict[str, object], kwargs: dict[str, object]) -> None:
+    """Extract known [scan] fields into kwargs; unknown keys are ignored."""
+    if "extensions" in scan_section:
+        ext_list = scan_section["extensions"]
+        if isinstance(ext_list, list):
+            kwargs["extensions"] = frozenset(str(e) for e in ext_list)
+
+    for key, expected_type in _SCAN_FIELDS.items():
+        if key in scan_section:
+            value = scan_section[key]
+            if isinstance(value, expected_type):
+                kwargs[key] = value

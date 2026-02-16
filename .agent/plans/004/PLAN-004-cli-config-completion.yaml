@@ -1,7 +1,7 @@
 id: "PLAN-004"
 title: "CLI Completion & Configurable Rules (R2, R9, R10)"
 type: implementation
-status: Active
+status: Done
 created: 2026-02-15
 priority: high
 
@@ -28,7 +28,7 @@ requirements:
   items:
     - id: R9-json
       description: "JSON output mode for CI/CD and tooling integration"
-      status: pending
+      status: done
       spec_ref: "SPEC-001 R9"
       notes: |
         Machine-parseable JSON output. Same findings data as text mode,
@@ -36,7 +36,7 @@ requirements:
 
     - id: R2-fail-on
       description: "--fail-on <severity> exit code threshold override"
-      status: pending
+      status: done
       spec_ref: "SPEC-001 R2"
       notes: |
         Overrides exit code threshold without changing verdict in report.
@@ -45,7 +45,7 @@ requirements:
 
     - id: R10-suppress
       description: "Rule suppression by ID via config file"
-      status: pending
+      status: done
       spec_ref: "SPEC-001 R10"
       notes: |
         TOML config with [suppress] section listing rule IDs to skip.
@@ -54,7 +54,7 @@ requirements:
 
     - id: R10-custom
       description: "Custom rules via TOML config"
-      status: pending
+      status: done
       spec_ref: "SPEC-001 R10"
       notes: |
         Config file may contain [rules.*] sections in same format as
@@ -62,7 +62,7 @@ requirements:
 
     - id: R2-repo
       description: "--repo <owner/repo> remote scanning via GitHub API"
-      status: pending
+      status: done
       spec_ref: "SPEC-001 R2"
       notes: |
         Fetch skill from GitHub without cloning. Uses httpx (optional dep).
@@ -102,7 +102,7 @@ utilities_audit:
 parts:
   - id: a
     title: "JSON output formatter + --format flag (R9)"
-    status: pending
+    status: Done
     requirements_covered: [R9-json]
     files:
       - "src/skill_scan/json_formatter.py"
@@ -131,7 +131,7 @@ parts:
 
   - id: b
     title: "--fail-on severity threshold (R2)"
-    status: pending
+    status: Done
     requirements_covered: [R2-fail-on]
     files:
       - "src/skill_scan/cli.py"
@@ -152,7 +152,7 @@ parts:
 
   - id: c
     title: "Config file loading + rule suppression (R10)"
-    status: pending
+    status: Done
     requirements_covered: [R10-suppress]
     files:
       - "src/skill_scan/config.py"
@@ -180,7 +180,7 @@ parts:
 
   - id: d
     title: "Custom rules via config (R10)"
-    status: pending
+    status: Done
     depends_on: [c]
     requirements_covered: [R10-custom]
     files:
@@ -206,7 +206,7 @@ parts:
 
   - id: e
     title: "Remote scanning via --repo (R2)"
-    status: pending
+    status: Done
     requirements_covered: [R2-repo]
     files:
       - "src/skill_scan/_fetchers.py"
@@ -236,7 +236,7 @@ parts:
 
   - id: f
     title: "Integration tests + final validation"
-    status: pending
+    status: Done
     depends_on: [a, b, c, d, e]
     requirements_covered: [R9-json, R2-fail-on, R10-suppress, R10-custom, R2-repo]
     files:
@@ -283,6 +283,37 @@ stop_condition: |
   When all requirements are verified done, all parts are Done, make check
   passes, and corpus revalidation confirms no regressions.
 
+work_log:
+  - date: 2026-02-15
+    type: implement
+    note: "Parts a-e implemented in parallel: JSON formatter, --fail-on flag, config loading with suppression, custom rules, GitHub remote scanning"
+    part: a-e
+
+  - date: 2026-02-15
+    type: implement
+    note: "Integration tests added, all 668+ tests passing"
+    part: f
+
+  - date: 2026-02-15
+    type: refactor
+    note: "Split _fetchers.py into _fetchers.py + _github_api.py for MI score compliance and maintainability"
+    part: e
+
+  - date: 2026-02-15
+    type: fix
+    note: "Security hardening: path traversal prevention, SSRF mitigation via download URL validation, ReDoS protection via 500-char pattern limit"
+    part: c-e
+
+  - date: 2026-02-15
+    type: fix
+    note: "Replaced assert with explicit check in cli.py for optimization flag safety"
+    part: e
+
+  - date: 2026-02-15
+    type: test
+    note: "All parts validated, make check passing, PLAN-004 complete"
+    part: f
+
 design_decisions:
   - decision: "JSON formatter in separate file (json_formatter.py)"
     rationale: "formatters.py is 205 lines; adding JSON formatting would exceed 250-line limit."
@@ -324,8 +355,8 @@ design_decisions:
       installed. Contents API needs only httpx.
 
 handoff:
-  stopped_at: null
-  current_state: null
+  stopped_at: "All parts complete"
+  current_state: "All parts implemented, tests passing, make check green"
   next_steps: []
   blockers: []
   scope:
@@ -336,6 +367,7 @@ handoff:
       - "src/skill_scan/scanner.py"
       - "src/skill_scan/cli.py"
       - "src/skill_scan/_fetchers.py"
+      - "src/skill_scan/_github_api.py"
       - "src/skill_scan/__init__.py"
       - "src/skill_scan/rules/loader.py"
       - "pyproject.toml"
@@ -350,14 +382,35 @@ handoff:
       - "Rule suppression + custom rules (scanner.py + loader.py)"
       - "Remote fetching (GitHubFetcher in _fetchers.py)"
       - "CLI flag additions (cli.py)"
-  decisions: []
-  resolved_questions: []
-  open_questions:
+  decisions:
+    - decision: "Path traversal prevention in config file loading"
+      rationale: |
+        Config file paths are normalized and checked to prevent directory traversal attacks.
+        Symlinks are resolved and validated to ensure they stay within allowed boundaries.
+    - decision: "SSRF mitigation in GitHub API downloads"
+      rationale: |
+        Download URLs from GitHub API responses are validated to ensure they match expected
+        githubusercontent.com domain pattern before fetching file contents. Prevents
+        malicious API responses from triggering requests to arbitrary internal endpoints.
+    - decision: "ReDoS protection via pattern length limits"
+      rationale: |
+        Custom rule patterns are limited to 500 characters to prevent ReDoS attacks via
+        config files. Documented in config.py error messages and user-facing docs.
+    - decision: "Split _fetchers.py into _fetchers.py + _github_api.py"
+      rationale: |
+        Original _fetchers.py with GitHubFetcher implementation exceeded 250 lines and
+        had maintainability index below threshold. Split GitHub API interaction logic
+        into separate _github_api.py module for better separation of concerns and
+        compliance with 250-line limit and MI score requirements.
+    - decision: "Replace assert with explicit check in cli.py"
+      rationale: |
+        Replaced assert statement with explicit if check and raise to ensure path
+        validation occurs even when Python is run with -O optimization flag.
+  resolved_questions:
     - question: "Should custom rules in config support path_exclude_patterns and confidence fields?"
-      context: "Built-in rules use these optional fields. Custom rules from config should probably support the same schema for consistency."
-      default_answer: "Yes, support full rule schema for custom rules."
+      answer: "Yes, full rule schema supported for custom rules for consistency."
     - question: "Should --repo support branch/tag specification?"
-      context: "Spec says --repo <owner/repo>. Could extend to <owner/repo>@<ref> for branches/tags."
-      default_answer: "Accept optional @ref suffix. Default to repo default branch."
+      answer: "Yes, optional @ref suffix implemented. Defaults to repo default branch."
+  open_questions: []
 
 errors: []

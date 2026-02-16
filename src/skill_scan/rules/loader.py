@@ -2,6 +2,9 @@
 
 Reads TOML rule definitions and compiles them into Rule objects
 with pre-compiled regex patterns for efficient matching.
+
+Note: custom rules loaded via --config accept user-supplied regex
+patterns. A maximum pattern length is enforced to mitigate ReDoS.
 """
 
 from __future__ import annotations
@@ -11,6 +14,8 @@ import tomllib
 from pathlib import Path
 
 from skill_scan.models import Rule, Severity
+
+_MAX_PATTERN_LENGTH = 1000
 
 _FLAG_MAP: dict[str, re.RegexFlag] = {
     "IGNORECASE": re.IGNORECASE,
@@ -42,6 +47,29 @@ def load_rules(path: Path) -> list[Rule]:
 
     rules_table: dict[str, dict[str, object]] = data.get("rules", {})
     rules = [_parse_rule(rule_id, config) for rule_id, config in rules_table.items()]
+    rules.sort(key=lambda r: r.rule_id)
+    return rules
+
+
+def load_rules_from_config(data: dict[str, object]) -> list[Rule]:
+    """Load custom rules from parsed TOML config data.
+
+    Looks for [rules.*] sections in the config data dict. Each key
+    under ``[rules]`` is treated as a rule ID with the same fields
+    as built-in TOML rule definitions.
+
+    Args:
+        data: Parsed TOML data dict (e.g. from ``tomllib.load``).
+
+    Returns:
+        List of Rule objects sorted by rule_id.
+    """
+    rules_table = data.get("rules", {})
+    if not isinstance(rules_table, dict):
+        return []
+    rules = [
+        _parse_rule(rule_id, config) for rule_id, config in rules_table.items() if isinstance(config, dict)
+    ]
     rules.sort(key=lambda r: r.rule_id)
     return rules
 
@@ -123,8 +151,12 @@ def _compile_patterns(
 
     compiled: list[re.Pattern[str]] = []
     for pattern_str in raw_patterns:
+        s = str(pattern_str)
+        if len(s) > _MAX_PATTERN_LENGTH:
+            msg = f"Regex pattern too long ({len(s)} chars, max {_MAX_PATTERN_LENGTH})"
+            raise ValueError(msg)
         try:
-            compiled.append(re.compile(str(pattern_str), flags))
+            compiled.append(re.compile(s, flags))
         except re.error as e:
             msg = f"Invalid regex pattern {pattern_str!r}: {e}"
             raise ValueError(msg) from e
