@@ -84,19 +84,21 @@ def _collect_files(skill_dir: Path, config: ScanConfig) -> tuple[list[Path], lis
     resolved_root = skill_dir.resolve()
     total_size = 0
 
+    file_count = 0
     for file_path in sorted(skill_dir.rglob("*")):
         result = _check_entry(file_path, skill_dir, resolved_root, config)
         if result is None:
             continue
         finding, size = result
+        total_size += size
+        file_count += 1
         if finding:
             fs_findings.append(finding)
         else:
-            total_size += size
             collected.append(file_path)
 
     _append_if(fs_findings, check_total_size(total_size, config.max_total_size))
-    _append_if(fs_findings, check_file_count(len(collected), config.max_file_count))
+    _append_if(fs_findings, check_file_count(file_count, config.max_file_count))
 
     return collected, fs_findings
 
@@ -120,23 +122,23 @@ def _check_entry(
     if not file_path.is_file() or not file_path.resolve().is_relative_to(resolved_root):
         return None
 
-    suffix = file_path.suffix
-    binary = check_binary(rel, suffix)
-    if binary:
-        return binary, 0
-
-    unknown = check_unknown_extension(rel, suffix, config.extensions)
-    if unknown:
-        return unknown, 0
-
     try:
         size = file_path.stat().st_size
     except OSError:
         return None
 
+    suffix = file_path.suffix
+    binary = check_binary(rel, suffix)
+    if binary:
+        return binary, size
+
+    unknown = check_unknown_extension(rel, suffix, config.extensions)
+    if unknown:
+        return unknown, size
+
     size_finding = check_file_size(rel, size, config.max_file_size)
     if size_finding:
-        return size_finding, 0
+        return size_finding, size
 
     return None, size
 

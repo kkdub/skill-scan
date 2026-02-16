@@ -81,6 +81,10 @@ patterns = [
   "(?i)process\\.env\\b(?!\\.)(?!\\[)",
   "(?i)\\benv\\s*\\|\\s*grep\\b"
 ]
+# Defense-in-depth: main patterns use position-level negative lookaheads,
+# but exclude_patterns operate at line level — if a line shows safe targeted
+# access (e.g. os.environ.get('KEY') alongside bare os.environ), skip the
+# entire rule for that line to reduce false positives.
 exclude_patterns = [
   "(?i)os\\.environ\\.get\\s*\\(",
   "(?i)os\\.environ\\[\\s*['\"]\\w+['\"]\\s*\\]",
