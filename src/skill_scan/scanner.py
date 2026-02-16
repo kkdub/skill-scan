@@ -11,6 +11,14 @@ from pathlib import Path
 
 from skill_scan._fetchers import LocalFetcher, SkillFetcher
 from skill_scan.config import ScanConfig, load_config
+from skill_scan.file_checks import (
+    check_binary,
+    check_file_count,
+    check_file_size,
+    check_symlink_outside,
+    check_total_size,
+    check_unknown_extension,
+)
 from skill_scan.models import Finding, Rule, ScanResult, Severity
 from skill_scan.parser import SkillParseError, parse_skill_frontmatter
 from skill_scan.rules import load_default_rules, match_line
@@ -22,56 +30,18 @@ def scan(
     config: ScanConfig | None = None,
     fetcher: SkillFetcher | None = None,
 ) -> ScanResult:
-    """Scan a skill directory and return aggregated results.
-
-    Pipeline:
-        1. Resolve path via fetcher (defaults to LocalFetcher)
-        2. Load config (defaults if None)
-        3. Validate SKILL.md frontmatter (R0 check)
-        4. Collect text files by extension
-        5. Load detection rules
-        6. Scan each file line by line
-        7. Assemble and return ScanResult
-
-    Args:
-        path: Path to the skill directory (string or Path object).
-        config: Optional scan configuration. Uses defaults if None.
-        fetcher: Optional SkillFetcher implementation. Uses LocalFetcher if None.
-
-    Returns:
-        ScanResult with findings, counts, verdict, and duration.
-    """
+    """Scan a skill directory and return aggregated results."""
     start = time.monotonic()
 
     resolved_fetcher = fetcher or LocalFetcher()
     skill_dir = resolved_fetcher.fetch(str(path))
     cfg = config if config is not None else load_config()
 
-    schema_findings: list[Finding] = []
-    skill_name: str | None = None
-    try:
-        fields = parse_skill_frontmatter(skill_dir)
-        skill_name = fields.get("name")
-    except SkillParseError as e:
-        severity = Severity.MEDIUM if cfg.strict_schema else Severity.INFO
-        schema_findings.append(
-            Finding(
-                rule_id="SV-001",
-                severity=severity,
-                category="schema-validation",
-                file="SKILL.md",
-                line=None,
-                matched_text="",
-                description=f"Schema validation failed: {e}",
-                recommendation="Fix frontmatter in SKILL.md or use 'skill-scan validate' for details",
-            )
-        )
-        skill_name = skill_dir.name
-
-    files = _collect_files(skill_dir, cfg)
+    schema_findings, skill_name = _validate_schema(skill_dir, cfg)
+    files, fs_findings = _collect_files(skill_dir, cfg)
     rules = load_default_rules()
     findings = _scan_all_files(files, skill_dir, rules)
-    all_findings = tuple(schema_findings + findings)
+    all_findings = tuple(schema_findings + fs_findings + findings)
     duration = time.monotonic() - start
 
     return ScanResult(
@@ -84,40 +54,97 @@ def scan(
     )
 
 
-def _collect_files(skill_dir: Path, config: ScanConfig) -> list[Path]:
+def _validate_schema(skill_dir: Path, cfg: ScanConfig) -> tuple[list[Finding], str | None]:
+    """Parse SKILL.md frontmatter and return (findings, skill_name)."""
+    try:
+        fields = parse_skill_frontmatter(skill_dir)
+        return [], fields.get("name")
+    except SkillParseError as e:
+        severity = Severity.MEDIUM if cfg.strict_schema else Severity.INFO
+        finding = Finding(
+            rule_id="SV-001",
+            severity=severity,
+            category="schema-validation",
+            file="SKILL.md",
+            line=None,
+            matched_text="",
+            description=f"Schema validation failed: {e}",
+            recommendation="Fix frontmatter in SKILL.md or use 'skill-scan validate' for details",
+        )
+        return [finding], skill_dir.name
+
+
+def _collect_files(skill_dir: Path, config: ScanConfig) -> tuple[list[Path], list[Finding]]:
     """Walk the skill directory and collect scannable files.
 
-    Filters files by extension (from config) and skips symlinks,
-    files outside the skill directory boundary, and files exceeding
-    the max_file_size threshold.
-
-    Args:
-        skill_dir: Root directory of the skill.
-        config: Scan configuration with extension and size limits.
-
-    Returns:
-        Sorted list of file paths to scan.
+    Returns tuple of (files to scan, file-safety findings).
     """
     collected: list[Path] = []
+    fs_findings: list[Finding] = []
     resolved_root = skill_dir.resolve()
+    total_size = 0
 
     for file_path in sorted(skill_dir.rglob("*")):
-        if file_path.is_symlink():
+        result = _check_entry(file_path, skill_dir, resolved_root, config)
+        if result is None:
             continue
-        if not file_path.is_file():
-            continue
-        if not file_path.resolve().is_relative_to(resolved_root):
-            continue
-        if file_path.suffix not in config.extensions:
-            continue
-        try:
-            if file_path.stat().st_size > config.max_file_size:
-                continue
-        except OSError:
-            continue
-        collected.append(file_path)
+        finding, size = result
+        if finding:
+            fs_findings.append(finding)
+        else:
+            total_size += size
+            collected.append(file_path)
 
-    return collected
+    _append_if(fs_findings, check_total_size(total_size, config.max_total_size))
+    _append_if(fs_findings, check_file_count(len(collected), config.max_file_count))
+
+    return collected, fs_findings
+
+
+def _check_entry(
+    file_path: Path,
+    skill_dir: Path,
+    resolved_root: Path,
+    config: ScanConfig,
+) -> tuple[Finding | None, int] | None:
+    """Check a single directory entry for file-safety issues.
+
+    Returns None to skip entirely, or (finding_or_None, file_size).
+    A non-None finding means the file should not be content-scanned.
+    """
+    rel = file_path.relative_to(skill_dir).as_posix()
+
+    if file_path.is_symlink():
+        return check_symlink_outside(rel, file_path.resolve(), resolved_root), 0
+
+    if not file_path.is_file() or not file_path.resolve().is_relative_to(resolved_root):
+        return None
+
+    suffix = file_path.suffix
+    binary = check_binary(rel, suffix)
+    if binary:
+        return binary, 0
+
+    unknown = check_unknown_extension(rel, suffix, config.extensions)
+    if unknown:
+        return unknown, 0
+
+    try:
+        size = file_path.stat().st_size
+    except OSError:
+        return None
+
+    size_finding = check_file_size(rel, size, config.max_file_size)
+    if size_finding:
+        return size_finding, 0
+
+    return None, size
+
+
+def _append_if(findings: list[Finding], finding: Finding | None) -> None:
+    """Append a finding to the list if it is not None."""
+    if finding:
+        findings.append(finding)
 
 
 def _scan_all_files(
@@ -125,16 +152,7 @@ def _scan_all_files(
     skill_dir: Path,
     rules: list[Rule],
 ) -> list[Finding]:
-    """Scan all collected files and aggregate findings.
-
-    Args:
-        files: List of file paths to scan.
-        skill_dir: Root directory for computing relative paths.
-        rules: Compiled detection rules.
-
-    Returns:
-        List of all findings across all files.
-    """
+    """Scan all collected files and aggregate findings."""
     all_findings: list[Finding] = []
     for file_path in files:
         all_findings.extend(_scan_file(file_path, skill_dir, rules))
@@ -144,20 +162,8 @@ def _scan_all_files(
 def _scan_file(file_path: Path, skill_dir: Path, rules: list[Rule]) -> list[Finding]:
     """Scan a single file line by line against all rules.
 
-    Reads the file as UTF-8, splits into lines, and applies match_line
-    to each line with 1-based line numbering. Uses the path relative
-    to the skill directory in findings (always forward slashes).
-
     On UnicodeDecodeError, emits an info-level FS-001 finding.
     On OSError, the file is silently skipped.
-
-    Args:
-        file_path: Absolute path to the file.
-        skill_dir: Root directory for computing relative paths.
-        rules: Compiled detection rules.
-
-    Returns:
-        List of findings from this file.
     """
     relative_path = file_path.relative_to(skill_dir).as_posix()
 
