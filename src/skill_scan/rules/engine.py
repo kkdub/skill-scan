@@ -1,6 +1,12 @@
 """Pattern matching engine — pure functions, no I/O.
 
 Applies compiled detection rules against text lines to produce findings.
+
+ReDoS mitigation:
+- All patterns are author-controlled (not user-supplied)
+- Input is bounded by ScanConfig.max_file_size (default 500KB)
+- Line-by-line processing limits blast radius of any single match
+- Default patterns reviewed to avoid pathological backtracking
 """
 
 from __future__ import annotations

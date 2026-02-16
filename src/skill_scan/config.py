@@ -8,7 +8,35 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
-_DEFAULT_EXTENSIONS = frozenset({".md", ".txt", ".py", ".sh", ".yaml", ".yml", ".json", ".toml"})
+_DEFAULT_EXTENSIONS = frozenset(
+    {
+        ".md",
+        ".txt",
+        ".py",
+        ".sh",
+        ".yaml",
+        ".yml",
+        ".json",
+        ".toml",
+        ".jinja2",
+    }
+)
+
+BINARY_EXTENSIONS = frozenset(
+    {
+        ".exe",
+        ".dll",
+        ".so",
+        ".dylib",
+        ".wasm",
+        ".pyc",
+        ".pyo",
+        ".bin",
+        ".o",
+        ".a",
+        ".lib",
+    }
+)
 
 
 @dataclass(slots=True, frozen=True)
@@ -17,6 +45,8 @@ class ScanConfig:
 
     extensions: frozenset[str] = field(default_factory=lambda: _DEFAULT_EXTENSIONS)
     max_file_size: int = 500_000  # 500KB
+    max_total_size: int = 5_000_000  # 5MB
+    max_file_count: int = 100
     strict_schema: bool = False
 
 

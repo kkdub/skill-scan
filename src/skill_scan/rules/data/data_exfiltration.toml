@@ -1,0 +1,93 @@
+# Data Exfiltration Detection Rules
+# Category: data-exfiltration
+# Rules EXFIL-001 through EXFIL-004
+
+[rules.EXFIL-001]
+severity = "critical"
+category = "data-exfiltration"
+description = "Silent outbound requests — covert data upload via curl, wget, or similar tools"
+recommendation = "Remove or reject commands that silently POST data to external servers"
+patterns = [
+  "(?i)curl\\s+.*-s.*-d\\s+@",
+  "(?i)curl\\s+.*-s.*--data",
+  "(?i)curl\\s+-s\\S*\\s+.*-X\\s+POST",
+  "(?i)curl\\s+.*--data-binary\\s+@",
+  "(?i)wget\\s+.*--post-file[=\\s]"
+]
+exclude_patterns = [
+  "(?i)^\\s*#\\s.*curl\\s+-s",
+  "(?i)use\\s+curl\\s+-s\\s+for\\b",
+  "(?i)the\\s+curl\\s+-s\\s+flag\\b",
+  "(?i)documentation.*curl"
+]
+
+[rules.EXFIL-002]
+severity = "high"
+category = "data-exfiltration"
+description = "Sensitive path access — reading private keys, credentials, or browser data"
+recommendation = "Remove or reject direct access to sensitive credential and key files"
+patterns = [
+  "~/\\.ssh/",
+  "~/\\.aws/",
+  "~/\\.gnupg/",
+  "/etc/shadow",
+  "(?i)\\.env\\b",
+  "(?i)Login\\s+Data",
+  "(?i)cookies\\.sqlite",
+  "Chrome/Default/",
+  "Firefox/Profiles/"
+]
+exclude_patterns = [
+  "(?i)protect\\s+your\\s+~/\\.",
+  "(?i)secure\\s+your\\s+~/\\.",
+  "(?i)never\\s+share\\s+your\\s+~/\\.",
+  "(?i)back\\s+up\\s+your\\s+~/\\.",
+  "(?i)ensure\\s+your\\s+~/\\.",
+  "(?i)warning.*~/\\.",
+  "(?i)do\\s+not\\s+expose\\s+~/\\."
+]
+
+[rules.EXFIL-003]
+severity = "high"
+category = "data-exfiltration"
+description = "Webhook/C2 patterns — data exfiltration via webhook endpoints or callback URLs"
+recommendation = "Remove or reject hard-coded webhook URLs and phone-home patterns"
+patterns = [
+  "(?i)discord\\.com/api/webhooks/",
+  "(?i)hooks\\.slack\\.com/services/",
+  "(?i)callback_url",
+  "(?i)phone_home",
+  "(?i)beacon_url",
+  "(?i)c2_server",
+  "(?i)exfil_url"
+]
+exclude_patterns = [
+  "(?i)documentation.*webhook",
+  "(?i)webhook\\s+security\\b",
+  "(?i)how\\s+to\\s+set\\s+up\\s+.*webhook",
+  "(?i)guide.*webhook",
+  "(?i)configuring\\s+.*webhook"
+]
+
+[rules.EXFIL-004]
+severity = "high"
+category = "data-exfiltration"
+description = "Environment harvesting — bulk access to environment variables"
+recommendation = "Use targeted environment variable access (e.g. os.environ.get('KEY')) instead of bulk reads"
+patterns = [
+  "(?i)\\bdict\\s*\\(\\s*os\\.environ\\s*\\)",
+  "(?i)\\bos\\.environ\\b(?!\\.get\\b)(?!\\[)",
+  "(?i)\\bprintenv\\b",
+  "(?i)process\\.env\\b(?!\\.)(?!\\[)",
+  "(?i)\\benv\\s*\\|\\s*grep\\b"
+]
+# Defense-in-depth: main patterns use position-level negative lookaheads,
+# but exclude_patterns operate at line level — if a line shows safe targeted
+# access (e.g. os.environ.get('KEY') alongside bare os.environ), skip the
+# entire rule for that line to reduce false positives.
+exclude_patterns = [
+  "(?i)os\\.environ\\.get\\s*\\(",
+  "(?i)os\\.environ\\[\\s*['\"]\\w+['\"]\\s*\\]",
+  "(?i)process\\.env\\.\\w+",
+  "(?i)process\\.env\\[\\s*['\"]\\w+"
+]

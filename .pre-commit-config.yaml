@@ -42,6 +42,7 @@ repos:
         name: Check Debug Statements
       - id: detect-private-key
         name: Detect Private Keys
+        exclude: ^tests/unit/test_rules_cred_detection\.py$
       - id: check-case-conflict
         name: Check Case Conflicts
 
@@ -137,7 +138,7 @@ repos:
         name: Check Spelling
         args:
           - --skip
-          - "*.lock,*.json,src/skill_scan/rules/data/prompt_injection_*.toml"
+          - "*.lock,*.json,src/skill_scan/rules/data/*.toml"
           - --ignore-words-list
           - "ignora,ist,als,alle,deine"
 

@@ -1,0 +1,71 @@
+# Supply Chain Risk Detection Rules
+# Category: supply-chain
+# Rules SC-001 through SC-004
+
+[rules.SC-001]
+severity = "medium"
+category = "supply-chain"
+description = "Remote instruction fetching — SKILL.md or config loaded from external URL (content can change post-review)"
+recommendation = "Bundle configuration locally; do not fetch instructions or config from remote URLs"
+patterns = [
+  '(?i)\b(?:source|config[_-]?url|instruction[_-]?url|skill[_-]?url)\s*[:=]\s*https?://',
+  "(?i)fetch\\s*\\(\\s*[\"']https?://\\S+\\.(?:md|ya?ml|toml|json|txt|cfg|ini)[\"']",
+  "(?i)(?:load|read|import|download|get)\\s*\\(\\s*[\"']https?://\\S+\\.(?:md|ya?ml|toml|json|txt|cfg|ini)[\"']",
+  '(?i)curl\s+\S*https?://\S+(?:SKILL|skill|config|instruction)\S*\.(?:md|ya?ml|toml|json)',
+  '(?i)wget\s+\S*https?://\S+(?:SKILL|skill|config|instruction)\S*\.(?:md|ya?ml|toml|json)'
+]
+exclude_patterns = [
+  '(?i)(?:attribution|credits?|license|author|reference|see\s+also)\s*[:]\s*https?://',
+  '(?i)^\s*(?:#|//|<!--)\s*(?:see|ref|source|from)\s*:?\s*https?://',
+  '(?i)\[.*\]\(https?://.*\)'
+]
+
+[rules.SC-002]
+severity = "medium"
+category = "supply-chain"
+description = "Unpinned dependencies — pip install without version pin allows supply chain attacks"
+recommendation = "Pin all dependencies to exact versions (e.g. requests==2.31.0) or use a requirements file"
+patterns = [
+  '(?i)\bpip3?\s+install\s+(?!-)[A-Za-z][\w.-]*(?:\s+(?!-)[A-Za-z][\w.-]*)*\s*$'
+]
+exclude_patterns = [
+  '(?i)\bpip3?\s+install\s+-[reE]\b',
+  '(?i)\bpip3?\s+install\s+\.\s*$',
+  '(?i)==',
+  '(?i)[><=!]=',
+  '(?i)~='
+]
+
+[rules.SC-003]
+severity = "medium"
+category = "supply-chain"
+description = "Broad filesystem access — path traversal or absolute paths to system directories"
+recommendation = "Use relative paths within the project directory; avoid traversal and system directory access"
+patterns = [
+  '\.\.\/',
+  '(?i)/etc/(?:passwd|shadow|hosts|sudoers)',
+  '(?i)/usr/(?:bin|sbin|local/bin)/',
+  '(?i)[Cc]:\\[Ww]indows',
+  '(?i)[Cc]:\\[Ss]ystem32'
+]
+exclude_patterns = [
+  '(?i)/dev/null',
+  '(?i)https?://\S*\.\.\/'
+]
+
+[rules.SC-004]
+severity = "high"
+category = "supply-chain"
+description = "Social engineering prerequisites — ClickFix pattern coercing users to run terminal commands"
+recommendation = "Remove social engineering content that tricks users into running commands"
+patterns = [
+  '(?i)(?:copy|paste|type|enter|run)\s+(?:this|the\s+following)\s+(?:command|line|code)\s+(?:in(?:to)?|at)\s+(?:your\s+)?(?:terminal|shell|console|cmd|command\s+(?:line|prompt))',
+  '(?i)run\s+the\s+following\s+in\s+your\s+(?:terminal|shell|console|cmd)',
+  '(?i)(?:fix|resolve|repair)\s+(?:the\s+)?(?:error|issue|problem|bug)\s+by\s+running\s*:',
+  '(?i)open\s+(?:your\s+)?(?:terminal|shell|cmd)\s+and\s+(?:paste|run|type|enter|execute)'
+]
+exclude_patterns = [
+  '(?i)(?:npm|yarn|pip|brew|apt|cargo|gem|go)\s+install\b',
+  '(?i)(?:npm|yarn)\s+(?:run|start|build|test)\b',
+  '(?i)(?:make|cmake|gradle|maven)\b'
+]

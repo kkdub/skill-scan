@@ -1,0 +1,121 @@
+# Malicious Code Detection Rules
+# Category: malicious-code
+# Rules EXEC-001 through EXEC-005
+
+[rules.EXEC-001]
+severity = "critical"
+category = "malicious-code"
+description = "Remote code execution — downloads piped directly to a shell interpreter"
+recommendation = "Remove piped download-to-shell commands; use verified package managers instead"
+patterns = [
+  '(?i)curl\b.*\|\s*(?:ba)?sh',
+  '(?i)wget\b.*\|\s*(?:ba)?sh',
+  '(?i)iex\s*\(\s*Invoke-WebRequest',
+  '(?i)Invoke-Expression\s*\(\s*Invoke-WebRequest',
+  '(?i)curl\b.*\|\s*zsh',
+  '(?i)wget\b.*\|\s*zsh'
+]
+exclude_patterns = [
+  '(?i)do\s+not\s+run\s+curl',
+  '(?i)never\s+run\s+curl\s*\|',
+  '(?i)avoid\s+curl\s*\|',
+  '(?i)warning.*curl\s*\|',
+  '(?i)do\s+not\s+run\s+wget',
+  '(?i)never\s+run\s+wget\s*\|',
+  '(?i)dangerous.*curl\s*\|'
+]
+
+[rules.EXEC-002]
+severity = "critical"
+category = "malicious-code"
+description = "Dynamic code execution — eval/exec/os.system/subprocess with shell=True"
+recommendation = "Remove dynamic code execution; use safe alternatives with validated inputs"
+patterns = [
+  '(?i)\beval\s*\(',
+  '(?i)\bexec\s*\(',
+  '(?i)\bos\.system\s*\(',
+  '(?i)subprocess\.[a-z]+\(.*shell\s*=\s*True'
+]
+exclude_patterns = [
+  '(?i)never\s+use\s+eval\s*\(',
+  '(?i)avoid\s+eval\s*\(',
+  "(?i)don't\\s+use\\s+eval",
+  '(?i)do\s+not\s+use\s+eval',
+  '(?i)never\s+use\s+exec\s*\(',
+  '(?i)avoid\s+exec\s*\(',
+  "(?i)don't\\s+use\\s+exec",
+  '(?i)do\s+not\s+use\s+exec',
+  '(?i)anti-pattern.*\beval\b',
+  '(?i)anti-pattern.*\bexec\b'
+]
+
+[rules.EXEC-003]
+severity = "high"
+category = "malicious-code"
+description = "Obfuscated payload — base64/hex-decoded content executed via shell or interpreter"
+recommendation = "Inspect and decode obfuscated payloads; remove if contents are malicious"
+patterns = [
+  '(?i)base64\s+(-d|--decode).*\|\s*(?:ba)?sh',
+  '(?i)\|\s*base64\s+(-d|--decode).*\|\s*(?:ba)?sh',
+  '(?i)powershell\b.*-enc(?:odedcommand)?',
+  '(?i)exec\s*\(\s*base64\.b64decode\s*\(',
+  '(?i)python\b.*-c\s*.*base64\.b64decode',
+  '(?i)echo\b.*\|\s*base64\s+(-d|--decode).*\|\s*(?:ba)?sh'
+]
+exclude_patterns = [
+  '(?i)data:image/',
+  '(?i)test.*fixture',
+  '(?i)base64\s+encode\s+images'
+]
+
+[rules.EXEC-004]
+severity = "high"
+category = "malicious-code"
+description = "Persistence mechanism — scheduled tasks, startup entries, or shell profile modifications"
+recommendation = "Remove persistence mechanisms; skills should not modify system startup or shell profiles"
+patterns = [
+  '(?i)\bcrontab\b.*-[eir]',
+  '(?i)Library/LaunchAgents/',
+  '(?i)Library/LaunchDaemons/',
+  '(?i)\bsystemctl\s+enable\b',
+  '(?i)\bsystemctl\s+daemon-reload\b',
+  '(?i)>>\s*~/?\.\w*(bashrc|zshrc|profile|bash_profile)',
+  '(?i)>>\s*\$HOME/\.\w*(bashrc|zshrc|profile|bash_profile)',
+  '(?i)\\Start\s+Menu\\Programs\\Startup',
+  '(?i)HKCU\\.*\\Run\b',
+  '(?i)HKLM\\.*\\Run\b'
+]
+exclude_patterns = [
+  '(?i)check\s+(?:your\s+)?crontab',
+  '(?i)view\s+(?:your\s+)?crontab',
+  '(?i)list\s+crontab',
+  '(?i)cat\s+~/?\.\w*(bashrc|zshrc|profile)',
+  '(?i)read\s+(?:your\s+)?\.bashrc',
+  '(?i)inspect\s+(?:your\s+)?\.bashrc'
+]
+
+[rules.EXEC-005]
+severity = "high"
+category = "malicious-code"
+description = "Suspicious binary download — executable or installer download instructions"
+recommendation = "Do not download raw binaries; use verified package managers or checksummed releases"
+patterns = [
+  '(?i)download\b.*\.exe\b',
+  '(?i)curl\b.*\.exe\b',
+  '(?i)wget\b.*\.exe\b',
+  '(?i)download\b.*\.dmg\b',
+  '(?i)curl\b.*\.dmg\b',
+  '(?i)wget\b.*\.dmg\b',
+  '(?i)download\b.*\.pkg\b',
+  '(?i)curl\b.*\.pkg\b',
+  '(?i)wget\b.*\.pkg\b',
+  '(?i)unzip\s+-P\s+\S+'
+]
+exclude_patterns = [
+  '(?i)warning.*\.exe\b',
+  '(?i)security.*\.exe\b',
+  '(?i)never\s+download\b.*\.exe\b',
+  '(?i)avoid\s+downloading\b.*\.exe\b',
+  '(?i)do\s+not\s+download\b.*\.exe\b',
+  '(?i)warning.*\.dmg\b'
+]
