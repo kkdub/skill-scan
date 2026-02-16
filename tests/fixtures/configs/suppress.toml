@@ -1,0 +1,2 @@
+[suppress]
+rules = ["PI-004b", "PI-006"]

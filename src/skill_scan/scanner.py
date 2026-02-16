@@ -39,7 +39,7 @@ def scan(
 
     schema_findings, skill_name = _validate_schema(skill_dir, cfg)
     files, fs_findings = _collect_files(skill_dir, cfg)
-    rules = load_default_rules()
+    rules = _prepare_rules(cfg)
     findings = _scan_all_files(files, skill_dir, rules)
     all_findings = tuple(schema_findings + fs_findings + findings)
     duration = time.monotonic() - start
@@ -52,6 +52,21 @@ def scan(
         files_scanned=len(files),
         skill_name=skill_name,
     )
+
+
+def _prepare_rules(cfg: ScanConfig) -> list[Rule]:
+    """Load and filter rules based on config (suppressions and custom rules)."""
+    rules = load_default_rules()
+    if cfg.suppress_rules:
+        rules = [r for r in rules if r.rule_id not in cfg.suppress_rules]
+    if cfg.custom_rules:
+        default_ids = {r.rule_id for r in rules}
+        for cr in cfg.custom_rules:
+            if cr.rule_id in default_ids:
+                msg = f"Custom rule ID '{cr.rule_id}' collides with built-in rule"
+                raise ValueError(msg)
+        rules = rules + [r for r in cfg.custom_rules if r.rule_id not in cfg.suppress_rules]
+    return rules
 
 
 def _validate_schema(skill_dir: Path, cfg: ScanConfig) -> tuple[list[Finding], str | None]:
