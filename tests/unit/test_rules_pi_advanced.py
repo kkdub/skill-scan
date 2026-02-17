@@ -55,10 +55,12 @@ class TestPI008Base64Decode:
     @pytest.mark.parametrize(
         "line",
         [
-            "data:image/png;base64,iVBORw0KGgoAAAANSUhEU=",
-            "# test fixture with b64decode('dGVzdA==')",
-            "example base64 encoding: b64decode('dGVzdA==')",
             "b64decode('abc')",
+            "# b64decode('cHJpbnQoJ2hlbGxvJyk=')",
+            "jwt payload = b64decode('eyJhbGciOiJIUzI1NiJ9aaa')",
+            "token = atob('ZXlKaGJHY2lPaUpJVXpJaaa')",
+            "config = b64decode('c29tZUNvbmZpZ1ZhbHVlYQ==')",
+            "assert b64decode('cHJpbnQoJ2hlbGxvJyk=') == expected",
         ],
     )
     def test_allows_safe_base64(self, rules: list[Rule], line: str) -> None:
