@@ -65,10 +65,10 @@ class TestGitHubFetcherProtocol:
         assert isinstance(fetcher, SkillFetcher)
 
 
-@respx.mock
 class TestGitHubFetcherSuccess:
     """Tests for successful GitHub fetch operations."""
 
+    @respx.mock
     def test_fetch_single_file(self) -> None:
         """Fetch a repo with a single file."""
         respx.get(f"{_API_BASE}/owner/repo/contents/").mock(
@@ -86,6 +86,7 @@ class TestGitHubFetcherSuccess:
             if fetcher.tmp_dir:
                 shutil.rmtree(fetcher.tmp_dir, ignore_errors=True)
 
+    @respx.mock
     def test_fetch_with_ref(self) -> None:
         """Fetch passes ref as query param."""
         route = respx.get(f"{_API_BASE}/owner/repo/contents/").mock(
@@ -103,6 +104,7 @@ class TestGitHubFetcherSuccess:
             if fetcher.tmp_dir:
                 shutil.rmtree(fetcher.tmp_dir, ignore_errors=True)
 
+    @respx.mock
     def test_fetch_nested_directory(self) -> None:
         """Fetch a repo with nested directories."""
         respx.get(f"{_API_BASE}/owner/repo/contents/").mock(
@@ -126,6 +128,7 @@ class TestGitHubFetcherSuccess:
             if fetcher.tmp_dir:
                 shutil.rmtree(fetcher.tmp_dir, ignore_errors=True)
 
+    @respx.mock
     def test_fetch_with_skill_path(self) -> None:
         """Fetch with skill_path fetches from subdirectory."""
         route = respx.get(f"{_API_BASE}/owner/repo/contents/skills/my-skill").mock(
@@ -143,6 +146,7 @@ class TestGitHubFetcherSuccess:
             if fetcher.tmp_dir:
                 shutil.rmtree(fetcher.tmp_dir, ignore_errors=True)
 
+    @respx.mock
     def test_tmp_dir_property_set_after_fetch(self) -> None:
         """tmp_dir is set after fetch and exists."""
         respx.get(f"{_API_BASE}/owner/repo/contents/").mock(

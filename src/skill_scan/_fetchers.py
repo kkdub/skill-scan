@@ -66,7 +66,7 @@ class GitHubFetcher:
         try:
             with httpx.Client(headers=headers, timeout=30.0) as client:
                 self._fetch_dir(client, owner_repo, ref, self._skill_path, self._tmp_dir, 0)
-        except BaseException:
+        except Exception:
             import shutil
 
             shutil.rmtree(self._tmp_dir, ignore_errors=True)

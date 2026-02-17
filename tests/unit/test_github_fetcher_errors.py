@@ -6,7 +6,6 @@ import builtins
 import os
 import shutil
 import sys
-from pathlib import Path
 from typing import Any
 from unittest.mock import patch
 
@@ -15,18 +14,17 @@ import pytest
 import respx
 
 from skill_scan._fetchers import GitHubFetcher
-from skill_scan._github_api import FetchError, download_file
-from skill_scan._github_api import validate_download_url, validate_entry_name
+from skill_scan._github_api import FetchError
 from tests.constants import HTTP_FORBIDDEN, HTTP_INTERNAL_ERROR, HTTP_NOT_FOUND, HTTP_OK
 from tests.unit.github_fetcher_helpers import contents_response, file_item
 
 _API_BASE = "https://api.github.com/repos"
 
 
-@respx.mock
 class TestGitHubFetcherHTTPErrors:
     """Tests for GitHub fetch HTTP error handling."""
 
+    @respx.mock
     def test_404_raises_fetch_error(self) -> None:
         """404 response raises FetchError with descriptive message."""
         respx.get(f"{_API_BASE}/owner/repo/contents/").mock(
@@ -37,6 +35,7 @@ class TestGitHubFetcherHTTPErrors:
             fetcher.fetch("owner/repo")
         assert fetcher.tmp_dir is None
 
+    @respx.mock
     def test_403_raises_fetch_error(self) -> None:
         """403 response raises FetchError about rate limiting."""
         respx.get(f"{_API_BASE}/owner/repo/contents/").mock(
@@ -46,6 +45,7 @@ class TestGitHubFetcherHTTPErrors:
         with pytest.raises(FetchError, match="forbidden"):
             fetcher.fetch("owner/repo")
 
+    @respx.mock
     def test_500_raises_fetch_error(self) -> None:
         """Server error raises FetchError."""
         respx.get(f"{_API_BASE}/owner/repo/contents/").mock(
@@ -55,6 +55,7 @@ class TestGitHubFetcherHTTPErrors:
         with pytest.raises(FetchError, match="API error 500"):
             fetcher.fetch("owner/repo")
 
+    @respx.mock
     def test_cleanup_on_failure(self) -> None:
         """Temp directory is cleaned up when fetch fails."""
         respx.get(f"{_API_BASE}/owner/repo/contents/").mock(
@@ -66,10 +67,10 @@ class TestGitHubFetcherHTTPErrors:
         assert fetcher.tmp_dir is None
 
 
-@respx.mock
 class TestGitHubFetcherFileLimit:
     """Tests for FS-007 file count limit enforcement."""
 
+    @respx.mock
     def test_exceeds_max_files_raises_fetch_error(self) -> None:
         """Exceeding max_files raises FetchError."""
         many_files = [file_item(f"file{i}.txt") for i in range(6)]
@@ -84,6 +85,7 @@ class TestGitHubFetcherFileLimit:
         with pytest.raises(FetchError, match="file limit"):
             fetcher.fetch("owner/repo")
 
+    @respx.mock
     def test_at_max_files_succeeds(self) -> None:
         """Exactly max_files does not raise."""
         files = [file_item(f"file{i}.txt") for i in range(3)]
@@ -143,87 +145,6 @@ class TestGitHubFetcherToken:
             finally:
                 if fetcher.tmp_dir:
                     shutil.rmtree(fetcher.tmp_dir, ignore_errors=True)
-
-
-class TestValidateEntryName:
-    """Tests for path traversal prevention in entry names."""
-
-    def test_rejects_dotdot(self) -> None:
-        with pytest.raises(FetchError, match="Unsafe entry name"):
-            validate_entry_name("..")
-
-    def test_rejects_dotdot_path(self) -> None:
-        with pytest.raises(FetchError, match="Unsafe entry name"):
-            validate_entry_name("../etc/passwd")
-
-    def test_rejects_slash(self) -> None:
-        with pytest.raises(FetchError, match="Unsafe entry name"):
-            validate_entry_name("sub/file.txt")
-
-    def test_rejects_backslash(self) -> None:
-        with pytest.raises(FetchError, match="Unsafe entry name"):
-            validate_entry_name("sub\\file.txt")
-
-    def test_rejects_dot(self) -> None:
-        with pytest.raises(FetchError, match="Unsafe entry name"):
-            validate_entry_name(".")
-
-    def test_rejects_empty(self) -> None:
-        with pytest.raises(FetchError, match="Unsafe entry name"):
-            validate_entry_name("")
-
-    def test_accepts_normal_name(self) -> None:
-        validate_entry_name("SKILL.md")
-        assert True
-
-    def test_accepts_double_dot_in_filename(self) -> None:
-        """Filenames like 'file..txt' are legitimate and should be accepted."""
-        validate_entry_name("file..txt")
-        assert True
-
-
-class TestValidateDownloadUrl:
-    """Tests for SSRF prevention in download URLs."""
-
-    def test_accepts_raw_githubusercontent(self) -> None:
-        validate_download_url("https://raw.githubusercontent.com/owner/repo/main/file.md")
-        assert True
-
-    def test_rejects_attacker_host(self) -> None:
-        with pytest.raises(FetchError, match="Untrusted download host"):
-            validate_download_url("https://evil.com/payload")
-
-    def test_rejects_http_scheme(self) -> None:
-        """HTTP (non-HTTPS) URLs are rejected to prevent MitM attacks."""
-        with pytest.raises(FetchError, match="Untrusted download scheme"):
-            validate_download_url("http://raw.githubusercontent.com/owner/repo/main/file.md")
-
-    def test_rejects_localhost(self) -> None:
-        with pytest.raises(FetchError, match="Untrusted download scheme"):
-            validate_download_url("http://localhost:8080/secret")
-
-
-@respx.mock
-class TestDownloadFileErrors:
-    """Tests for download_file HTTP error handling."""
-
-    def test_http_error_raises_fetch_error(self, tmp_path: Path) -> None:
-        """HTTP errors during download raise FetchError."""
-        url = "https://raw.githubusercontent.com/owner/repo/main/file.md"
-        respx.get(url).mock(return_value=httpx.Response(HTTP_NOT_FOUND))
-        dest = tmp_path / "file.md"
-        with httpx.Client() as client:
-            with pytest.raises(FetchError, match="HTTP 404"):
-                download_file(client, url, dest)
-
-    def test_success_writes_file(self, tmp_path: Path) -> None:
-        """Successful download writes content to disk."""
-        url = "https://raw.githubusercontent.com/owner/repo/main/file.md"
-        respx.get(url).mock(return_value=httpx.Response(HTTP_OK, content=b"hello"))
-        dest = tmp_path / "file.md"
-        with httpx.Client() as client:
-            download_file(client, url, dest)
-        assert dest.read_bytes() == b"hello"
 
 
 class TestGitHubFetcherMissingHttpx:

@@ -94,17 +94,23 @@ def api_get(client: Any, url: str, params: dict[str, str]) -> Any:
 
 
 def download_file(client: Any, url: str, dest: Path) -> None:
-    """Download a file from a URL and write it to disk.
+    """Download a file from a URL via streaming.
+
+    Streams the response to avoid loading oversized files into memory.
 
     Raises:
         FetchError: If the HTTP request fails or file exceeds size limit.
     """
-    response = client.get(url)
-    if response.status_code >= 400:
-        msg = f"HTTP {response.status_code} downloading {url}"
-        raise FetchError(msg)
-    if len(response.content) > _MAX_DOWNLOAD_SIZE:
-        msg = f"Download exceeds {_MAX_DOWNLOAD_SIZE} byte limit"
-        raise FetchError(msg)
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    dest.write_bytes(response.content)
+    with client.stream("GET", url) as response:
+        if response.status_code >= 400:
+            msg = f"HTTP {response.status_code} downloading {url}"
+            raise FetchError(msg)
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        written = 0
+        with dest.open("wb") as f:
+            for chunk in response.iter_bytes():
+                written += len(chunk)
+                if written > _MAX_DOWNLOAD_SIZE:
+                    msg = f"Download exceeds {_MAX_DOWNLOAD_SIZE} byte limit"
+                    raise FetchError(msg)
+                f.write(chunk)

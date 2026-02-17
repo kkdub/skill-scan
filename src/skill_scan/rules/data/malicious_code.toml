@@ -34,7 +34,7 @@ patterns = [
   '(?i)\beval\s*\(',
   '(?i)\bexec\s*\(',
   '(?i)\bos\.system\s*\(',
-  '(?i)subprocess\.[a-z]+\([^)]{0,200}shell\s*=\s*True'
+  '(?i)subprocess\.[a-z]+\(.{0,200}?shell\s*=\s*True'
 ]
 exclude_patterns = [
   '(?i)never\s+use\s+eval\s*\(',
