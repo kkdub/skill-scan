@@ -102,7 +102,7 @@ patterns = [
   "(?i)\\bhttpx\\.(?:post|put)\\s*\\(",
   "(?i)\\burllib\\.request\\.urlopen\\s*\\(.*\\bdata\\s*=",
   "(?i)\\bhttp\\.client\\.HTTPS?Connection\\b",
-  "(?i)\\baiohttp\\.ClientSession\\s*\\(\\s*\\)\\s*\\.post\\s*\\("
+  "(?i)\\baiohttp\\.ClientSession\\s*\\("
 ]
 exclude_patterns = [
   "(?i)\\brequests\\.get\\s*\\(",
@@ -119,8 +119,10 @@ category = "data-exfiltration"
 description = "Raw socket and DNS exfiltration — data sent via low-level sockets or DNS queries"
 recommendation = "Remove or audit raw socket connections and DNS-based data exfiltration"
 patterns = [
+  "(?i)\\bsocket\\.socket\\s*\\(",
   "(?i)\\bsocket\\.connect\\s*\\(",
-  "(?i)\\bsocket\\.send(?:to|all)?\\s*\\(",
+  "(?i)\\bsocket\\.send\\s*\\(",
+  "(?i)\\b\\w+\\.send(?:to|all)\\s*\\(",
   "(?i)\\bdns\\.resolver\\b",
   "(?i)\\bgetaddrinfo\\s*\\(.*\\+",
   "(?i)\\bsubprocess\\b.*\\bnslookup\\b",

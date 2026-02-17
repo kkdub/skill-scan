@@ -60,8 +60,8 @@ patterns = [
   '(?i)&&\s*rm\s+-',
   '(?i);\s*rm\s+-rf\b',
   '(?i)\|\s*tee\s+/dev/',
-  '(?i)(?:run|execute)\b.*\bthen\s+(?:delete|remove)\b',
-  '(?i)(?:execute|run)\b.*\band\s+remove\s+traces\b'
+  '(?i)(?:run|execute)\b.{0,200}?\bthen\s+(?:delete|remove)\b',
+  '(?i)(?:execute|run)\b.{0,200}?\band\s+remove\s+traces\b'
 ]
 exclude_patterns = [
   '(?i)\bmake\s+clean\b',

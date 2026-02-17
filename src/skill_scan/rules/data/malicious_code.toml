@@ -129,7 +129,7 @@ patterns = [
   '(?i)\b__import__\s*\(',
   '(?i)\bgetattr\s*\(\s*\w+\s*,\s*\S',
   '(?i)\bimportlib\.import_module\s*\(',
-  '(?i)\bcompile\s*\([^)]+\).*\bexec\s*\('
+  '(?i)\bcompile\s*\([^)]{0,1024}\).{0,200}?\bexec\s*\('
 ]
 exclude_patterns = [
   '(?i)\bavoid\s+__import__',
@@ -153,8 +153,8 @@ patterns = [
 ]
 exclude_patterns = [
   '(?i)\byaml\.safe_load\b',
-  '(?i)\byaml\.load\s*\([^)]*Loader\s*=\s*SafeLoader',
-  '(?i)\byaml\.load\s*\([^)]*Loader\s*=\s*yaml\.SafeLoader',
+  '(?i)\byaml\.load\s*\(.{0,200}?Loader\s*=\s*SafeLoader',
+  '(?i)\byaml\.load\s*\(.{0,200}?Loader\s*=\s*yaml\.SafeLoader',
   '(?i)\bavoid\s+pickle\b',
   '(?i)\bnever\s+use\s+pickle\b',
   '(?i)\bdo\s+not\s+use\s+pickle\b',

