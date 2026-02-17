@@ -130,7 +130,7 @@ class TestLegitimateExclusions:
     )
     def test_match_line_overlapping_exclude_suppresses(self, mode: str) -> None:
         rule = _make_rule(
-            patterns=[r"\beval\b"],
+            patterns=[r"eval"],
             exclude_patterns=["safe_eval"],
             exclude_mode=mode,
         )
@@ -146,7 +146,7 @@ class TestLegitimateExclusions:
     )
     def test_match_content_overlapping_exclude_suppresses(self, mode: str) -> None:
         rule = _make_rule(
-            patterns=[r"\beval\b"],
+            patterns=[r"eval"],
             exclude_patterns=["safe_eval"],
             exclude_mode=mode,
         )
@@ -181,7 +181,7 @@ class TestExclusionWithFileScope:
 
     def test_match_content_file_scope_legit_exclude_suppresses(self) -> None:
         rule = _make_rule(
-            patterns=[r"\beval\b"],
+            patterns=[r"eval"],
             exclude_patterns=["safe_eval"],
             match_scope="file",
             exclude_mode="strict",

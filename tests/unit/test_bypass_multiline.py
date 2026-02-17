@@ -2,7 +2,7 @@
 
 Verifies that payloads with keywords on a single line are detected even
 when arguments span multiple lines, and that line-scope rules correctly
-match the critical tokens (e.g. eval(, exec() on the line they appear.
+match the critical tokens (e.g., eval(), exec()) on the line where they appear.
 """
 
 from __future__ import annotations
@@ -185,9 +185,6 @@ class TestMultilineBenignContent:
         )
         content = "# How to ignore\n# previous versions\n# of instructions"
         findings = match_content(content, "test.md", [rule])
-        # This benign content happens to match the pattern since "ignore"
-        # "previous" and "instructions" appear across lines. We accept
-        # that file-scope rules with broad patterns can match. The real
-        # defense is that default rules are line-scope where possible.
-        # This test documents the behavior.
-        assert isinstance(findings, list)
+        # Extra words between "previous" and "instructions" prevent a match,
+        # confirming no false positive on benign content with similar vocabulary.
+        assert findings == []

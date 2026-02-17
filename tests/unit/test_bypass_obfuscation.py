@@ -19,7 +19,6 @@ def _make_rule(
     rule_id: str = "TEST-001",
     patterns: list[str] | None = None,
     flags: re.RegexFlag = re.RegexFlag(0),  # noqa: B008
-    match_scope: str = "line",
 ) -> Rule:
     """Helper to build Rule objects for testing."""
     compiled = tuple(re.compile(p, flags) for p in (patterns or []))

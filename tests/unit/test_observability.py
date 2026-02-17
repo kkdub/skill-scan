@@ -171,7 +171,7 @@ def test_scan_coverage_math_with_mixed_files(tmp_path: Path) -> None:
     result = scan(skill_dir)
     # files_scanned counts files collected (SKILL.md, good.py, bad.txt — but not .dll)
     # files_skipped counts binary (dll=1) + content_skipped (bad.txt=1)
-    assert result.files_scanned >= 2  # At least SKILL.md + good.py + bad.txt
+    assert result.files_scanned >= 3  # At least SKILL.md + good.py + bad.txt
     assert result.files_skipped >= 2  # dll + bad.txt
 
 
