@@ -1,0 +1,70 @@
+# JavaScript/TypeScript Execution Detection Rules
+# Category: malicious-code
+# Rules JSEXEC-001 through JSEXEC-003
+
+[rules.JSEXEC-001]
+severity = "critical"
+category = "malicious-code"
+description = "Node.js code execution -- child_process, spawn, or dynamic Function constructor"
+recommendation = "Remove child_process usage and dynamic Function construction; use safe APIs with validated inputs"
+patterns = [
+  '(?i)\bchild_process\.exec\s*\(',
+  '(?i)\bchild_process\.execSync\s*\(',
+  '(?i)\bchild_process\.spawn\s*\(.*shell',
+  "(?i)require\\s*\\(\\s*['\"]child_process['\"]\\s*\\)",
+  '(?i)\bnew\s+Function\s*\('
+]
+exclude_patterns = [
+  '(?i)\bnever\s+use\s+child_process\b',
+  '(?i)\bavoid\s+child_process\b',
+  '(?i)\bavoid\s+new\s+Function\b',
+  '(?i)\bnever\s+use\s+new\s+Function\b',
+  '(?i)\bdo\s+not\s+use\s+child_process\b',
+  '(?i)\bdo\s+not\s+use\s+new\s+Function\b',
+  '(?i)\bdocumentation\b.*\bchild_process\b',
+  '(?i)\beducational\b.*\bchild_process\b',
+  '(?i)\banti-pattern\b'
+]
+
+[rules.JSEXEC-002]
+severity = "critical"
+category = "malicious-code"
+description = "JavaScript eval and dynamic execution -- eval, string setTimeout/setInterval, DOM injection"
+recommendation = "Remove eval and dynamic execution; use safe alternatives like JSON.parse or textContent"
+patterns = [
+  '(?i)\beval\s*\(',
+  "(?i)\\bsetTimeout\\s*\\(\\s*[\"']",
+  "(?i)\\bsetInterval\\s*\\(\\s*[\"']",
+  '(?i)\bdocument\.write\s*\(',
+  '(?i)\.innerHTML\s*=',
+  "(?i)\\bwindow\\.location\\s*=\\s*[\"']data:"
+]
+exclude_patterns = [
+  '(?i)\bavoid\s+eval\b',
+  '(?i)\bnever\s+use\s+eval\b',
+  '(?i)\bdo\s+not\s+use\s+eval\b',
+  '(?i)\banti-pattern\b.*\beval\b',
+  '(?i)\beval\b.*\banti-pattern\b',
+  '(?i)\bdocumentation\b.*\beval\b',
+  '(?i)\beducational\b.*\beval\b'
+]
+
+[rules.JSEXEC-003]
+severity = "high"
+category = "malicious-code"
+description = "Script injection and dynamic loading -- external scripts, dynamic import/require"
+recommendation = "Use static imports from trusted sources; avoid dynamic script injection"
+patterns = [
+  '(?i)<script\s+src\s*=',
+  "(?i)document\\.createElement\\s*\\(\\s*['\"]script['\"]\\s*\\)",
+  '(?i)\bimport\s*\(\s*[`$+]',
+  "(?i)\\brequire\\s*\\(\\s*[`$+]"
+]
+exclude_patterns = [
+  '(?i)\bavoid\s+dynamic\s+import\b',
+  '(?i)\bnever\s+use\s+dynamic\s+import\b',
+  '(?i)\bdo\s+not\s+inject\s+scripts\b',
+  '(?i)\beducational\b.*\bscript\b',
+  '(?i)\bdocumentation\b.*\bscript\b',
+  '(?i)\banti-pattern\b'
+]
