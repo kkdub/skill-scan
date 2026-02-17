@@ -66,7 +66,8 @@ def _classify_entry(
     config: ScanConfig,
 ) -> Finding | None:
     """Classify a single file entry. Returns a Finding or None."""
-    if entry.is_external_symlink:
+    # Check if this is an external symlink (classification decision)
+    if entry.is_symlink and not entry.resolved_path.is_relative_to(resolved_root):
         return check_symlink_outside(entry.relative_path, entry.resolved_path, resolved_root)
 
     binary = check_binary(entry.relative_path, entry.suffix)
