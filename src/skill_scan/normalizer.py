@@ -68,7 +68,7 @@ def canonicalize_whitespace(text: str) -> str:
     return _MULTI_SPACE_RE.sub(" ", result)
 
 
-def normalize_line(text: str) -> str:
+def normalize_text(text: str) -> str:
     """Apply full normalization pipeline to *text*.
 
     Strips zero-width characters then canonicalizes whitespace. This is

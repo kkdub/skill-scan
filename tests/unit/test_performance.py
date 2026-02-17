@@ -11,7 +11,7 @@ import time
 
 import pytest
 
-from skill_scan.normalizer import normalize_line
+from skill_scan.normalizer import normalize_text
 from skill_scan.rules.engine import match_content, match_line
 from skill_scan.rules.loader import _MAX_PATTERN_LENGTH, load_default_rules
 
@@ -171,7 +171,7 @@ class TestNormalizationPerformance:
         content = chunk * (100_000 // len(chunk))
 
         start = time.perf_counter()
-        result = normalize_line(content)
+        result = normalize_text(content)
         elapsed = time.perf_counter() - start
 
         assert elapsed < 2.0, f"Normalization took {elapsed:.2f}s (limit 2s)"
@@ -180,7 +180,7 @@ class TestNormalizationPerformance:
 
     def test_normalize_output_correctness_on_large_input(self) -> None:
         content = ("e\u200bval " * 100).strip()
-        result = normalize_line(content)
+        result = normalize_text(content)
         assert result == ("eval " * 100).strip()
 
 

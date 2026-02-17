@@ -112,7 +112,7 @@ def _collect_files(skill_dir: Path, config: ScanConfig) -> tuple[list[Path], lis
         if finding:
             fs_findings.append(finding)
             # Still collect for content scanning unless binary or external symlink
-            if finding.rule_id not in ("FS-002", "FS-004"):
+            if finding.rule_id not in ("FS-002", "FS-004", "FS-005"):
                 collected.append(file_path)
         else:
             collected.append(file_path)
@@ -225,7 +225,7 @@ def _scan_file(
                 file=relative_path,
                 line=None,
                 matched_text="",
-                description=f"File could not be read: {exc}",
+                description=f"File could not be read: {type(exc).__name__}",
                 recommendation="Check file permissions and accessibility.",
             ),
         ], 0

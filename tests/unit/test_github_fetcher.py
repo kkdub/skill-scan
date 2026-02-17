@@ -10,6 +10,7 @@ import respx
 
 from skill_scan._fetchers import GitHubFetcher, SkillFetcher
 from skill_scan._github_api import parse_source
+from tests.constants import HTTP_OK
 from tests.unit.github_fetcher_helpers import contents_response, dir_item, file_item
 
 _API_BASE = "https://api.github.com/repos"
@@ -74,7 +75,7 @@ class TestGitHubFetcherSuccess:
             return_value=contents_response([file_item("SKILL.md")]),
         )
         respx.get("https://raw.githubusercontent.com/test/SKILL.md").mock(
-            return_value=httpx.Response(200, content=b"# Skill"),
+            return_value=httpx.Response(HTTP_OK, content=b"# Skill"),
         )
         fetcher = GitHubFetcher()
         try:
@@ -91,7 +92,7 @@ class TestGitHubFetcherSuccess:
             return_value=contents_response([file_item("README.md")]),
         )
         respx.get("https://raw.githubusercontent.com/test/README.md").mock(
-            return_value=httpx.Response(200, content=b"hello"),
+            return_value=httpx.Response(HTTP_OK, content=b"hello"),
         )
         fetcher = GitHubFetcher()
         try:
@@ -111,10 +112,10 @@ class TestGitHubFetcherSuccess:
             return_value=contents_response([file_item("main.py", "src")]),
         )
         respx.get("https://raw.githubusercontent.com/test/SKILL.md").mock(
-            return_value=httpx.Response(200, content=b"# Skill"),
+            return_value=httpx.Response(HTTP_OK, content=b"# Skill"),
         )
         respx.get("https://raw.githubusercontent.com/test/src/main.py").mock(
-            return_value=httpx.Response(200, content=b"print('hi')"),
+            return_value=httpx.Response(HTTP_OK, content=b"print('hi')"),
         )
         fetcher = GitHubFetcher()
         try:
@@ -131,7 +132,7 @@ class TestGitHubFetcherSuccess:
             return_value=contents_response([file_item("SKILL.md", "skills/my-skill")]),
         )
         respx.get("https://raw.githubusercontent.com/test/skills/my-skill/SKILL.md").mock(
-            return_value=httpx.Response(200, content=b"# Skill"),
+            return_value=httpx.Response(HTTP_OK, content=b"# Skill"),
         )
         fetcher = GitHubFetcher(skill_path="skills/my-skill")
         try:
@@ -148,7 +149,7 @@ class TestGitHubFetcherSuccess:
             return_value=contents_response([file_item("SKILL.md")]),
         )
         respx.get("https://raw.githubusercontent.com/test/SKILL.md").mock(
-            return_value=httpx.Response(200, content=b"data"),
+            return_value=httpx.Response(HTTP_OK, content=b"data"),
         )
         fetcher = GitHubFetcher()
         assert fetcher.tmp_dir is None

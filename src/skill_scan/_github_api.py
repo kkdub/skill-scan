@@ -15,6 +15,7 @@ from urllib.parse import urlparse
 logger = logging.getLogger(__name__)
 
 _ALLOWED_DOWNLOAD_HOSTS = frozenset({"raw.githubusercontent.com", "objects.githubusercontent.com"})
+_MAX_DOWNLOAD_SIZE = 10 * 1024 * 1024  # 10 MB
 
 
 class FetchError(Exception):
@@ -96,11 +97,14 @@ def download_file(client: Any, url: str, dest: Path) -> None:
     """Download a file from a URL and write it to disk.
 
     Raises:
-        FetchError: If the HTTP request fails (status code >= 400).
+        FetchError: If the HTTP request fails or file exceeds size limit.
     """
     response = client.get(url)
     if response.status_code >= 400:
         msg = f"HTTP {response.status_code} downloading {url}"
+        raise FetchError(msg)
+    if len(response.content) > _MAX_DOWNLOAD_SIZE:
+        msg = f"Download exceeds {_MAX_DOWNLOAD_SIZE} byte limit"
         raise FetchError(msg)
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_bytes(response.content)

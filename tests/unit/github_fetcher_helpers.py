@@ -4,10 +4,12 @@ from __future__ import annotations
 
 import httpx
 
+from tests.constants import HTTP_OK
+
 
 def contents_response(items: list[dict[str, str]]) -> httpx.Response:
     """Build a mock Contents API response."""
-    return httpx.Response(200, json=items)
+    return httpx.Response(HTTP_OK, json=items)
 
 
 def file_item(name: str, path: str = "") -> dict[str, str]:

@@ -34,7 +34,7 @@ patterns = [
   '(?i)\beval\s*\(',
   '(?i)\bexec\s*\(',
   '(?i)\bos\.system\s*\(',
-  '(?i)subprocess\.[a-z]+\(.*shell\s*=\s*True'
+  '(?i)subprocess\.[a-z]+\([^)]{0,200}shell\s*=\s*True'
 ]
 exclude_patterns = [
   '(?i)never\s+use\s+eval\s*\(',
@@ -182,4 +182,39 @@ exclude_patterns = [
   '(?i)\bwarning.*\bDownloadString\b',
   '(?i)\banti-pattern\b',
   '(?i)\bdocumentation\b.*\bcertutil\b'
+]
+
+[rules.EXEC-009]
+severity = "critical"
+category = "malicious-code"
+description = "Multi-line encoded execution — exec/eval of base64-decoded content spanning multiple lines"
+recommendation = "Remove base64-encoded execution; use explicit, auditable code instead"
+match_scope = "file"
+flags = "IGNORECASE|DOTALL"
+patterns = [
+  'exec\s*\(\s*(?:compile\s*\(\s*)?base64\.b64decode\s*\(',
+  'eval\s*\(\s*(?:compile\s*\(\s*)?base64\.b64decode\s*\('
+]
+exclude_patterns = [
+  '(?i)test.*fixture',
+  '(?i)example.*base64',
+  '(?i)anti-pattern'
+]
+
+[rules.EXEC-010]
+severity = "high"
+category = "malicious-code"
+description = "Dynamic code execution with strict exclusion — eval/exec calls resistant to comment-based suppression"
+recommendation = "Replace eval/exec with safe alternatives; do not use comments to justify dynamic execution"
+exclude_mode = "strict"
+patterns = [
+  '(?i)\beval\s*\([^)]*\buser',
+  '(?i)\beval\s*\([^)]*\binput',
+  '(?i)\bexec\s*\([^)]*\buser',
+  '(?i)\bexec\s*\([^)]*\binput'
+]
+exclude_patterns = [
+  'safe_eval',
+  'safe_exec',
+  'ast\.literal_eval'
 ]

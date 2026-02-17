@@ -17,6 +17,7 @@ import respx
 from skill_scan._fetchers import GitHubFetcher
 from skill_scan._github_api import FetchError, download_file
 from skill_scan._github_api import validate_download_url, validate_entry_name
+from tests.constants import HTTP_FORBIDDEN, HTTP_INTERNAL_ERROR, HTTP_NOT_FOUND, HTTP_OK
 from tests.unit.github_fetcher_helpers import contents_response, file_item
 
 _API_BASE = "https://api.github.com/repos"
@@ -29,7 +30,7 @@ class TestGitHubFetcherHTTPErrors:
     def test_404_raises_fetch_error(self) -> None:
         """404 response raises FetchError with descriptive message."""
         respx.get(f"{_API_BASE}/owner/repo/contents/").mock(
-            return_value=httpx.Response(404),
+            return_value=httpx.Response(HTTP_NOT_FOUND),
         )
         fetcher = GitHubFetcher()
         with pytest.raises(FetchError, match="not found"):
@@ -39,7 +40,7 @@ class TestGitHubFetcherHTTPErrors:
     def test_403_raises_fetch_error(self) -> None:
         """403 response raises FetchError about rate limiting."""
         respx.get(f"{_API_BASE}/owner/repo/contents/").mock(
-            return_value=httpx.Response(403),
+            return_value=httpx.Response(HTTP_FORBIDDEN),
         )
         fetcher = GitHubFetcher()
         with pytest.raises(FetchError, match="forbidden"):
@@ -48,7 +49,7 @@ class TestGitHubFetcherHTTPErrors:
     def test_500_raises_fetch_error(self) -> None:
         """Server error raises FetchError."""
         respx.get(f"{_API_BASE}/owner/repo/contents/").mock(
-            return_value=httpx.Response(500),
+            return_value=httpx.Response(HTTP_INTERNAL_ERROR),
         )
         fetcher = GitHubFetcher()
         with pytest.raises(FetchError, match="API error 500"):
@@ -57,7 +58,7 @@ class TestGitHubFetcherHTTPErrors:
     def test_cleanup_on_failure(self) -> None:
         """Temp directory is cleaned up when fetch fails."""
         respx.get(f"{_API_BASE}/owner/repo/contents/").mock(
-            return_value=httpx.Response(404),
+            return_value=httpx.Response(HTTP_NOT_FOUND),
         )
         fetcher = GitHubFetcher()
         with pytest.raises(FetchError):
@@ -77,7 +78,7 @@ class TestGitHubFetcherFileLimit:
         )
         for i in range(5):
             respx.get(f"https://raw.githubusercontent.com/test/file{i}.txt").mock(
-                return_value=httpx.Response(200, content=b"data"),
+                return_value=httpx.Response(HTTP_OK, content=b"data"),
             )
         fetcher = GitHubFetcher(max_files=5)
         with pytest.raises(FetchError, match="file limit"):
@@ -91,7 +92,7 @@ class TestGitHubFetcherFileLimit:
         )
         for i in range(3):
             respx.get(f"https://raw.githubusercontent.com/test/file{i}.txt").mock(
-                return_value=httpx.Response(200, content=b"data"),
+                return_value=httpx.Response(HTTP_OK, content=b"data"),
             )
         fetcher = GitHubFetcher(max_files=3)
         try:
@@ -112,7 +113,7 @@ class TestGitHubFetcherToken:
             return_value=contents_response([file_item("SKILL.md")]),
         )
         respx.get("https://raw.githubusercontent.com/test/SKILL.md").mock(
-            return_value=httpx.Response(200, content=b"data"),
+            return_value=httpx.Response(HTTP_OK, content=b"data"),
         )
         fetcher = GitHubFetcher()
         with patch.dict(os.environ, {"GITHUB_TOKEN": "ghp_test123"}):
@@ -131,7 +132,7 @@ class TestGitHubFetcherToken:
             return_value=contents_response([file_item("SKILL.md")]),
         )
         respx.get("https://raw.githubusercontent.com/test/SKILL.md").mock(
-            return_value=httpx.Response(200, content=b"data"),
+            return_value=httpx.Response(HTTP_OK, content=b"data"),
         )
         fetcher = GitHubFetcher()
         with patch.dict(os.environ, {}, clear=True):
@@ -209,7 +210,7 @@ class TestDownloadFileErrors:
     def test_http_error_raises_fetch_error(self, tmp_path: Path) -> None:
         """HTTP errors during download raise FetchError."""
         url = "https://raw.githubusercontent.com/owner/repo/main/file.md"
-        respx.get(url).mock(return_value=httpx.Response(404))
+        respx.get(url).mock(return_value=httpx.Response(HTTP_NOT_FOUND))
         dest = tmp_path / "file.md"
         with httpx.Client() as client:
             with pytest.raises(FetchError, match="HTTP 404"):
@@ -218,7 +219,7 @@ class TestDownloadFileErrors:
     def test_success_writes_file(self, tmp_path: Path) -> None:
         """Successful download writes content to disk."""
         url = "https://raw.githubusercontent.com/owner/repo/main/file.md"
-        respx.get(url).mock(return_value=httpx.Response(200, content=b"hello"))
+        respx.get(url).mock(return_value=httpx.Response(HTTP_OK, content=b"hello"))
         dest = tmp_path / "file.md"
         with httpx.Client() as client:
             download_file(client, url, dest)
