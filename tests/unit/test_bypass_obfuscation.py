@@ -7,30 +7,10 @@ hardening works against adversarial inputs.
 
 from __future__ import annotations
 
-import re
-
 import pytest
 
-from skill_scan.models import Rule, Severity
 from skill_scan.rules.engine import match_content
-
-
-def _make_rule(
-    rule_id: str = "TEST-001",
-    patterns: list[str] | None = None,
-    flags: re.RegexFlag = re.RegexFlag(0),  # noqa: B008
-) -> Rule:
-    """Helper to build Rule objects for testing."""
-    compiled = tuple(re.compile(p, flags) for p in (patterns or []))
-    return Rule(
-        rule_id=rule_id,
-        severity=Severity.CRITICAL,
-        category="malicious-code",
-        description="Test rule",
-        recommendation="Fix it",
-        patterns=compiled,
-        exclude_patterns=(),
-    )
+from tests.unit.rule_helpers import make_rule
 
 
 class TestZeroWidthCharBypass:
@@ -48,7 +28,7 @@ class TestZeroWidthCharBypass:
         ],
     )
     def test_match_content_detects_zwc_in_eval(self, obfuscated: str, rule_pattern: str) -> None:
-        rule = _make_rule(patterns=[rule_pattern])
+        rule = make_rule(patterns=[rule_pattern])
         findings = match_content(obfuscated, "test.py", [rule])
         assert len(findings) >= 1
 
@@ -73,12 +53,12 @@ class TestZeroWidthCharBypass:
         ],
     )
     def test_match_content_detects_zwc_in_code_execution(self, obfuscated: str, rule_pattern: str) -> None:
-        rule = _make_rule(patterns=[rule_pattern])
+        rule = make_rule(patterns=[rule_pattern])
         findings = match_content(obfuscated, "test.py", [rule])
         assert len(findings) >= 1
 
     def test_match_content_detects_zwc_in_prompt_injection(self) -> None:
-        rule = _make_rule(
+        rule = make_rule(
             rule_id="PI-001",
             patterns=[r"(?i)ignore\s+previous\s+instructions"],
         )
@@ -102,14 +82,14 @@ class TestExoticWhitespaceBypass:
         ],
     )
     def test_match_content_detects_exotic_space_in_eval(self, space_char: str, name: str) -> None:
-        rule = _make_rule(patterns=[r"(?i)\beval\s*\("])
+        rule = make_rule(patterns=[r"(?i)\beval\s*\("])
         # Replace the space before '(' with an exotic whitespace char
         obfuscated = f"eval{space_char}(user_input)"
         findings = match_content(obfuscated, "test.py", [rule])
         assert len(findings) >= 1, f"Failed for {name}"
 
     def test_match_content_detects_ideographic_space_in_prompt_injection(self) -> None:
-        rule = _make_rule(
+        rule = make_rule(
             rule_id="PI-001",
             patterns=[r"(?i)ignore\s+previous\s+instructions"],
         )
@@ -122,14 +102,14 @@ class TestMixedObfuscation:
     """Combined zero-width and exotic whitespace in one payload."""
 
     def test_match_content_detects_mixed_zwc_and_exotic_space(self) -> None:
-        rule = _make_rule(patterns=[r"(?i)\beval\s*\("])
+        rule = make_rule(patterns=[r"(?i)\beval\s*\("])
         # Zero-width chars in keyword + exotic space before paren
         obfuscated = "e\u200bv\u200ca\u200dl\u00a0("
         findings = match_content(obfuscated, "test.py", [rule])
         assert len(findings) >= 1
 
     def test_match_content_detects_mixed_in_import(self) -> None:
-        rule = _make_rule(patterns=[r"(?i)\b__import__\s*\("])
+        rule = make_rule(patterns=[r"(?i)\b__import__\s*\("])
         obfuscated = "_\u200b_\u200cimport\u200d_\u200b_\u3000('os')"
         findings = match_content(obfuscated, "test.py", [rule])
         assert len(findings) >= 1
@@ -152,6 +132,6 @@ class TestNormalUnicodeNoFalsePositives:
         ],
     )
     def test_match_content_no_findings_for_normal_unicode(self, content: str) -> None:
-        rule = _make_rule(patterns=[r"(?i)\beval\s*\("])
+        rule = make_rule(patterns=[r"(?i)\beval\s*\("])
         findings = match_content(content, "test.py", [rule])
         assert findings == []

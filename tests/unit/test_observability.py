@@ -82,16 +82,16 @@ def test_scan_binary_bytes_not_in_bytes_scanned(tmp_path: Path) -> None:
     assert result.bytes_scanned == skill_md_size
 
 
-def test_scan_oversized_file_still_content_scanned(tmp_path: Path) -> None:
-    """FS-005 oversized files are still content-scanned (collected and read)."""
+def test_scan_oversized_file_excluded_from_content_scan(tmp_path: Path) -> None:
+    """FS-005 oversized files are excluded from content scanning (DoS prevention)."""
     content = "print('hello')\n" * 200
     skill_dir = make_skill_dir(tmp_path, extra_files={"big.py": content})
     config = ScanConfig(max_file_size=100)
     result = scan(skill_dir, config=config)
     assert any(f.rule_id == "FS-005" and f.file == "big.py" for f in result.findings)
-    # Oversized files are still scanned — bytes included
-    assert result.bytes_scanned >= len(content.encode("utf-8"))
-    assert result.files_skipped == 0
+    # Oversized files are NOT content-scanned — no bytes from big.py
+    skill_md_size = len((skill_dir / "SKILL.md").read_text(encoding="utf-8").encode("utf-8"))
+    assert result.bytes_scanned == skill_md_size
 
 
 def test_scan_total_size_exceeded_emits_fs006(tmp_path: Path) -> None:

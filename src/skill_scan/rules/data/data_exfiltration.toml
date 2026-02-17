@@ -100,7 +100,7 @@ recommendation = "Remove or audit outbound HTTP POST/PUT calls that may exfiltra
 patterns = [
   "(?i)\\brequests\\.(?:post|put)\\s*\\(",
   "(?i)\\bhttpx\\.(?:post|put)\\s*\\(",
-  "(?i)\\burllib\\.request\\.urlopen\\s*\\(.*\\bdata\\s*=",
+  "(?i)\\burllib\\.request\\.urlopen\\s*\\(.{0,200}?\\bdata\\s*=",
   "(?i)\\bhttp\\.client\\.HTTPS?Connection\\b",
   "(?i)\\baiohttp\\.ClientSession\\s*\\("
 ]

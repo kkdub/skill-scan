@@ -80,9 +80,9 @@ class TestBinaryFileCoverage:
 
 
 class TestOversizedFileCoverage:
-    """Oversized files generate FS-005 but are still content-scanned."""
+    """Oversized files generate FS-005 and are excluded from content scanning."""
 
-    def test_scan_oversized_emits_fs005_and_scans(self, tmp_path: Path) -> None:
+    def test_scan_oversized_emits_fs005_not_content_scanned(self, tmp_path: Path) -> None:
         skill_dir = make_skill_dir(tmp_path)
         large_content = "eval(x)\n" * 200
         (skill_dir / "big.py").write_text(large_content, encoding="utf-8")
@@ -92,9 +92,9 @@ class TestOversizedFileCoverage:
         fs005 = [f for f in result.findings if f.rule_id == "FS-005"]
         assert len(fs005) >= 1
         assert any(f.file == "big.py" for f in fs005)
-        # Still content-scanned
+        # FS-005 files are excluded from content scanning (DoS prevention)
         code_findings = [f for f in result.findings if f.file == "big.py" and f.category == "malicious-code"]
-        assert len(code_findings) >= 1
+        assert len(code_findings) == 0
 
     def test_scan_oversized_finding_severity(self, tmp_path: Path) -> None:
         skill_dir = make_skill_dir(tmp_path)
@@ -131,7 +131,7 @@ class TestReadErrorCoverage:
         assert len(fs008) == 1
         assert fs008[0].file == "broken.py"
         assert fs008[0].severity == Severity.MEDIUM
-        assert "Device not ready" in fs008[0].description
+        assert "OSError" in fs008[0].description
 
 
 class TestDegradedReasons:

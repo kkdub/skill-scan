@@ -10,6 +10,7 @@ import respx
 
 from skill_scan._fetchers import GitHubFetcher, SkillFetcher
 from skill_scan._github_api import parse_source
+from tests.constants import HTTP_OK
 from tests.unit.github_fetcher_helpers import contents_response, dir_item, file_item
 
 _API_BASE = "https://api.github.com/repos"
@@ -64,17 +65,17 @@ class TestGitHubFetcherProtocol:
         assert isinstance(fetcher, SkillFetcher)
 
 
-@respx.mock
 class TestGitHubFetcherSuccess:
     """Tests for successful GitHub fetch operations."""
 
+    @respx.mock
     def test_fetch_single_file(self) -> None:
         """Fetch a repo with a single file."""
         respx.get(f"{_API_BASE}/owner/repo/contents/").mock(
             return_value=contents_response([file_item("SKILL.md")]),
         )
         respx.get("https://raw.githubusercontent.com/test/SKILL.md").mock(
-            return_value=httpx.Response(200, content=b"# Skill"),
+            return_value=httpx.Response(HTTP_OK, content=b"# Skill"),
         )
         fetcher = GitHubFetcher()
         try:
@@ -85,13 +86,14 @@ class TestGitHubFetcherSuccess:
             if fetcher.tmp_dir:
                 shutil.rmtree(fetcher.tmp_dir, ignore_errors=True)
 
+    @respx.mock
     def test_fetch_with_ref(self) -> None:
         """Fetch passes ref as query param."""
         route = respx.get(f"{_API_BASE}/owner/repo/contents/").mock(
             return_value=contents_response([file_item("README.md")]),
         )
         respx.get("https://raw.githubusercontent.com/test/README.md").mock(
-            return_value=httpx.Response(200, content=b"hello"),
+            return_value=httpx.Response(HTTP_OK, content=b"hello"),
         )
         fetcher = GitHubFetcher()
         try:
@@ -102,6 +104,7 @@ class TestGitHubFetcherSuccess:
             if fetcher.tmp_dir:
                 shutil.rmtree(fetcher.tmp_dir, ignore_errors=True)
 
+    @respx.mock
     def test_fetch_nested_directory(self) -> None:
         """Fetch a repo with nested directories."""
         respx.get(f"{_API_BASE}/owner/repo/contents/").mock(
@@ -111,10 +114,10 @@ class TestGitHubFetcherSuccess:
             return_value=contents_response([file_item("main.py", "src")]),
         )
         respx.get("https://raw.githubusercontent.com/test/SKILL.md").mock(
-            return_value=httpx.Response(200, content=b"# Skill"),
+            return_value=httpx.Response(HTTP_OK, content=b"# Skill"),
         )
         respx.get("https://raw.githubusercontent.com/test/src/main.py").mock(
-            return_value=httpx.Response(200, content=b"print('hi')"),
+            return_value=httpx.Response(HTTP_OK, content=b"print('hi')"),
         )
         fetcher = GitHubFetcher()
         try:
@@ -125,13 +128,14 @@ class TestGitHubFetcherSuccess:
             if fetcher.tmp_dir:
                 shutil.rmtree(fetcher.tmp_dir, ignore_errors=True)
 
+    @respx.mock
     def test_fetch_with_skill_path(self) -> None:
         """Fetch with skill_path fetches from subdirectory."""
         route = respx.get(f"{_API_BASE}/owner/repo/contents/skills/my-skill").mock(
             return_value=contents_response([file_item("SKILL.md", "skills/my-skill")]),
         )
         respx.get("https://raw.githubusercontent.com/test/skills/my-skill/SKILL.md").mock(
-            return_value=httpx.Response(200, content=b"# Skill"),
+            return_value=httpx.Response(HTTP_OK, content=b"# Skill"),
         )
         fetcher = GitHubFetcher(skill_path="skills/my-skill")
         try:
@@ -142,13 +146,14 @@ class TestGitHubFetcherSuccess:
             if fetcher.tmp_dir:
                 shutil.rmtree(fetcher.tmp_dir, ignore_errors=True)
 
+    @respx.mock
     def test_tmp_dir_property_set_after_fetch(self) -> None:
         """tmp_dir is set after fetch and exists."""
         respx.get(f"{_API_BASE}/owner/repo/contents/").mock(
             return_value=contents_response([file_item("SKILL.md")]),
         )
         respx.get("https://raw.githubusercontent.com/test/SKILL.md").mock(
-            return_value=httpx.Response(200, content=b"data"),
+            return_value=httpx.Response(HTTP_OK, content=b"data"),
         )
         fetcher = GitHubFetcher()
         assert fetcher.tmp_dir is None

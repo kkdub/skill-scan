@@ -6,7 +6,7 @@ import pytest
 
 from skill_scan.normalizer import (
     canonicalize_whitespace,
-    normalize_line,
+    normalize_text,
     strip_zero_width,
 )
 
@@ -130,36 +130,36 @@ class TestCanonicalizeWhitespace:
         assert canonicalize_whitespace("") == ""
 
 
-class TestNormalizeLine:
-    """Tests for normalize_line — combined normalization pipeline."""
+class TestNormalizeText:
+    """Tests for normalize_text — combined normalization pipeline."""
 
     def test_strips_zero_width_and_canonicalizes_whitespace(self) -> None:
         text = "e\u200bval\u00a0(input)"
-        assert normalize_line(text) == "eval (input)"
+        assert normalize_text(text) == "eval (input)"
 
     def test_identity_on_clean_text(self) -> None:
         clean = "normal code here"
-        assert normalize_line(clean) == clean
+        assert normalize_text(clean) == clean
 
     def test_empty_string(self) -> None:
-        assert normalize_line("") == ""
+        assert normalize_text("") == ""
 
     def test_preserves_newlines(self) -> None:
         text = "line1\u200b\nline2\u00a0word"
-        assert normalize_line(text) == "line1\nline2 word"
+        assert normalize_text(text) == "line1\nline2 word"
 
     def test_preserves_tabs(self) -> None:
         text = "\t\u200beval\u00a0()"
-        assert normalize_line(text) == "\teval ()"
+        assert normalize_text(text) == "\teval ()"
 
     def test_combined_evasion_tactics(self) -> None:
         # Attacker uses zero-width + exotic spaces together
         text = "__\u200bimport\u200c__\u00a0(\u2003'os'\u2003)"
-        assert normalize_line(text) == "__import__ ( 'os' )"
+        assert normalize_text(text) == "__import__ ( 'os' )"
 
     def test_multiline_content_preserved(self) -> None:
         text = "line1\u200b\nline2\u200c\nline3\u00a0word"
-        result = normalize_line(text)
+        result = normalize_text(text)
         assert result.count("\n") == 2
         assert result == "line1\nline2\nline3 word"
 
@@ -176,7 +176,7 @@ class TestNormalizeLine:
     )
     def test_each_zero_width_char_stripped_in_pipeline(self, char: str, name: str) -> None:
         text = f"ev{char}al"
-        assert normalize_line(text) == "eval", f"Failed for {name}"
+        assert normalize_text(text) == "eval", f"Failed for {name}"
 
     @pytest.mark.parametrize(
         "char,name",
@@ -191,4 +191,4 @@ class TestNormalizeLine:
     )
     def test_each_exotic_space_normalized_in_pipeline(self, char: str, name: str) -> None:
         text = f"a{char}b"
-        assert normalize_line(text) == "a b", f"Failed for {name}"
+        assert normalize_text(text) == "a b", f"Failed for {name}"
