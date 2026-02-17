@@ -110,7 +110,7 @@ exclude_patterns = [
   "(?i)\\bpatch\\b.*\\brequests\\.",
   "(?i)^\\s*#\\s.*\\brequests\\.(?:post|put)",
   "(?i)\\brequests\\.post\\s*\\(.*\\btest\\b",
-  "(?i)\\bresponse\\s*=\\s*requests\\.get\\b"
+  "(?i)\\bresponse\\s*=\\s*\\brequests\\.get\\b"
 ]
 
 [rules.EXFIL-006]
