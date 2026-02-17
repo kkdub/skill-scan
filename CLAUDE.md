@@ -4,9 +4,9 @@ Security scanner for agent skills — detect prompt injection, malicious code, a
 
 ## Quick Reference
 
-- **Plans & specs**: `.agents/plans/`
-- **Code patterns and rules**: `.agents/standards/`
-- **Workflow context**: `.agents/WORKFLOW.md`
+- **Plans & specs**: `.agent/plans/`
+- **Code patterns and rules**: `.agent/standards/`
+- **Workflow context**: `.agent/WORKFLOW.md`
 
 ## Stack
 
@@ -40,7 +40,7 @@ make check    # All quality checks (run early, run often)
 src/skill_scan/     # Production source code
 tests/              # Test suite (mirrors src/ structure)
 scripts/            # Quality & analysis scripts
-.agents/            # Plans, standards, workflow
+.agent/             # Plans, standards, workflow
 ```
 
 ## Tips
