@@ -8,7 +8,7 @@ from __future__ import annotations
 import pytest
 
 from skill_scan.models import Finding, Severity, Verdict
-from skill_scan.verdict import calculate_verdict, count_by_severity
+from skill_scan.verdict import calculate_verdict, count_by_severity, coverage_aware_verdict
 
 
 def make_finding(
@@ -147,3 +147,57 @@ class TestCountBySeverity:
         # Verify we get the string value "high", not "HIGH" or the enum
         assert "high" in counts
         assert counts["high"] == 1
+
+
+class TestCoverageAwareVerdict:
+    """Tests for coverage_aware_verdict function."""
+
+    def test_returns_pass_when_no_degradation(self) -> None:
+        verdict = coverage_aware_verdict(
+            findings=(),
+            files_skipped=0,
+            degraded_reasons=(),
+        )
+        assert verdict == Verdict.PASS
+
+    def test_upgrades_pass_to_flag_when_files_skipped(self) -> None:
+        verdict = coverage_aware_verdict(
+            findings=(),
+            files_skipped=1,
+            degraded_reasons=(),
+        )
+        assert verdict == Verdict.FLAG
+
+    def test_upgrades_pass_to_flag_when_degraded_reasons(self) -> None:
+        verdict = coverage_aware_verdict(
+            findings=(),
+            files_skipped=0,
+            degraded_reasons=("Large file excluded",),
+        )
+        assert verdict == Verdict.FLAG
+
+    def test_preserves_block_even_with_degradation(self) -> None:
+        findings = (make_finding(Severity.HIGH),)
+        verdict = coverage_aware_verdict(
+            findings=findings,
+            files_skipped=1,
+            degraded_reasons=(),
+        )
+        assert verdict == Verdict.BLOCK
+
+    def test_preserves_flag_from_findings(self) -> None:
+        findings = (make_finding(Severity.MEDIUM),)
+        verdict = coverage_aware_verdict(
+            findings=findings,
+            files_skipped=0,
+            degraded_reasons=(),
+        )
+        assert verdict == Verdict.FLAG
+
+    def test_returns_flag_with_both_skips_and_degraded_reasons(self) -> None:
+        verdict = coverage_aware_verdict(
+            findings=(),
+            files_skipped=2,
+            degraded_reasons=("Binary file", "Large file"),
+        )
+        assert verdict == Verdict.FLAG

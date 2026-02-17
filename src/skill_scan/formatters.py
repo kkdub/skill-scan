@@ -82,7 +82,10 @@ def _format_quiet(result: ScanResult) -> str:
         if result.counts.get(s.value, 0) > 0
     )
     suffix = f" ({counts_str})" if counts_str else ""
-    return f"Verdict: {result.verdict.value.upper()}{suffix}"
+    line = f"Verdict: {result.verdict.value.upper()}{suffix}"
+    if result.files_skipped:
+        line += f" [{result.files_skipped} files skipped]"
+    return line
 
 
 def _format_verbose(result: ScanResult) -> str:
@@ -102,7 +105,15 @@ def _format_verbose(result: ScanResult) -> str:
 
 def _header(result: ScanResult) -> str:
     name = result.skill_name or "unknown"
-    return f"skill-scan report: {name}\nScanned {result.files_scanned} files in {result.duration:.2f}s"
+    parts = [f"skill-scan report: {name}"]
+    parts.append(
+        f"Scanned {result.files_scanned} files ({result.bytes_scanned} bytes) in {result.duration:.2f}s"
+    )
+    if result.files_skipped:
+        parts.append(f"  Skipped: {result.files_skipped} files")
+    for reason in result.degraded_reasons:
+        parts.append(f"  Warning: {reason}")
+    return "\n".join(parts)
 
 
 def _verdict_banner(result: ScanResult) -> str:

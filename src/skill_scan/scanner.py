@@ -1,7 +1,6 @@
 """Core scan orchestration — the I/O boundary.
 
-Ties together config, fetching, parsing, rule loading, and matching
-into a single scan() entry point that returns a ScanResult.
+Ties together config, fetching, parsing, rule loading, and matching.
 """
 
 from __future__ import annotations
@@ -21,8 +20,8 @@ from skill_scan.file_checks import (
 )
 from skill_scan.models import Finding, Rule, ScanResult, Severity
 from skill_scan.parser import SkillParseError, parse_skill_frontmatter
-from skill_scan.rules import load_default_rules, match_line
-from skill_scan.verdict import calculate_verdict, count_by_severity
+from skill_scan.rules import load_default_rules, match_content
+from skill_scan.verdict import count_by_severity, coverage_aware_verdict
 
 
 def scan(
@@ -40,16 +39,21 @@ def scan(
     schema_findings, skill_name = _validate_schema(skill_dir, cfg)
     files, fs_findings = _collect_files(skill_dir, cfg)
     rules = _prepare_rules(cfg)
-    findings = _scan_all_files(files, skill_dir, rules)
-    all_findings = tuple(schema_findings + fs_findings + findings)
-    duration = time.monotonic() - start
+    findings, bytes_scanned, content_skipped = _scan_all_files(files, skill_dir, rules)
 
+    binary_skipped = sum(1 for f in fs_findings if f.rule_id == "FS-002")
+    all_findings = tuple(schema_findings + fs_findings + findings)
+    degraded = _build_degraded_reasons(content_skipped, binary_skipped)
+    duration = time.monotonic() - start
     return ScanResult(
         findings=all_findings,
         counts=count_by_severity(all_findings),
-        verdict=calculate_verdict(all_findings),
+        verdict=coverage_aware_verdict(all_findings, content_skipped + binary_skipped, degraded),
         duration=duration,
         files_scanned=len(files),
+        files_skipped=content_skipped + binary_skipped,
+        bytes_scanned=bytes_scanned,
+        degraded_reasons=degraded,
         skill_name=skill_name,
     )
 
@@ -92,15 +96,11 @@ def _validate_schema(skill_dir: Path, cfg: ScanConfig) -> tuple[list[Finding], s
 
 
 def _collect_files(skill_dir: Path, config: ScanConfig) -> tuple[list[Path], list[Finding]]:
-    """Walk the skill directory and collect scannable files.
-
-    Returns tuple of (files to scan, file-safety findings).
-    """
+    """Walk the skill directory and collect scannable files."""
     collected: list[Path] = []
     fs_findings: list[Finding] = []
     resolved_root = skill_dir.resolve()
     total_size = 0
-
     file_count = 0
     for file_path in sorted(skill_dir.rglob("*")):
         result = _check_entry(file_path, skill_dir, resolved_root, config)
@@ -111,11 +111,18 @@ def _collect_files(skill_dir: Path, config: ScanConfig) -> tuple[list[Path], lis
         file_count += 1
         if finding:
             fs_findings.append(finding)
+            # Still collect for content scanning unless binary or external symlink
+            if finding.rule_id not in ("FS-002", "FS-004"):
+                collected.append(file_path)
         else:
             collected.append(file_path)
 
-    _append_if(fs_findings, check_total_size(total_size, config.max_total_size))
-    _append_if(fs_findings, check_file_count(file_count, config.max_file_count))
+    for check in (
+        check_total_size(total_size, config.max_total_size),
+        check_file_count(file_count, config.max_file_count),
+    ):
+        if check:
+            fs_findings.append(check)
 
     return collected, fs_findings
 
@@ -129,7 +136,8 @@ def _check_entry(
     """Check a single directory entry for file-safety issues.
 
     Returns None to skip entirely, or (finding_or_None, file_size).
-    A non-None finding means the file should not be content-scanned.
+    A non-None finding signals a file-safety issue; the caller decides
+    whether to still collect the file for content scanning.
     """
     rel = file_path.relative_to(skill_dir).as_posix()
 
@@ -163,29 +171,33 @@ def _check_entry(
     return None, size
 
 
-def _append_if(findings: list[Finding], finding: Finding | None) -> None:
-    """Append a finding to the list if it is not None."""
-    if finding:
-        findings.append(finding)
-
-
 def _scan_all_files(
     files: list[Path],
     skill_dir: Path,
     rules: list[Rule],
-) -> list[Finding]:
-    """Scan all collected files and aggregate findings."""
+) -> tuple[list[Finding], int, int]:
+    """Scan all collected files. Returns (findings, bytes_scanned, files_skipped)."""
     all_findings: list[Finding] = []
+    bytes_scanned = 0
+    files_skipped = 0
     for file_path in files:
-        all_findings.extend(_scan_file(file_path, skill_dir, rules))
-    return all_findings
+        findings, nbytes = _scan_file(file_path, skill_dir, rules)
+        all_findings.extend(findings)
+        bytes_scanned += nbytes
+        if nbytes == 0 and findings:
+            files_skipped += 1
+    return all_findings, bytes_scanned, files_skipped
 
 
-def _scan_file(file_path: Path, skill_dir: Path, rules: list[Rule]) -> list[Finding]:
-    """Scan a single file line by line against all rules.
+def _scan_file(
+    file_path: Path,
+    skill_dir: Path,
+    rules: list[Rule],
+) -> tuple[list[Finding], int]:
+    """Scan a single file against all rules (line-scope and file-scope).
 
-    On UnicodeDecodeError, emits an info-level FS-001 finding.
-    On OSError, the file is silently skipped.
+    Returns (findings, bytes_scanned). bytes_scanned is 0 when the file
+    could not be read (UnicodeDecodeError, OSError).
     """
     relative_path = file_path.relative_to(skill_dir).as_posix()
 
@@ -195,7 +207,7 @@ def _scan_file(file_path: Path, skill_dir: Path, rules: list[Rule]) -> list[Find
         return [
             Finding(
                 rule_id="FS-001",
-                severity=Severity.INFO,
+                severity=Severity.MEDIUM,
                 category="file-safety",
                 file=relative_path,
                 line=None,
@@ -203,19 +215,33 @@ def _scan_file(file_path: Path, skill_dir: Path, rules: list[Rule]) -> list[Find
                 description="File is not valid UTF-8 and was skipped.",
                 recommendation="Verify file encoding or exclude from scan.",
             ),
-        ]
-    except OSError:
-        return []
+        ], 0
+    except OSError as exc:
+        return [
+            Finding(
+                rule_id="FS-008",
+                severity=Severity.MEDIUM,
+                category="file-safety",
+                file=relative_path,
+                line=None,
+                matched_text="",
+                description=f"File could not be read: {exc}",
+                recommendation="Check file permissions and accessibility.",
+            ),
+        ], 0
 
     applicable_rules = [r for r in rules if not _is_path_excluded(relative_path, r)]
+    return match_content(content, relative_path, applicable_rules), len(content.encode("utf-8"))
 
-    lines = content.split("\n")
-    findings: list[Finding] = []
 
-    for line_num, line in enumerate(lines, start=1):
-        findings.extend(match_line(line, line_num, relative_path, applicable_rules))
-
-    return findings
+def _build_degraded_reasons(content_skipped: int, binary_skipped: int) -> tuple[str, ...]:
+    """Build tuple of human-readable reasons for scan degradation."""
+    reasons: list[str] = []
+    if content_skipped:
+        reasons.append(f"{content_skipped} files could not be decoded/read")
+    if binary_skipped:
+        reasons.append(f"{binary_skipped} binary files excluded")
+    return tuple(reasons)
 
 
 def _is_path_excluded(file_path: str, rule: Rule) -> bool:

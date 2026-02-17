@@ -93,6 +93,10 @@ def load_default_rules() -> list[Rule]:
     return all_rules
 
 
+_VALID_MATCH_SCOPES = {"line", "file"}
+_VALID_EXCLUDE_MODES = {"default", "strict"}
+
+
 def _parse_rule(rule_id: str, config: dict[str, object]) -> Rule:
     """Parse a single rule definition into a Rule object."""
     severity = Severity(config["severity"])
@@ -101,6 +105,16 @@ def _parse_rule(rule_id: str, config: dict[str, object]) -> Rule:
     patterns = _compile_patterns(config.get("patterns", []), flags)
     exclude_patterns = _compile_patterns(config.get("exclude_patterns", []), flags)
     path_exclude_patterns = _compile_patterns(config.get("path_exclude_patterns", []), re.RegexFlag(0))
+
+    match_scope = str(config.get("match_scope", "line"))
+    if match_scope not in _VALID_MATCH_SCOPES:
+        msg = f"Invalid match_scope '{match_scope}' for rule {rule_id}; must be 'line' or 'file'"
+        raise ValueError(msg)
+
+    exclude_mode = str(config.get("exclude_mode", "default"))
+    if exclude_mode not in _VALID_EXCLUDE_MODES:
+        msg = f"Invalid exclude_mode '{exclude_mode}' for rule {rule_id}; must be 'default' or 'strict'"
+        raise ValueError(msg)
 
     return Rule(
         rule_id=rule_id,
@@ -112,6 +126,8 @@ def _parse_rule(rule_id: str, config: dict[str, object]) -> Rule:
         exclude_patterns=exclude_patterns,
         path_exclude_patterns=path_exclude_patterns,
         confidence=str(config.get("confidence", "stable")),
+        match_scope=match_scope,
+        exclude_mode=exclude_mode,
     )
 
 
