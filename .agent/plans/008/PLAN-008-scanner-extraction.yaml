@@ -1,7 +1,7 @@
 id: "PLAN-008"
 title: "Extract scanner.py into focused modules"
 type: implementation
-status: Proposed
+status: Done
 created: 2026-02-17
 
 linked_spec: null
@@ -22,28 +22,28 @@ requirements:
   items:
     - id: R-001
       text: "scanner.py shrinks to ~85 lines (orchestration only)"
-      status: pending
+      status: done
     - id: R-002
       text: "file_collector.py owns filesystem traversal + entry classification"
-      status: pending
+      status: done
     - id: R-003
       text: "content_scanner.py owns file reading + rule application"
-      status: pending
+      status: done
     - id: R-004
       text: "All hardcoded rule IDs in conditionals replaced with named constants"
-      status: pending
+      status: done
     - id: R-005
       text: "Public API unchanged (scan() in scanner.py, __init__.py exports intact)"
-      status: pending
+      status: done
     - id: R-006
       text: "No circular imports introduced"
-      status: pending
+      status: done
     - id: R-007
       text: "All files under 250-line limit"
-      status: pending
+      status: done
     - id: R-008
       text: "All existing tests pass without logic changes (import updates only)"
-      status: pending
+      status: done
   uncovered: []
 
 utilities_audit:
@@ -68,7 +68,7 @@ utilities_audit:
 parts:
   - id: a
     title: "Create file_collector.py"
-    status: Pending
+    status: Done
     requirements_covered: [R-002, R-004, R-007]
     criteria:
       - "src/skill_scan/file_collector.py exists with collect_files() and _check_entry()"
@@ -78,7 +78,7 @@ parts:
 
   - id: b
     title: "Create content_scanner.py"
-    status: Pending
+    status: Done
     requirements_covered: [R-003, R-004, R-007]
     criteria:
       - "src/skill_scan/content_scanner.py exists with scan_all_files(), _scan_file(), _is_path_excluded()"
@@ -88,7 +88,7 @@ parts:
 
   - id: c
     title: "Slim down scanner.py"
-    status: Pending
+    status: Done
     depends_on: [a, b]
     requirements_covered: [R-001, R-004, R-005, R-006]
     criteria:
@@ -100,7 +100,7 @@ parts:
 
   - id: d
     title: "Update test import + verify"
-    status: Pending
+    status: Done
     depends_on: [c]
     requirements_covered: [R-005, R-008]
     criteria:

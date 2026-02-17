@@ -8,6 +8,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from enum import Enum
+from pathlib import Path
 
 
 class Severity(Enum):
@@ -73,3 +74,21 @@ class ScanResult:
     degraded_reasons: tuple[str, ...] = ()
     skill_name: str | None = None
     error_message: str | None = None
+
+
+@dataclass(slots=True, frozen=True)
+class FileEntry:
+    """Filesystem metadata for a single entry in a skill directory.
+    
+    Raw filesystem data only — no classification decisions.
+    is_symlink indicates whether path is a symlink (internal or external).
+    Classification logic determines if a symlink is external by comparing
+    resolved_path to the skill root.
+    """
+
+    path: Path
+    relative_path: str
+    suffix: str
+    size: int
+    is_symlink: bool
+    resolved_path: Path
