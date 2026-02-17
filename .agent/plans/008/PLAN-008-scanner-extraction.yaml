@@ -1,0 +1,160 @@
+id: "PLAN-008"
+title: "Extract scanner.py into focused modules"
+type: implementation
+status: Proposed
+created: 2026-02-17
+
+linked_spec: null
+
+description: |
+  scanner.py is at 249/250 lines with zero headroom. It mixes three concerns:
+  filesystem traversal, file content scanning, and orchestration. Rule ID
+  strings ("FS-002", "SV-001") appear as magic literals in conditionals.
+
+  Split into three modules — file_collector.py, content_scanner.py, and a
+  slimmed scanner.py orchestrator — and name the magic strings as constants.
+  No public API changes. No new abstraction layers.
+
+requirements:
+  extraction_status: manual
+  extracted_at: null
+  spec_hash: null
+  items:
+    - id: R-001
+      text: "scanner.py shrinks to ~85 lines (orchestration only)"
+      status: pending
+    - id: R-002
+      text: "file_collector.py owns filesystem traversal + entry classification"
+      status: pending
+    - id: R-003
+      text: "content_scanner.py owns file reading + rule application"
+      status: pending
+    - id: R-004
+      text: "All hardcoded rule IDs in conditionals replaced with named constants"
+      status: pending
+    - id: R-005
+      text: "Public API unchanged (scan() in scanner.py, __init__.py exports intact)"
+      status: pending
+    - id: R-006
+      text: "No circular imports introduced"
+      status: pending
+    - id: R-007
+      text: "All files under 250-line limit"
+      status: pending
+    - id: R-008
+      text: "All existing tests pass without logic changes (import updates only)"
+      status: pending
+  uncovered: []
+
+utilities_audit:
+  status: done
+  search_performed:
+    - "Searched src/ for all rule ID string literals"
+    - "Traced every import of scanner.py from src/ and tests/"
+    - "Verified dependency graph is acyclic"
+  categories:
+    error_handling:
+      needed: false
+    validation:
+      needed: false
+    types:
+      needed: false
+    configuration:
+      needed: false
+    http_client:
+      needed: false
+  infrastructure_parts: []
+
+parts:
+  - id: a
+    title: "Create file_collector.py"
+    status: Pending
+    requirements_covered: [R-002, R-004, R-007]
+    criteria:
+      - "src/skill_scan/file_collector.py exists with collect_files() and _check_entry()"
+      - "_SKIP_CONTENT_RULES constant replaces inline ('FS-002', 'FS-004', 'FS-005') tuple"
+      - "Imports only from config, file_checks, models (no circular deps)"
+      - "Under 250 lines"
+
+  - id: b
+    title: "Create content_scanner.py"
+    status: Pending
+    requirements_covered: [R-003, R-004, R-007]
+    criteria:
+      - "src/skill_scan/content_scanner.py exists with scan_all_files(), _scan_file(), _is_path_excluded()"
+      - "Named constants for FS-001, FS-008, file-safety category"
+      - "Imports only from models, rules (no circular deps)"
+      - "Under 250 lines"
+
+  - id: c
+    title: "Slim down scanner.py"
+    status: Pending
+    depends_on: [a, b]
+    requirements_covered: [R-001, R-004, R-005, R-006]
+    criteria:
+      - "scanner.py contains only scan(), _validate_schema(), _prepare_rules(), _build_degraded_reasons()"
+      - "Imports collect_files from file_collector and scan_all_files from content_scanner"
+      - "Named constants for FS-002 (binary count) and SV-001 (schema validation)"
+      - "No direct imports from file_checks (moved to file_collector)"
+      - "Under 100 lines"
+
+  - id: d
+    title: "Update test import + verify"
+    status: Pending
+    depends_on: [c]
+    requirements_covered: [R-005, R-008]
+    criteria:
+      - "test_rules_prompt_injection_encoding.py imports _is_path_excluded from content_scanner"
+      - "make check passes (ruff, mypy, pytest, bandit)"
+      - "All 1677+ tests pass"
+
+allowed_files:
+  - "src/skill_scan/file_collector.py"
+  - "src/skill_scan/content_scanner.py"
+  - "src/skill_scan/scanner.py"
+  - "tests/unit/test_rules_prompt_injection_encoding.py"
+
+forbidden:
+  - ".env*"
+  - "src/skill_scan/__init__.py"
+  - "src/skill_scan/cli.py"
+
+acceptance_criteria:
+  - "All parts have status: Done"
+  - "make check passes clean"
+  - "All files under 250 lines"
+  - "scanner.py under 100 lines"
+  - "No magic rule ID strings in conditional expressions"
+  - "Dependency graph remains acyclic"
+
+stop_condition: |
+  When all parts are Done and make check passes.
+
+work_log: []
+evidence: []
+
+handoff:
+  stopped_at: null
+  current_state: null
+  next_steps: []
+  blockers: []
+  scope:
+    files:
+      - "src/skill_scan/scanner.py"
+      - "src/skill_scan/file_collector.py (new)"
+      - "src/skill_scan/content_scanner.py (new)"
+      - "tests/unit/test_rules_prompt_injection_encoding.py"
+    functions:
+      - "collect_files (from _collect_files)"
+      - "scan_all_files (from _scan_all_files)"
+      - "_check_entry (moves to file_collector)"
+      - "_scan_file (moves to content_scanner)"
+      - "_is_path_excluded (moves to content_scanner)"
+    components: []
+  decisions:
+    - "Functions become package-public (drop leading underscore) when used cross-module"
+    - "_check_entry and _scan_file stay private (only used within their new modules)"
+    - "Constants are module-local (prefixed with _), not exported"
+  open_questions: []
+
+errors: []
