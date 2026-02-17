@@ -1,8 +1,8 @@
-"""Core scan orchestration — the I/O boundary.
+"""Core scan orchestration for the skill-scan pipeline.
 
 Ties together config, fetching, parsing, rule loading, and matching.
 File collection is handled by file_collector, content scanning by
-content_scanner. This module wires them together.
+content_scanner. This module coordinates the high-level flow and wires them together.
 """
 
 from __future__ import annotations
