@@ -18,7 +18,7 @@ def _entry(
     suffix: str = ".py",
     size: int = 100,
     *,
-    is_external_symlink: bool = False,
+    is_symlink: bool = False,
     resolved_path: Path | None = None,
 ) -> FileEntry:
     """Build a FileEntry for testing."""
@@ -27,7 +27,7 @@ def _entry(
         relative_path=name,
         suffix=suffix,
         size=size,
-        is_external_symlink=is_external_symlink,
+        is_symlink=is_symlink,
         resolved_path=resolved_path or _ROOT / name,
     )
 
@@ -53,7 +53,7 @@ class TestClassifyEntriesCollection:
             _entry(
                 "evil-link",
                 suffix=".py",
-                is_external_symlink=True,
+                is_symlink=True,
                 resolved_path=Path("/etc/passwd"),
             ),
         ]
@@ -114,7 +114,7 @@ class TestClassifyEntriesMixed:
             _entry("data.csv", suffix=".csv"),
             _entry(
                 "escape",
-                is_external_symlink=True,
+                is_symlink=True,
                 resolved_path=Path("/tmp/outside"),
             ),
         ]
