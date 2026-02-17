@@ -81,14 +81,11 @@ jobs:
       - name: Install dependencies
         run: uv sync --frozen --group dev
 
-      - name: Install Semgrep
-        run: uv pip install semgrep==1.113.0
-
       - name: Run Semgrep
         id: semgrep
         timeout-minutes: 10
         run: |
-          uv run semgrep scan \
+          uvx semgrep@1.113.0 scan \
             --config=p/python \
             --config=p/security-audit \
             --sarif-output=semgrep-results.sarif \
@@ -147,6 +144,7 @@ jobs:
         run: uv sync --frozen --group dev
 
       - name: Run tests with coverage
+        shell: bash
         run: |
           uv run pytest \
             --cov=src \
