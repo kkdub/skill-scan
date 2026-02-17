@@ -91,3 +91,66 @@ exclude_patterns = [
   "(?i)process\\.env\\.\\w+",
   "(?i)process\\.env\\[\\s*['\"]\\w+"
 ]
+
+[rules.EXFIL-005]
+severity = "high"
+category = "data-exfiltration"
+description = "Python HTTP client exfiltration — data sent via requests, httpx, urllib, or aiohttp"
+recommendation = "Remove or audit outbound HTTP POST/PUT calls that may exfiltrate data"
+patterns = [
+  "(?i)\\brequests\\.(?:post|put)\\s*\\(",
+  "(?i)\\bhttpx\\.(?:post|put)\\s*\\(",
+  "(?i)\\burllib\\.request\\.urlopen\\s*\\(.*\\bdata\\s*=",
+  "(?i)\\bhttp\\.client\\.HTTPS?Connection\\b",
+  "(?i)\\baiohttp\\.ClientSession\\s*\\(\\s*\\)\\s*\\.post\\s*\\("
+]
+exclude_patterns = [
+  "(?i)\\brequests\\.get\\s*\\(",
+  "(?i)\\bmock[._].*\\brequests\\.",
+  "(?i)\\bpatch\\b.*\\brequests\\.",
+  "(?i)^\\s*#\\s.*\\brequests\\.(?:post|put)",
+  "(?i)\\brequests\\.post\\s*\\(.*\\btest\\b",
+  "(?i)\\bresponse\\s*=\\s*requests\\.get\\b"
+]
+
+[rules.EXFIL-006]
+severity = "high"
+category = "data-exfiltration"
+description = "Raw socket and DNS exfiltration — data sent via low-level sockets or DNS queries"
+recommendation = "Remove or audit raw socket connections and DNS-based data exfiltration"
+patterns = [
+  "(?i)\\bsocket\\.connect\\s*\\(",
+  "(?i)\\bsocket\\.send(?:to|all)?\\s*\\(",
+  "(?i)\\bdns\\.resolver\\b",
+  "(?i)\\bgetaddrinfo\\s*\\(.*\\+",
+  "(?i)\\bsubprocess\\b.*\\bnslookup\\b",
+  "(?i)\\bsubprocess\\b.*\\bdig\\b"
+]
+exclude_patterns = [
+  "(?i)\\bsocket\\.(?:listen|accept|bind)\\s*\\(",
+  "(?i)\\blocalhost\\b",
+  "(?i)\\b127\\.0\\.0\\.1\\b",
+  "(?i)^\\s*#\\s.*\\bsocket\\.",
+  "(?i)\\beducational\\b.*\\bsocket\\b"
+]
+
+[rules.EXFIL-007]
+severity = "medium"
+category = "data-exfiltration"
+description = "Mail and messaging exfiltration — data sent via SMTP, SES, or WebSocket"
+recommendation = "Audit email sending and WebSocket connections for unauthorized data transmission"
+patterns = [
+  "(?i)\\bsmtplib\\.SMTP\\s*\\(",
+  "(?i)\\bsmtplib\\.SMTP_SSL\\s*\\(",
+  "(?i)\\bemail\\.mime\\b.*\\bsendmail\\b",
+  "(?i)\\bboto3\\b.*\\bses\\b.*\\bsend",
+  "(?i)\\bwebsocket\\.send\\s*\\(",
+  "(?i)\\bws\\.send\\s*\\("
+]
+exclude_patterns = [
+  "(?i)^\\s*#\\s.*\\bsmtplib\\b",
+  "(?i)\\bnotification\\b.*\\bsmtp\\b",
+  "(?i)\\balert\\b.*\\bsmtp\\b",
+  "(?i)\\bsmtp\\b.*\\blocalhost\\b",
+  "(?i)\\bsmtp\\b.*\\b127\\.0\\.0\\.1\\b"
+]

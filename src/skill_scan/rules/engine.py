@@ -14,6 +14,7 @@ from __future__ import annotations
 import re
 
 from skill_scan.models import Finding, Rule
+from skill_scan.normalizer import normalize_line
 
 _MAX_MATCHED_TEXT = 200
 
@@ -107,19 +108,50 @@ def match_file(
 
 
 def match_content(content: str, file_path: str, rules: list[Rule]) -> list[Finding]:
-    """Apply line-scope and file-scope rules to file content."""
+    """Apply line-scope and file-scope rules to file content.
+
+    Each line is matched in its original form, then (if normalization changes
+    the text) matched again in normalized form to catch evasion via invisible
+    Unicode characters or exotic whitespace.
+    """
     line_rules = [r for r in rules if r.match_scope == "line"]
     file_rules = [r for r in rules if r.match_scope == "file"]
 
     findings: list[Finding] = []
 
     for line_num, line in enumerate(content.split("\n"), start=1):
-        findings.extend(match_line(line, line_num, file_path, line_rules))
+        line_findings = match_line(line, line_num, file_path, line_rules)
+        findings.extend(line_findings)
+        findings.extend(_normalized_line_findings(line, line_num, file_path, line_rules, line_findings))
 
     if file_rules:
-        findings.extend(match_file(content, file_path, file_rules))
+        file_findings = match_file(content, file_path, file_rules)
+        findings.extend(file_findings)
+        findings.extend(_normalized_file_findings(content, file_path, file_rules, file_findings))
 
     return findings
+
+
+def _normalized_line_findings(
+    line: str, line_num: int, file_path: str, rules: list[Rule], originals: list[Finding]
+) -> list[Finding]:
+    """Match normalized form of a line and return deduplicated new findings."""
+    normalized = normalize_line(line)
+    if normalized == line:
+        return []
+    seen = {f.rule_id for f in originals}
+    return [f for f in match_line(normalized, line_num, file_path, rules) if f.rule_id not in seen]
+
+
+def _normalized_file_findings(
+    content: str, file_path: str, rules: list[Rule], originals: list[Finding]
+) -> list[Finding]:
+    """Match normalized form of full content and return deduplicated new findings."""
+    norm_content = normalize_line(content)
+    if norm_content == content:
+        return []
+    seen = {(f.rule_id, f.line) for f in originals}
+    return [f for f in match_file(norm_content, file_path, rules) if (f.rule_id, f.line) not in seen]
 
 
 def _make_finding(rule: Rule, file_path: str, line_num: int, match: re.Match[str]) -> Finding:
