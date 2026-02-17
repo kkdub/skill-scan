@@ -85,7 +85,7 @@ jobs:
         id: semgrep
         timeout-minutes: 10
         run: |
-          uvx semgrep@1.113.0 scan \
+          uvx --with 'setuptools<78' semgrep@1.113.0 scan \
             --config=p/python \
             --config=p/security-audit \
             --sarif-output=semgrep-results.sarif \
