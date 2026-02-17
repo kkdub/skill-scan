@@ -13,7 +13,8 @@ from pathlib import Path
 from skill_scan._fetchers import LocalFetcher, SkillFetcher
 from skill_scan.config import ScanConfig, load_config
 from skill_scan.content_scanner import scan_all_files
-from skill_scan.file_collector import collect_files
+from skill_scan.file_classifier import classify_entries
+from skill_scan.file_collector import walk_skill_dir
 from skill_scan.models import Finding, Rule, ScanResult, Severity
 from skill_scan.parser import SkillParseError, parse_skill_frontmatter
 from skill_scan.rules import load_default_rules
@@ -37,7 +38,8 @@ def scan(
     cfg = config if config is not None else load_config()
 
     schema_findings, skill_name = _validate_schema(skill_dir, cfg)
-    files, fs_findings = collect_files(skill_dir, cfg)
+    entries, resolved_root = walk_skill_dir(skill_dir)
+    files, fs_findings = classify_entries(entries, resolved_root, cfg)
     rules = _prepare_rules(cfg)
     findings, bytes_scanned, content_skipped = scan_all_files(files, skill_dir, rules)
 

@@ -8,6 +8,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from enum import Enum
+from pathlib import Path
 
 
 class Severity(Enum):
@@ -73,3 +74,15 @@ class ScanResult:
     degraded_reasons: tuple[str, ...] = ()
     skill_name: str | None = None
     error_message: str | None = None
+
+
+@dataclass(slots=True, frozen=True)
+class FileEntry:
+    """Filesystem metadata for a single entry in a skill directory."""
+
+    path: Path
+    relative_path: str
+    suffix: str
+    size: int
+    is_external_symlink: bool
+    resolved_path: Path
