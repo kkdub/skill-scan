@@ -1,7 +1,9 @@
 """Filesystem traversal for skill scanning — I/O only.
 
-Walks a skill directory and gathers filesystem metadata into FileEntry
-objects. No classification decisions happen here; see file_classifier.py.
+Walks a skill directory and gathers raw filesystem metadata into FileEntry
+objects. Reports symlink status and resolved paths without determining if
+symlinks are internal or external. All classification decisions happen in
+file_classifier.py.
 """
 
 from __future__ import annotations
@@ -35,23 +37,33 @@ def _gather_entry(
     """Gather filesystem metadata for a single directory entry.
 
     Returns None for entries that are not relevant (directories,
-    internal symlinks to directories, stat failures).
+    symlinks to directories, stat failures). For symlinks to files,
+    reports is_symlink=True and the resolved target path; the classifier
+    determines if the symlink is internal or external.
     """
     rel = file_path.relative_to(skill_dir).as_posix()
     resolved = file_path.resolve()
+    is_symlink = file_path.is_symlink()
 
-    if file_path.is_symlink():
-        if not resolved.is_relative_to(resolved_root):
-            return FileEntry(
-                path=file_path,
-                relative_path=rel,
-                suffix=file_path.suffix,
-                size=0,
-                is_external_symlink=True,
-                resolved_path=resolved,
-            )
-        # Internal symlink: fall through to is_file check below
+    # Skip directories and symlinks to directories
+    if is_symlink:
+        if not resolved.is_file():
+            return None
+        # Return symlink metadata; classifier will determine if external
+        try:
+            size = file_path.stat().st_size
+        except OSError:
+            size = 0
+        return FileEntry(
+            path=file_path,
+            relative_path=rel,
+            suffix=file_path.suffix,
+            size=size,
+            is_symlink=True,
+            resolved_path=resolved,
+        )
 
+    # For regular files, ensure they're within the root (security check)
     if not file_path.is_file() or not resolved.is_relative_to(resolved_root):
         return None
 
@@ -65,6 +77,6 @@ def _gather_entry(
         relative_path=rel,
         suffix=file_path.suffix,
         size=size,
-        is_external_symlink=False,
+        is_symlink=False,
         resolved_path=resolved,
     )
