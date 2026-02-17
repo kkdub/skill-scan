@@ -1,6 +1,6 @@
 # Malicious Code Detection Rules
 # Category: malicious-code
-# Rules EXEC-001 through EXEC-005
+# Rules EXEC-001 through EXEC-008
 
 [rules.EXEC-001]
 severity = "critical"
@@ -34,7 +34,7 @@ patterns = [
   '(?i)\beval\s*\(',
   '(?i)\bexec\s*\(',
   '(?i)\bos\.system\s*\(',
-  '(?i)subprocess\.[a-z]+\(.*shell\s*=\s*True'
+  '(?i)subprocess\.[a-z]+\(.{0,200}?shell\s*=\s*True'
 ]
 exclude_patterns = [
   '(?i)never\s+use\s+eval\s*\(',
@@ -118,4 +118,103 @@ exclude_patterns = [
   '(?i)avoid\s+downloading\b.*\.exe\b',
   '(?i)do\s+not\s+download\b.*\.exe\b',
   '(?i)warning.*\.dmg\b'
+]
+
+[rules.EXEC-006]
+severity = "high"
+category = "malicious-code"
+description = "Dynamic indirection — runtime module import or attribute lookup bypasses static analysis"
+recommendation = "Use explicit imports instead of __import__, getattr, or importlib for module loading"
+patterns = [
+  '(?i)\b__import__\s*\(',
+  '(?i)\bgetattr\s*\(\s*\w+\s*,\s*\S',
+  '(?i)\bimportlib\.import_module\s*\(',
+  '(?i)\bcompile\s*\([^)]{0,1024}\).{0,200}?\bexec\s*\('
+]
+exclude_patterns = [
+  '(?i)\bavoid\s+__import__',
+  '(?i)\bnever\s+use\s+getattr\s+for\b',
+  '(?i)\bimportlib\s+documentation\b',
+  '(?i)\banti-pattern\b'
+]
+
+[rules.EXEC-007]
+severity = "critical"
+category = "malicious-code"
+description = "Unsafe deserialization — pickle, marshal, or unsafe YAML loading enables arbitrary code execution"
+recommendation = "Use safe alternatives: json, yaml.safe_load, or validated data formats instead of pickle/marshal"
+patterns = [
+  '(?i)\bpickle\.loads?\s*\(',
+  '(?i)\byaml\.load\s*\(',
+  '(?i)\byaml\.unsafe_load\s*\(',
+  '(?i)\bmarshal\.loads?\s*\(',
+  '(?i)\bshelve\.open\s*\(',
+  '(?i)\bdill\.loads?\s*\('
+]
+exclude_patterns = [
+  '(?i)\byaml\.safe_load\b',
+  '(?i)\byaml\.load\s*\(.{0,200}?Loader\s*=\s*SafeLoader',
+  '(?i)\byaml\.load\s*\(.{0,200}?Loader\s*=\s*yaml\.SafeLoader',
+  '(?i)\bavoid\s+pickle\b',
+  '(?i)\bnever\s+use\s+pickle\b',
+  '(?i)\bdo\s+not\s+use\s+pickle\b',
+  '(?i)\banti-pattern\b'
+]
+
+[rules.EXEC-008]
+severity = "high"
+category = "malicious-code"
+description = "PowerShell cradle or LOLBin download — uses system tools to fetch and execute remote payloads"
+recommendation = "Remove download cradles and LOLBin abuse; use verified package managers for software installation"
+patterns = [
+  '(?i)\bIEX\b.*\bDownloadString\b',
+  '(?i)\[System\.Net\.WebClient\].*\bDownloadString\b',
+  '(?i)\bInvoke-RestMethod\b.*\|\s*IEX\b',
+  '(?i)\bStart-BitsTransfer\b',
+  '(?i)\bcertutil\b.*-urlcache\b.*-split\b.*-f\b',
+  '(?i)\bmshta\s+https?://',
+  '(?i)\bwscript\.shell\b'
+]
+exclude_patterns = [
+  '(?i)\bavoid\s+IEX\b',
+  '(?i)\bnever\s+use\s+IEX\b',
+  '(?i)\bdo\s+not\s+use\s+IEX\b',
+  '(?i)\bwarning.*\bDownloadString\b',
+  '(?i)\banti-pattern\b',
+  '(?i)\bdocumentation\b.*\bcertutil\b'
+]
+
+[rules.EXEC-009]
+severity = "critical"
+category = "malicious-code"
+description = "Multi-line encoded execution — exec/eval of base64-decoded content spanning multiple lines"
+recommendation = "Remove base64-encoded execution; use explicit, auditable code instead"
+match_scope = "file"
+flags = "IGNORECASE|DOTALL"
+patterns = [
+  'exec\s*\(\s*(?:compile\s*\(\s*)?base64\.b64decode\s*\(',
+  'eval\s*\(\s*(?:compile\s*\(\s*)?base64\.b64decode\s*\('
+]
+exclude_patterns = [
+  '(?i)test.*fixture',
+  '(?i)example.*base64',
+  '(?i)anti-pattern'
+]
+
+[rules.EXEC-010]
+severity = "high"
+category = "malicious-code"
+description = "Dynamic code execution with strict exclusion — eval/exec calls resistant to comment-based suppression"
+recommendation = "Replace eval/exec with safe alternatives; do not use comments to justify dynamic execution"
+exclude_mode = "strict"
+patterns = [
+  '(?i)\beval\s*\([^)]*\buser',
+  '(?i)\beval\s*\([^)]*\binput',
+  '(?i)\bexec\s*\([^)]*\buser',
+  '(?i)\bexec\s*\([^)]*\binput'
+]
+exclude_patterns = [
+  'safe_eval',
+  'safe_exec',
+  'ast\.literal_eval'
 ]

@@ -1,0 +1,73 @@
+# Tool Abuse Detection Rules
+# Category: tool-abuse
+# Rules TOOL-001 through TOOL-003
+
+[rules.TOOL-001]
+severity = "high"
+category = "tool-abuse"
+description = "Destructive file operations -- rm -rf /, disk overwrite, or filesystem format commands"
+recommendation = "Remove destructive file operations; skills should not delete system files or overwrite disks"
+patterns = [
+  '(?i)\brm\s+-rf\s+/',
+  '(?i)\brm\s+-rf\s+~',
+  '(?i)\brm\s+-rf\s+\$HOME\b',
+  '(?i)\bdel\s+/[fF]\s+/[sS]\s+/[qQ]\s+[A-Za-z]:\\',
+  '(?i)\bFormat-Volume\b',
+  '(?i)\bmkfs\b',
+  '(?i)\bdd\s+if=/dev/zero\b',
+  '(?i)\bdd\s+if=/dev/urandom\b'
+]
+exclude_patterns = [
+  '(?i)/dev/null\b',
+  '(?i)\bdocumentation\b.*\brm\s+-rf\b',
+  '(?i)\bnever\s+run\s+rm\s+-rf\b',
+  '(?i)\bavoid\s+rm\s+-rf\b',
+  '(?i)\bdo\s+not\s+run\s+rm\s+-rf\b',
+  '(?i)\banti-pattern\b'
+]
+
+[rules.TOOL-002]
+severity = "high"
+category = "tool-abuse"
+description = "Privilege escalation instructions -- overly permissive chmod, root shell, or admin group modification"
+recommendation = "Use least-privilege permissions; avoid chmod 777, root shells, and admin group changes"
+patterns = [
+  '(?i)\bsudo\s+chmod\s+777\b',
+  '(?i)\bchmod\s+-R\s+777\b',
+  '(?i)\bsudo\s+su\s+-',
+  '(?i)\bsudo\s+-i\b',
+  '(?i)\bnet\s+localgroup\s+administrators\b',
+  '(?i)\brunas\s+/user:\s*administrator\b'
+]
+exclude_patterns = [
+  '(?i)\bnever\s+use\s+chmod\s+777\b',
+  '(?i)\bavoid\s+chmod\s+777\b',
+  '(?i)\bdo\s+not\s+use\s+chmod\s+777\b',
+  '(?i)\bavoid\s+sudo\s+su\b',
+  '(?i)\bnever\s+use\s+sudo\s+su\b',
+  '(?i)\beducational\b.*\bchmod\b',
+  '(?i)\banti-pattern\b',
+  '(?i)\bchmod\s+755\b',
+  '(?i)\bchmod\s+644\b'
+]
+
+[rules.TOOL-003]
+severity = "medium"
+category = "tool-abuse"
+description = "Tool chaining abuse -- dangerous command sequences that chain execution with deletion or device writes"
+recommendation = "Avoid chaining destructive commands; use separate, auditable steps for build and cleanup"
+patterns = [
+  '(?i)&&\s*rm\s+-',
+  '(?i);\s*rm\s+-rf\b',
+  '(?i)\|\s*tee\s+/dev/',
+  '(?i)(?:run|execute)\b.{0,200}?\bthen\s+(?:delete|remove)\b',
+  '(?i)(?:execute|run)\b.{0,200}?\band\s+remove\s+traces\b'
+]
+exclude_patterns = [
+  '(?i)\bmake\s+clean\b',
+  '(?i)\bnpm\s+run\s+clean\b',
+  '(?i)\byarn\s+clean\b',
+  '(?i)\bclean\s*:\s*rm\s+-rf\s+(?:dist|build|node_modules|__pycache__|\.cache)\b',
+  '(?i)\banti-pattern\b',
+  '(?i)\bavoid\s+chaining\b'
+]

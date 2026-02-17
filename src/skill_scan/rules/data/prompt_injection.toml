@@ -122,3 +122,36 @@ patterns = [
   '[\u0430\u0441\u0435\u043e\u0440\u0445\u0410\u0421\u0415\u041e\u0420\u0425][a-zA-Z]'
 ]
 exclude_patterns = []
+
+[rules.PI-008]
+severity = "medium"
+category = "prompt-injection"
+description = "Short base64 decode — inline base64-encoded payload in a decode call may hide instructions"
+recommendation = "Inspect and decode the base64 payload; remove if contents are malicious"
+confidence = "stable"
+patterns = [
+  "(?i)(?:b64decode|atob|base64\\.decode|base64_decode)\\s*\\(\\s*['\"][A-Za-z0-9+/=]{20,199}['\"]"
+]
+exclude_patterns = [
+  '(?i)data:image/',
+  '(?i)test.*fixture',
+  '(?i)example.*base64',
+  '(?i)^\s*#\s',
+  '(?i)\bjwt\b.*(?:b64decode|atob|base64)',
+  '(?i)\btoken\b.*(?:b64decode|atob|base64)',
+  '(?i)\bconfig\b.*(?:b64decode|atob|base64)',
+  '(?i)\bassert\b.*(?:b64decode|atob|base64)'
+]
+path_exclude_patterns = ['tests?/', 'test_']
+
+[rules.PI-009]
+severity = "medium"
+category = "prompt-injection"
+description = "Script mixing — Greek homoglyphs adjacent to Latin characters (potential homoglyph attack)"
+recommendation = "Inspect for Greek character substitution disguising malicious content as safe text"
+confidence = "stable"
+patterns = [
+  '[a-zA-Z][\u03b1\u03b5\u03b7\u03b9\u03bf\u03c1\u03c4\u03c5\u03bd\u0391\u0395\u0397\u0399\u039f\u03a1\u03a4\u03a5\u039d]',
+  '[\u03b1\u03b5\u03b7\u03b9\u03bf\u03c1\u03c4\u03c5\u03bd\u0391\u0395\u0397\u0399\u039f\u03a1\u03a4\u03a5\u039d][a-zA-Z]'
+]
+exclude_patterns = []

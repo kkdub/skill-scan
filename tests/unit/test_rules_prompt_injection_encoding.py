@@ -10,7 +10,7 @@ import pytest
 
 from skill_scan.models import Rule, Severity
 from skill_scan.rules import load_default_rules, match_line
-from skill_scan.scanner import _is_path_excluded
+from skill_scan.content_scanner import _is_path_excluded
 
 
 @pytest.fixture(scope="module")

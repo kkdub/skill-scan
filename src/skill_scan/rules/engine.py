@@ -14,6 +14,7 @@ from __future__ import annotations
 import re
 
 from skill_scan.models import Finding, Rule
+from skill_scan.normalizer import normalize_text
 
 _MAX_MATCHED_TEXT = 200
 
@@ -107,19 +108,54 @@ def match_file(
 
 
 def match_content(content: str, file_path: str, rules: list[Rule]) -> list[Finding]:
-    """Apply line-scope and file-scope rules to file content."""
+    """Apply line-scope and file-scope rules to file content.
+
+    Line endings are normalized (CRLF/CR -> LF) before matching so rules
+    produce consistent findings regardless of platform line-ending style.
+
+    Each line is matched in its original form, then (if normalization changes
+    the text) matched again in normalized form to catch evasion via invisible
+    Unicode characters or exotic whitespace.
+    """
+    content = content.replace("\r\n", "\n").replace("\r", "\n")
     line_rules = [r for r in rules if r.match_scope == "line"]
     file_rules = [r for r in rules if r.match_scope == "file"]
 
     findings: list[Finding] = []
 
     for line_num, line in enumerate(content.split("\n"), start=1):
-        findings.extend(match_line(line, line_num, file_path, line_rules))
+        line_findings = match_line(line, line_num, file_path, line_rules)
+        findings.extend(line_findings)
+        findings.extend(_normalized_line_findings(line, line_num, file_path, line_rules, line_findings))
 
     if file_rules:
-        findings.extend(match_file(content, file_path, file_rules))
+        file_findings = match_file(content, file_path, file_rules)
+        findings.extend(file_findings)
+        findings.extend(_normalized_file_findings(content, file_path, file_rules, file_findings))
 
     return findings
+
+
+def _normalized_line_findings(
+    line: str, line_num: int, file_path: str, rules: list[Rule], originals: list[Finding]
+) -> list[Finding]:
+    """Match normalized form of a line and return deduplicated new findings."""
+    normalized = normalize_text(line)
+    if normalized == line:
+        return []
+    seen = {f.rule_id for f in originals}
+    return [f for f in match_line(normalized, line_num, file_path, rules) if f.rule_id not in seen]
+
+
+def _normalized_file_findings(
+    content: str, file_path: str, rules: list[Rule], originals: list[Finding]
+) -> list[Finding]:
+    """Match normalized form of full content and return deduplicated new findings."""
+    norm_content = normalize_text(content)
+    if norm_content == content:
+        return []
+    seen = {(f.rule_id, f.line) for f in originals}
+    return [f for f in match_file(norm_content, file_path, rules) if (f.rule_id, f.line) not in seen]
 
 
 def _make_finding(rule: Rule, file_path: str, line_num: int, match: re.Match[str]) -> Finding:
@@ -174,8 +210,17 @@ class _ShiftedMatch:
         s, e = self._match.span()
         return (s + self._offset, e + self._offset)
 
+    def start(self) -> int:
+        return self._match.start() + self._offset
+
+    def end(self) -> int:
+        return self._match.end() + self._offset
+
     def group(self) -> str:
         return self._match.group()
+
+    def groups(self) -> tuple[str | None, ...]:
+        return self._match.groups()
 
 
 def _shift_match(match: re.Match[str], offset: int) -> re.Match[str]:
