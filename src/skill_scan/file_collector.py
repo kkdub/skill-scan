@@ -78,7 +78,8 @@ def _check_entry(
         resolved = file_path.resolve()
         if not resolved.is_relative_to(resolved_root):
             return check_symlink_outside(rel, resolved, resolved_root), 0
-        # Internal symlink: fall through to binary/extension/size checks
+        # Internal symlink: if it resolves to a file, it will fall through to
+        # the binary/extension/size checks; symlinks to directories are skipped
 
     if not file_path.is_file() or not file_path.resolve().is_relative_to(resolved_root):
         return None
