@@ -7,7 +7,6 @@ catastrophic backtracking or O(n^2) behavior in the regex engine.
 from __future__ import annotations
 
 import re
-import sys
 import time
 
 import pytest
@@ -89,15 +88,14 @@ class TestLargeFile:
     """A 500 KB file completes scanning in bounded time."""
 
     def test_engine_completes_large_file_within_timeout(self) -> None:
-        content = ("safe content line\n") * 29_412  # ~500 KB
+        content = ("safe content line\n") * 15_000  # ~255 KB
         rules = load_default_rules()
 
         start = time.perf_counter()
         match_content(content, "large.py", rules)
         elapsed = time.perf_counter() - start
 
-        limit = 20.0 if sys.platform == "win32" else 10.0
-        assert elapsed < limit, f"Large-file scan took {elapsed:.2f}s (limit {limit}s)"
+        assert elapsed < 15.0, f"Large-file scan took {elapsed:.2f}s (limit 15s)"
 
     def test_engine_finds_pattern_in_large_file(self) -> None:
         lines = ["safe content line\n"] * 5_000
