@@ -30,6 +30,28 @@ def calculate_verdict(findings: tuple[Finding, ...]) -> Verdict:
     return Verdict.PASS
 
 
+def coverage_aware_verdict(
+    findings: tuple[Finding, ...],
+    files_skipped: int,
+    degraded_reasons: tuple[str, ...],
+) -> Verdict:
+    """Calculate verdict with coverage-aware upgrade policy.
+
+    If the findings-based verdict is PASS but significant scan degradation
+    is detected, upgrade to FLAG to signal incomplete assurance.
+
+    Degradation is significant when:
+    - Any files were skipped (files_skipped > 0), OR
+    - Any degraded_reasons are present
+    """
+    base = calculate_verdict(findings)
+    if base != Verdict.PASS:
+        return base
+    if files_skipped > 0 or degraded_reasons:
+        return Verdict.FLAG
+    return Verdict.PASS
+
+
 def count_by_severity(findings: tuple[Finding, ...]) -> dict[str, int]:
     """Count findings grouped by severity value string.
 

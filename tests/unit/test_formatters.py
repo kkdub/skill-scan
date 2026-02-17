@@ -24,7 +24,7 @@ class TestFormatTextDefaultNoFindings:
         )
         output = format_text(result)
         assert "skill-scan report: my-skill" in output
-        assert "Scanned 3 files in 0.50s" in output
+        assert "Scanned 3 files (0 bytes) in 0.50s" in output
 
     def test_includes_no_issues_message(self) -> None:
         result = ScanResult(

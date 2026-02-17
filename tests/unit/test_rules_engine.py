@@ -10,7 +10,7 @@ import re
 import pytest
 
 from skill_scan.models import Finding, Rule, Severity
-from skill_scan.rules.engine import match_line
+from skill_scan.rules.engine import match_file, match_line
 
 
 def make_rule(
@@ -22,6 +22,7 @@ def make_rule(
     patterns: list[str] | None = None,
     exclude_patterns: list[str] | None = None,
     flags: re.RegexFlag = re.RegexFlag(0),  # noqa: B008
+    match_scope: str = "line",
 ) -> Rule:
     """Helper to build Rule objects for testing."""
     compiled_patterns = tuple(re.compile(p, flags) for p in (patterns or []))
@@ -35,6 +36,7 @@ def make_rule(
         recommendation=recommendation,
         patterns=compiled_patterns,
         exclude_patterns=compiled_exclude,
+        match_scope=match_scope,
     )
 
 
@@ -196,3 +198,51 @@ class TestMatchLine:
         findings = match_line("test line", 1, "test.py", [rule])
 
         assert findings[0].severity == expected
+
+
+class TestMatchFile:
+    """Tests for match_file function — applying file-scope rules against full content."""
+
+    def test_match_file_detects_pattern_and_maps_line_numbers(self) -> None:
+        rule = make_rule(patterns=["target"], match_scope="file")
+        content = "line one\nline two\nline target here\nline four"
+
+        findings = match_file(content, "test.py", [rule])
+
+        assert len(findings) == 1
+        assert findings[0].line == 3
+        assert findings[0].matched_text == "target"
+
+    def test_match_file_with_multiline_pattern(self) -> None:
+        rule = make_rule(patterns=[r"eval\(\s*\n\s*code"], match_scope="file")
+
+        findings = match_file("eval(\n    code)", "test.py", [rule])
+
+        assert len(findings) == 1
+        assert "eval" in findings[0].matched_text
+
+    def test_match_file_exclude_pattern_checked_against_match_line(self) -> None:
+        rule = make_rule(patterns=["danger"], exclude_patterns=["# safe"], match_scope="file")
+        content_excluded = "line one\ndanger here # safe\nline three"
+        content_not_excluded = "line one # safe\ndanger here\nline three"
+
+        assert match_file(content_excluded, "test.py", [rule]) == []
+        assert len(match_file(content_not_excluded, "test.py", [rule])) == 1
+
+    def test_match_file_truncates_matched_text(self) -> None:
+        long_pattern = "a" * 250
+        rule = make_rule(patterns=[long_pattern], match_scope="file")
+
+        findings = match_file(long_pattern, "test.py", [rule])
+
+        assert len(findings[0].matched_text) == 200
+
+    def test_match_file_multiple_matches_returns_all_findings(self) -> None:
+        rule = make_rule(patterns=["danger"], match_scope="file")
+        content = "danger on line 1\nline 2\ndanger on line 3"
+
+        findings = match_file(content, "test.py", [rule])
+
+        assert len(findings) == 2
+        assert findings[0].line == 1
+        assert findings[1].line == 3

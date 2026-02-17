@@ -124,48 +124,20 @@ class TestLoadRules:
 
         assert rules[0].severity == expected_enum
 
-    def test_load_rules_flag_ignorecase_applied_to_patterns(self, tmp_path: Path) -> None:
-        toml_path = write_toml(
-            tmp_path / "test.toml", make_simple_rule(patterns=["Test"], flags="IGNORECASE")
+    def test_load_rules_regex_flags_parsing(self, tmp_path: Path) -> None:
+        ignorecase = write_toml(tmp_path / "ic.toml", make_simple_rule(patterns=["Test"], flags="IGNORECASE"))
+        multiflags_pipe = write_toml(
+            tmp_path / "mp.toml", make_simple_rule(patterns=["^test"], flags="IGNORECASE|MULTILINE")
         )
-
-        rules = load_rules(toml_path)
-        pattern = rules[0].patterns[0]
-
-        assert pattern.search("test") is not None
-        assert pattern.search("TEST") is not None
-        assert pattern.search("TeSt") is not None
-
-    def test_load_rules_multiple_flags_pipe_separated(self, tmp_path: Path) -> None:
-        toml_path = write_toml(
-            tmp_path / "test.toml",
-            make_simple_rule(patterns=["^test"], flags="IGNORECASE|MULTILINE"),
+        multiflags_comma = write_toml(
+            tmp_path / "mc.toml", make_simple_rule(patterns=["TEST"], flags="IGNORECASE, DOTALL")
         )
+        no_flags = write_toml(tmp_path / "nf.toml", make_simple_rule(patterns=["Test"]))
 
-        rules = load_rules(toml_path)
-        pattern = rules[0].patterns[0]
-
-        assert pattern.search("TEST") is not None
-        assert pattern.search("line1\ntest") is not None
-
-    def test_load_rules_multiple_flags_comma_separated(self, tmp_path: Path) -> None:
-        toml_path = write_toml(
-            tmp_path / "test.toml",
-            make_simple_rule(patterns=["TEST"], flags="IGNORECASE, DOTALL"),
-        )
-
-        rules = load_rules(toml_path)
-
-        assert rules[0].patterns[0].search("test") is not None
-
-    def test_load_rules_no_flags_field_compiles_without_flags(self, tmp_path: Path) -> None:
-        toml_path = write_toml(tmp_path / "test.toml", make_simple_rule(patterns=["Test"]))
-
-        rules = load_rules(toml_path)
-        pattern = rules[0].patterns[0]
-
-        assert pattern.search("Test") is not None
-        assert pattern.search("test") is None
+        assert load_rules(ignorecase)[0].patterns[0].search("test") is not None
+        assert load_rules(multiflags_pipe)[0].patterns[0].search("line1\ntest") is not None
+        assert load_rules(multiflags_comma)[0].patterns[0].search("test") is not None
+        assert load_rules(no_flags)[0].patterns[0].search("test") is None
 
     def test_load_rules_unknown_flag_raises_value_error(self, tmp_path: Path) -> None:
         toml_path = write_toml(tmp_path / "test.toml", make_simple_rule(flags="INVALID_FLAG"))
@@ -234,6 +206,37 @@ class TestLoadRules:
     def test_load_rules_path_exclude_patterns_defaults_to_empty(self, tmp_path: Path) -> None:
         rules = load_rules(write_toml(tmp_path / "test.toml", make_simple_rule()))
         assert rules[0].path_exclude_patterns == ()
+
+    def test_load_rules_match_scope_parsing(self, tmp_path: Path) -> None:
+        default_rule = write_toml(tmp_path / "default.toml", make_simple_rule())
+        file_rule = write_toml(
+            tmp_path / "file.toml",
+            """
+            [rules.TEST-001]
+            severity = "info"
+            category = "test"
+            description = "Test"
+            recommendation = "Test"
+            patterns = ["pattern"]
+            match_scope = "file"
+            """,
+        )
+        invalid_rule = write_toml(
+            tmp_path / "invalid.toml",
+            """
+            [rules.TEST-001]
+            severity = "info"
+            category = "test"
+            description = "Test"
+            recommendation = "Test"
+            patterns = ["pattern"]
+            match_scope = "invalid"
+            """,
+        )
+        assert load_rules(default_rule)[0].match_scope == "line"
+        assert load_rules(file_rule)[0].match_scope == "file"
+        with pytest.raises(ValueError, match="Invalid match_scope"):
+            load_rules(invalid_rule)
 
 
 class TestLoadDefaultRules:
