@@ -2,14 +2,13 @@
 
 ## Overview
 
-Quality-first hardening roadmap to close confirmed scanner blind spots, achieve platform-equal detection assurance across macOS/Windows/Linux, and extend scanning to MCP artifacts via a separate in-repo module.
+Quality-first hardening roadmap to close confirmed scanner blind spots and achieve platform-equal detection assurance across macOS/Windows/Linux.
 
 ## Objectives
 
 - Eliminate high-confidence bypass classes before broadening detection surface.
 - Preserve deterministic behavior and bounded runtime as coverage grows.
 - Certify parity of detection assurance across Linux, Windows, and macOS.
-- Add MCP scanning in the same repo, with a clean module boundary for gateway consumers.
 
 ## Workstream P0: Architectural Security Fixes (Blockers)
 
@@ -105,42 +104,6 @@ Quality-first hardening roadmap to close confirmed scanner blind spots, achieve 
 - Add LF/CRLF/CR parity tests.
 - Fail CI on platform-induced detection drift beyond policy.
 
-## Workstream P4: MCP Scanner Extension (Same Repo, Separate Module)
-
-### 16) Add MCP scanner module boundary and API
-
-- Files: new module under `src/skill_scan/mcp`, exports in `src/skill_scan/__init__.py`
-- Provide standalone MCP scan entrypoint suitable for MCP gateway integration.
-- Keep shared package/release pipeline in this repo.
-
-### 17) Extend shared rule schema for artifact targeting
-
-- Files: `src/skill_scan/models.py`, `src/skill_scan/rules/loader.py`, `src/skill_scan/rules/data/*`
-- Add explicit targets (for example: `skill`, `mcp`, `both`).
-- Reuse overlapping logic without rule drift or duplicate code paths.
-
-### 18) Add MCP-specific rule families
-
-- Files: new MCP-focused TOMLs under `src/skill_scan/rules/data/`
-- Cover tool capability abuse, dangerous argument forms, transport/callback exfiltration, and MCP metadata prompt injection.
-
-### 19) Cross-artifact correlation and unified verdicting
-
-- Files: `src/skill_scan/scanner.py`, new correlation module under `src/skill_scan`, `src/skill_scan/verdict.py`
-- Add combined scan mode (skill + MCP artifacts) and correlation findings for attack chains that emerge only in combination.
-
-### 20) MCP consumer and gateway integration contract
-
-- Files: integration tests and docs in repo plan/docs locations
-- Define stable input/output/failure/versioning contract.
-- Add compatibility tests for external gateway consumers.
-
-### 21) MCP regression corpus and certification
-
-- Files: fixtures in `tests/*`, CI in `.github/workflows/ci.yml`
-- Add MCP positive/negative/evasion corpus and cross-OS parity checks.
-- Include MCP suites in full quality gate.
-
 ## Acceptance Criteria
 
 - Multi-line bypass classes are detected where rule intent exists.
@@ -151,21 +114,17 @@ Quality-first hardening roadmap to close confirmed scanner blind spots, achieve 
 - CI passes on Linux, Windows, and macOS.
 - Golden corpus parity checks pass under defined diff policy.
 - Encoding and line-ending parity tests pass.
-- MCP scanner module is importable and usable independently by gateway consumers.
-- Shared rules support explicit target scoping without duplicate logic drift.
-- MCP-specific and cross-artifact correlation tests pass with deterministic unified verdicting.
 - Full `make check` and full pre-commit pass before completion.
 
 ## Execution Flow
 
 ```mermaid
 flowchart TD
-    input[SkillAndMCPArtifacts] --> fs[FileSafetyChecks]
+    input[SkillArtifacts] --> fs[FileSafetyChecks]
     fs --> cov[CoverageAccounting]
     cov --> scan[LineAndFileScopeMatching]
     scan --> norm[NormalizationAndConfusables]
-    norm --> rules[SharedAndTargetedRulePacks]
-    rules --> corr[CrossArtifactCorrelation]
-    corr --> findings[FindingsAndEvidence]
+    norm --> rules[RulePacks]
+    rules --> findings[FindingsAndEvidence]
     findings --> verdict[DeterministicVerdict]
 ```
