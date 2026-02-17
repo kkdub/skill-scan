@@ -30,7 +30,7 @@ def match_line(
     checked for overlap with primary matches (in strict mode). In default
     mode, if any exclude pattern matches the line, that rule is skipped
     entirely. In strict mode, an exclude only suppresses a finding when
-    the exclude match does not overlap with the primary match region.
+    the exclude match does overlap with the primary match region.
 
     Args:
         line: The text line to scan.
@@ -154,8 +154,7 @@ def _should_suppress_strict(line: str, rule: Rule, primary_match: re.Match[str])
     """
     p_start, p_end = primary_match.span()
     for ep in rule.exclude_patterns:
-        em = ep.search(line)
-        if em:
+        for em in ep.finditer(line):
             e_start, e_end = em.span()
             if e_end > p_start and e_start < p_end:
                 return True

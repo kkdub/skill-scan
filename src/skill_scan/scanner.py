@@ -111,8 +111,8 @@ def _collect_files(skill_dir: Path, config: ScanConfig) -> tuple[list[Path], lis
         file_count += 1
         if finding:
             fs_findings.append(finding)
-            # Still collect for content scanning unless binary
-            if finding.rule_id != "FS-002":
+            # Still collect for content scanning unless binary or external symlink
+            if finding.rule_id not in ("FS-002", "FS-004"):
                 collected.append(file_path)
         else:
             collected.append(file_path)
@@ -231,7 +231,7 @@ def _scan_file(
         ], 0
 
     applicable_rules = [r for r in rules if not _is_path_excluded(relative_path, r)]
-    return match_content(content, relative_path, applicable_rules), len(content)
+    return match_content(content, relative_path, applicable_rules), len(content.encode("utf-8"))
 
 
 def _build_degraded_reasons(content_skipped: int, binary_skipped: int) -> tuple[str, ...]:
