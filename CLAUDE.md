@@ -25,9 +25,9 @@ make check    # All quality checks (run early, run often)
 
 ## Code
 
-- Follow `.agents/standards/CODE-PATTERNS.md` for design decisions
-- Follow `.agents/standards/TEST-PATTERNS.md` when writing or modifying tests
-- Rules enforced via `.agents/standards/code-rules.json`
+- Follow `.agent/standards/CODE-PATTERNS.md` for design decisions
+- Follow `.agent/standards/TEST-PATTERNS.md` when writing or modifying tests
+- Rules enforced via `.agent/standards/code-rules.json`
 - Type hints on all public functions
 - Tests in `tests/`
 - Core scanner engine uses stdlib only (`re`, `pathlib`, `json`, `tomllib`)
