@@ -38,9 +38,9 @@ def _gather_entry(
     internal symlinks to directories, stat failures).
     """
     rel = file_path.relative_to(skill_dir).as_posix()
+    resolved = file_path.resolve()
 
     if file_path.is_symlink():
-        resolved = file_path.resolve()
         if not resolved.is_relative_to(resolved_root):
             return FileEntry(
                 path=file_path,
@@ -52,7 +52,7 @@ def _gather_entry(
             )
         # Internal symlink: fall through to is_file check below
 
-    if not file_path.is_file() or not file_path.resolve().is_relative_to(resolved_root):
+    if not file_path.is_file() or not resolved.is_relative_to(resolved_root):
         return None
 
     try:
@@ -66,5 +66,5 @@ def _gather_entry(
         suffix=file_path.suffix,
         size=size,
         is_external_symlink=False,
-        resolved_path=file_path.resolve(),
+        resolved_path=resolved,
     )
