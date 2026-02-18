@@ -1,0 +1,37 @@
+# =============================================================================
+# skill-scan Rule Template
+# =============================================================================
+# Copy a [rules.YOUR-ID] section into:
+# - a new .toml file in src/skill_scan/rules/data/  (built-in rules)
+# - your --config file                               (project-specific rules)
+#
+# See RULES.md at the repo root for the full catalog of existing rules.
+#
+# Required fields: severity, category, description, recommendation, patterns
+# Optional fields: exclude_patterns, path_exclude_patterns, flags,
+# match_scope, exclude_mode, confidence
+# =============================================================================
+
+[rules.EXAMPLE-001]
+# Severity level for findings produced by this rule.
+# Valid values: "critical" | "high" | "medium" | "low" | "info"
+severity = "medium"
+# Category groups related rules in output and the catalog.
+# Existing categories: prompt-injection, malicious-code, data-exfiltration,
+# credential-exposure, supply-chain, tool-abuse
+# You may use a custom category name.
+category = "your-category"
+# Human-readable summary shown in each finding.
+description = "Short summary of what this rule detects"
+# Actionable guidance shown alongside each finding.
+recommendation = "What the user should do to resolve this"
+# One or more regex patterns (Python `re` syntax). Any match triggers a finding.
+# Use TOML single-quoted strings to avoid backslash escaping:
+# '\beval\s*\('  not  "\\beval\\s*\\("
+patterns = [
+  '(?i)\byour_pattern_here\b'
+]
+
+# Confidence: "stable" (default) or "beta".
+# Beta rules may produce more false positives.
+# confidence = "stable"

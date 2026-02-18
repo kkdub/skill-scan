@@ -29,6 +29,14 @@ def walk_skill_dir(skill_dir: Path) -> tuple[list[FileEntry], Path]:
     return entries, resolved_root
 
 
+def _safe_size(path: Path) -> int:
+    """Get file size, returning 0 on OS errors (TOCTOU-safe)."""
+    try:
+        return path.stat().st_size
+    except OSError:
+        return 0
+
+
 def _gather_entry(
     file_path: Path,
     skill_dir: Path,
@@ -49,16 +57,11 @@ def _gather_entry(
     if is_symlink:
         if not resolved.is_file():
             return None
-        # Return symlink metadata; classifier will determine if external
-        try:
-            size = file_path.stat().st_size
-        except OSError:
-            size = 0
         return FileEntry(
             path=file_path,
             relative_path=rel,
             suffix=file_path.suffix,
-            size=size,
+            size=_safe_size(file_path),
             is_symlink=True,
             resolved_path=resolved,
         )
@@ -67,18 +70,11 @@ def _gather_entry(
     if not file_path.is_file() or not resolved.is_relative_to(resolved_root):
         return None
 
-    try:
-        size = file_path.stat().st_size
-    except OSError:
-        # Include the entry with size=0 rather than skipping it —
-        # prevents TOCTOU races from hiding files from the scanner.
-        size = 0
-
     return FileEntry(
         path=file_path,
         relative_path=rel,
         suffix=file_path.suffix,
-        size=size,
+        size=_safe_size(file_path),
         is_symlink=False,
         resolved_path=resolved,
     )

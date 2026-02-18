@@ -1,0 +1,161 @@
+#!/usr/bin/env python3
+"""Generate RULES.md catalog from built-in and procedural rules.
+
+Usage:
+    uv run python scripts/generate_rules_catalog.py > RULES.md
+    # or: make rules-catalog
+"""
+
+from __future__ import annotations
+
+import sys
+from collections import defaultdict
+from dataclasses import dataclass
+from pathlib import Path
+
+# Add repo root to sys.path for imports when running as script
+sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+
+from skill_scan.rules.loader import load_default_rules
+
+
+@dataclass(slots=True, frozen=True)
+class RuleInfo:
+    """Minimal rule metadata for catalog rendering."""
+
+    rule_id: str
+    severity: str
+    category: str
+    description: str
+    confidence: str
+    source: str  # "pattern" or "procedural"
+
+
+# FS-001..008 and SV-001: procedural rules defined in Python code.
+# These change very rarely. Update here if file_checks.py, content_scanner.py,
+# or scanner.py rule metadata changes.
+_PROCEDURAL_RULES: list[RuleInfo] = [
+    RuleInfo(
+        "FS-001", "medium", "file-safety", "File is not valid UTF-8 and was skipped", "stable", "procedural"
+    ),
+    RuleInfo(
+        "FS-002", "high", "file-safety", "Binary file detected in skill directory", "stable", "procedural"
+    ),
+    RuleInfo(
+        "FS-003",
+        "medium",
+        "file-safety",
+        "Unknown file extension not in allowed list",
+        "stable",
+        "procedural",
+    ),
+    RuleInfo(
+        "FS-004", "high", "file-safety", "Symlink points outside the skill directory", "stable", "procedural"
+    ),
+    RuleInfo("FS-005", "medium", "file-safety", "File exceeds configured size limit", "stable", "procedural"),
+    RuleInfo(
+        "FS-006", "medium", "file-safety", "Total skill size exceeds configured limit", "stable", "procedural"
+    ),
+    RuleInfo(
+        "FS-007", "medium", "file-safety", "File count exceeds configured limit", "stable", "procedural"
+    ),
+    RuleInfo("FS-008", "medium", "file-safety", "File could not be read (OS error)", "stable", "procedural"),
+    RuleInfo(
+        "SV-001",
+        "medium",
+        "schema-validation",
+        "SKILL.md frontmatter validation failed",
+        "stable",
+        "procedural",
+    ),
+]
+
+_CATEGORY_ORDER = [
+    "prompt-injection",
+    "malicious-code",
+    "data-exfiltration",
+    "credential-exposure",
+    "supply-chain",
+    "tool-abuse",
+    "file-safety",
+    "schema-validation",
+]
+
+_CATEGORY_TITLES = {
+    "prompt-injection": "Prompt Injection",
+    "malicious-code": "Malicious Code",
+    "data-exfiltration": "Data Exfiltration",
+    "credential-exposure": "Credential Exposure",
+    "supply-chain": "Supply Chain",
+    "tool-abuse": "Tool Abuse",
+    "file-safety": "File Safety",
+    "schema-validation": "Schema Validation",
+}
+
+
+def collect_rules() -> dict[str, list[RuleInfo]]:
+    """Load all rules and group by category."""
+    groups: dict[str, list[RuleInfo]] = defaultdict(list)
+
+    for rule in load_default_rules():
+        groups[rule.category].append(
+            RuleInfo(
+                rule.rule_id, rule.severity.value, rule.category, rule.description, rule.confidence, "pattern"
+            )
+        )
+
+    for procedural in _PROCEDURAL_RULES:
+        groups[procedural.category].append(procedural)
+
+    for rules_list in groups.values():
+        rules_list.sort(key=lambda r: r.rule_id)
+
+    return groups
+
+
+def generate_catalog() -> str:
+    """Generate the full RULES.md content."""
+    groups = collect_rules()
+    total = sum(len(v) for v in groups.values())
+    lines: list[str] = []
+
+    # Header
+    lines.append("# Rules Catalog")
+    lines.append("")
+    lines.append("All detection rules built into skill-scan.")
+    lines.append("Pattern-based rules are defined in TOML files under `src/skill_scan/rules/data/`.")
+    lines.append("Procedural rules are implemented directly in Python modules.")
+    lines.append("")
+    lines.append(
+        "To add a custom rule, copy a section from "
+        "[template.toml](src/skill_scan/rules/template.toml) "
+        "into a new `.toml` file or your `--config` file."
+    )
+    lines.append("")
+    lines.append(f"**{total} rules** across {len(groups)} categories.")
+    lines.append("")
+
+    # Category sections
+    for category in _CATEGORY_ORDER:
+        if category not in groups:
+            continue
+        title = _CATEGORY_TITLES.get(category, category.replace("-", " ").title())
+        lines.append(f"## {title}")
+        lines.append("")
+        lines.append("| Rule ID | Severity | Description | Confidence |")
+        lines.append("|---------|----------|-------------|------------|")
+        for r in groups[category]:
+            lines.append(f"| {r.rule_id} | {r.severity} | {r.description} | {r.confidence} |")
+        lines.append("")
+
+    # Footer
+    lines.append("---")
+    lines.append("")
+    lines.append("*Generated by `scripts/generate_rules_catalog.py`. Do not edit manually.*")
+    lines.append("")
+
+    return "\n".join(lines)
+
+
+if __name__ == "__main__":
+    sys.stdout.write(generate_catalog())

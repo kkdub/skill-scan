@@ -1,4 +1,4 @@
-.PHONY: install sync run test lint format type-check quality check ci
+.PHONY: install sync run test lint format type-check quality check ci rules-catalog
 
 UV ?= uv
 PYTHON ?= $(UV) run python
@@ -44,5 +44,8 @@ quality: lint type-check test
 
 check:
 	$(UV) run pre-commit run --all-files
+
+rules-catalog:
+	PYTHONIOENCODING=utf-8 $(PYTHON) scripts/generate_rules_catalog.py > RULES.md
 
 ci: check

@@ -140,7 +140,7 @@ repos:
           - --skip
           - "*.lock,*.json,src/skill_scan/rules/data/*.toml"
           - --ignore-words-list
-          - "ignora,ist,als,alle,deine"
+          - "ignora,ist,als,alle,deine,covert"
 
   - repo: https://github.com/abravalheri/validate-pyproject
     rev: v0.23
