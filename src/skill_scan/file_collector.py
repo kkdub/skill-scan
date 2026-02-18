@@ -37,8 +37,8 @@ def _gather_entry(
     """Gather filesystem metadata for a single directory entry.
 
     Returns None for entries that are not relevant (directories,
-    symlinks to directories, stat failures). For symlinks to files,
-    reports is_symlink=True and the resolved target path; the classifier
+    symlinks to directories). For symlinks to files, reports
+    is_symlink=True and the resolved target path; the classifier
     determines if the symlink is internal or external.
     """
     rel = file_path.relative_to(skill_dir).as_posix()
@@ -70,6 +70,8 @@ def _gather_entry(
     try:
         size = file_path.stat().st_size
     except OSError:
+        # Include the entry with size=0 rather than skipping it —
+        # prevents TOCTOU races from hiding files from the scanner.
         size = 0
 
     return FileEntry(

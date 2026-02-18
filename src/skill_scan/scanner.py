@@ -44,7 +44,9 @@ def scan(
     entries, resolved_root = walk_skill_dir(skill_dir)
     files, fs_findings = classify_entries(entries, resolved_root, cfg)
     rules = _prepare_rules(cfg)
-    findings, bytes_scanned, content_skipped = scan_all_files(files, skill_dir, rules)
+    findings, bytes_scanned, content_skipped = scan_all_files(
+        files, skill_dir, rules, max_file_size=cfg.max_file_size
+    )
 
     binary_skipped = sum(1 for f in fs_findings if f.rule_id == _RULE_BINARY)
     all_findings = tuple(schema_findings + fs_findings + findings)
