@@ -48,11 +48,8 @@ def check_unknown_extension(file_path: str, suffix: str, allowed: frozenset[str]
 
 def check_symlink_outside(file_path: str, link_target: Path, skill_root: Path) -> Finding | None:
     """FS-004: Flag symlinks that point outside the skill directory."""
-    try:
-        if link_target.is_relative_to(skill_root):
-            return None
-    except ValueError:
-        pass
+    if link_target.is_relative_to(skill_root):
+        return None
     return Finding(
         rule_id="FS-004",
         severity=Severity.HIGH,

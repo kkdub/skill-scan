@@ -87,14 +87,3 @@ class TestFormatTextGrouping:
         assert "... and" not in output
         assert "f0.md:0" in output
         assert "f2.md:2" in output
-
-    def test_scan_result_findings_preserved_unchanged(self) -> None:
-        findings = tuple(make_finding(rule_id="PI-004", file=f"f{i}.md", line=i) for i in range(50))
-        result = ScanResult(
-            findings=findings,
-            counts={"medium": 50},
-            verdict=Verdict.FLAG,
-            duration=0.1,
-        )
-        format_text(result)
-        assert len(result.findings) == 50

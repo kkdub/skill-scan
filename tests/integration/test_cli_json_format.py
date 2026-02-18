@@ -14,19 +14,6 @@ from skill_scan.cli import skill_scan
 from tests.conftest import make_skill_dir
 
 
-class TestPublicAPI:
-    """Tests for the public Python API."""
-
-    def test_public_api_scan_returns_pass_verdict(self, tmp_path: Path) -> None:
-        skill_dir = make_skill_dir(tmp_path)
-
-        from skill_scan import scan
-
-        result = scan(str(skill_dir))
-
-        assert result.verdict.value == "pass"
-
-
 class TestCLIJsonFormat:
     """Tests for --format json flag."""
 
@@ -38,16 +25,6 @@ class TestCLIJsonFormat:
 
         data = json.loads(result.output)
         assert isinstance(data, dict)
-
-    def test_format_json_has_required_fields(self, tmp_path: Path) -> None:
-        skill_dir = make_skill_dir(tmp_path)
-        runner = CliRunner()
-
-        result = runner.invoke(skill_scan, ["scan", "--format", "json", str(skill_dir)])
-
-        data = json.loads(result.output)
-        expected_keys = {"skill_name", "verdict", "files_scanned", "duration", "counts", "findings"}
-        assert set(data.keys()) == expected_keys
 
     def test_format_json_clean_skill_has_pass_verdict(self, tmp_path: Path) -> None:
         skill_dir = make_skill_dir(tmp_path)

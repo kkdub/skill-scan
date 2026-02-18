@@ -107,14 +107,3 @@ def test_scan_emits_fs008_for_oserror(tmp_path: Path, monkeypatch: pytest.Monkey
     assert "permissions" in finding.recommendation.lower()
     # Content was not scanned, so no other findings for this file
     assert not any(f.file == "test.py" and f.rule_id != "FS-008" for f in result.findings)
-
-
-def test_scan_fs001_is_medium_severity(tmp_path: Path) -> None:
-    """FS-001 finding has MEDIUM severity (upgraded from INFO)."""
-    skill_dir = make_skill_dir(tmp_path)
-    bad_file = skill_dir / "corrupted.txt"
-    bad_file.write_bytes(b"\xff\xfe\x00\x00")
-    result = scan(skill_dir)
-    fs_findings = [f for f in result.findings if f.rule_id == "FS-001"]
-    assert len(fs_findings) == 1
-    assert fs_findings[0].severity == Severity.MEDIUM

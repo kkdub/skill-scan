@@ -6,9 +6,9 @@ from pathlib import Path
 
 import pytest
 
-from skill_scan.models import Finding, Rule, Severity
-from skill_scan.rules.engine import match_line
+from skill_scan.models import Rule, Severity
 from skill_scan.rules.loader import load_rules
+from tests.unit.rule_helpers import match_rule, rule_findings
 
 RULES_PATH = Path(__file__).resolve().parents[2] / "src" / "skill_scan" / "rules" / "data" / "tool_abuse.toml"
 
@@ -17,15 +17,6 @@ RULES_PATH = Path(__file__).resolve().parents[2] / "src" / "skill_scan" / "rules
 def rules() -> list[Rule]:
     """Load tool abuse rules once for the module."""
     return load_rules(RULES_PATH)
-
-
-def _match(line: str, rules: list[Rule], rule_id: str) -> bool:
-    findings = match_line(line, 1, "test.md", rules)
-    return any(f.rule_id == rule_id for f in findings)
-
-
-def _findings(line: str, rules: list[Rule], rule_id: str) -> list[Finding]:
-    return [f for f in match_line(line, 1, "test.md", rules) if f.rule_id == rule_id]
 
 
 class TestTool001DestructiveOperations:
@@ -48,8 +39,8 @@ class TestTool001DestructiveOperations:
         ],
     )
     def test_detects_destructive_ops(self, rules: list[Rule], line: str) -> None:
-        findings = _findings(line, rules, "TOOL-001")
-        assert len(findings) >= 1
+        findings = rule_findings(line, rules, "TOOL-001")
+        assert len(findings) == 1
         assert findings[0].severity == Severity.HIGH
         assert findings[0].category == "tool-abuse"
 
@@ -66,7 +57,7 @@ class TestTool001DestructiveOperations:
         ],
     )
     def test_allows_safe_content(self, rules: list[Rule], line: str) -> None:
-        assert not _match(line, rules, "TOOL-001")
+        assert not match_rule(line, rules, "TOOL-001")
 
 
 class TestTool002PrivilegeEscalation:
@@ -85,8 +76,8 @@ class TestTool002PrivilegeEscalation:
         ],
     )
     def test_detects_privilege_escalation(self, rules: list[Rule], line: str) -> None:
-        findings = _findings(line, rules, "TOOL-002")
-        assert len(findings) >= 1
+        findings = rule_findings(line, rules, "TOOL-002")
+        assert len(findings) == 1
         assert findings[0].severity == Severity.HIGH
         assert findings[0].category == "tool-abuse"
 
@@ -104,7 +95,7 @@ class TestTool002PrivilegeEscalation:
         ],
     )
     def test_allows_safe_content(self, rules: list[Rule], line: str) -> None:
-        assert not _match(line, rules, "TOOL-002")
+        assert not match_rule(line, rules, "TOOL-002")
 
 
 class TestTool003ToolChainingAbuse:
@@ -123,8 +114,8 @@ class TestTool003ToolChainingAbuse:
         ],
     )
     def test_detects_chaining_abuse(self, rules: list[Rule], line: str) -> None:
-        findings = _findings(line, rules, "TOOL-003")
-        assert len(findings) >= 1
+        findings = rule_findings(line, rules, "TOOL-003")
+        assert len(findings) == 1
         assert findings[0].severity == Severity.MEDIUM
         assert findings[0].category == "tool-abuse"
 
@@ -140,4 +131,4 @@ class TestTool003ToolChainingAbuse:
         ],
     )
     def test_allows_safe_content(self, rules: list[Rule], line: str) -> None:
-        assert not _match(line, rules, "TOOL-003")
+        assert not match_rule(line, rules, "TOOL-003")

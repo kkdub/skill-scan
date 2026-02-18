@@ -179,3 +179,16 @@ class TestCLIValidateCommand:
 
         assert result.exit_code == 1
         assert "Validation failed" in result.output
+
+
+class TestPublicAPI:
+    """Tests for the public Python API."""
+
+    def test_public_api_scan_returns_pass_verdict(self, tmp_path: Path) -> None:
+        skill_dir = make_skill_dir(tmp_path)
+
+        from skill_scan import scan
+
+        result = scan(str(skill_dir))
+
+        assert result.verdict.value == "pass"

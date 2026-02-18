@@ -12,6 +12,7 @@ from skill_scan.models import Finding, Rule, Severity
 from skill_scan.rules import match_content
 
 _RULE_ENCODING_ERROR = "FS-001"
+_RULE_FILE_SIZE = "FS-005"
 _RULE_READ_ERROR = "FS-008"
 _CATEGORY_FILE_SAFETY = "file-safety"
 
@@ -20,13 +21,15 @@ def scan_all_files(
     files: list[Path],
     skill_dir: Path,
     rules: list[Rule],
+    *,
+    max_file_size: int = 0,
 ) -> tuple[list[Finding], int, int]:
     """Scan all collected files. Returns (findings, bytes_scanned, files_skipped)."""
     all_findings: list[Finding] = []
     bytes_scanned = 0
     files_skipped = 0
     for file_path in files:
-        findings, nbytes = _scan_file(file_path, skill_dir, rules)
+        findings, nbytes = _scan_file(file_path, skill_dir, rules, max_file_size)
         all_findings.extend(findings)
         bytes_scanned += nbytes
         if nbytes == 0 and findings:
@@ -38,11 +41,12 @@ def _scan_file(
     file_path: Path,
     skill_dir: Path,
     rules: list[Rule],
+    max_file_size: int,
 ) -> tuple[list[Finding], int]:
-    """Scan a single file against all rules (line-scope and file-scope).
+    """Read a file and delegate to pure decision functions.
 
     Returns (findings, bytes_scanned). bytes_scanned is 0 when the file
-    could not be read (UnicodeDecodeError, OSError).
+    could not be read (UnicodeDecodeError, OSError) or exceeds the size limit.
     """
     relative_path = file_path.relative_to(skill_dir).as_posix()
 
@@ -50,33 +54,66 @@ def _scan_file(
         content = file_path.read_text(encoding="utf-8")
     except UnicodeDecodeError:
         return [
-            Finding(
-                rule_id=_RULE_ENCODING_ERROR,
-                severity=Severity.MEDIUM,
-                category=_CATEGORY_FILE_SAFETY,
-                file=relative_path,
-                line=None,
-                matched_text="",
-                description="File is not valid UTF-8 and was skipped.",
-                recommendation="Verify file encoding or exclude from scan.",
-            ),
+            _read_error_finding(
+                _RULE_ENCODING_ERROR,
+                relative_path,
+                "File is not valid UTF-8 and was skipped.",
+                "Verify file encoding or exclude from scan.",
+            )
         ], 0
     except OSError as exc:
         return [
-            Finding(
-                rule_id=_RULE_READ_ERROR,
-                severity=Severity.MEDIUM,
-                category=_CATEGORY_FILE_SAFETY,
-                file=relative_path,
-                line=None,
-                matched_text="",
-                description=f"File could not be read: {type(exc).__name__}",
-                recommendation="Check file permissions and accessibility.",
-            ),
+            _read_error_finding(
+                _RULE_READ_ERROR,
+                relative_path,
+                f"File could not be read: {type(exc).__name__}",
+                "Check file permissions and accessibility.",
+            )
         ], 0
 
-    applicable_rules = [r for r in rules if not _is_path_excluded(relative_path, r)]
-    return match_content(content, relative_path, applicable_rules), len(content.encode("utf-8"))
+    nbytes = len(content.encode("utf-8"))
+    # Defense-in-depth: if stat() failed earlier the classifier could not
+    # enforce FS-005.  Re-check the actual size after reading.
+    if max_file_size and nbytes > max_file_size:
+        return [
+            _read_error_finding(
+                _RULE_FILE_SIZE,
+                relative_path,
+                f"File exceeds size limit ({nbytes:,} > {max_file_size:,} bytes).",
+                "Reduce file size or adjust max_file_size in config.",
+            )
+        ], 0
+
+    return _apply_rules(content, relative_path, rules), nbytes
+
+
+def _apply_rules(
+    content: str,
+    relative_path: str,
+    rules: list[Rule],
+) -> list[Finding]:
+    """Filter rules by path exclusions, then match content. Pure — no I/O."""
+    applicable = [r for r in rules if not _is_path_excluded(relative_path, r)]
+    return match_content(content, relative_path, applicable)
+
+
+def _read_error_finding(
+    rule_id: str,
+    relative_path: str,
+    description: str,
+    recommendation: str,
+) -> Finding:
+    """Build a Finding for a file-read failure. Pure — no I/O."""
+    return Finding(
+        rule_id=rule_id,
+        severity=Severity.MEDIUM,
+        category=_CATEGORY_FILE_SAFETY,
+        file=relative_path,
+        line=None,
+        matched_text="",
+        description=description,
+        recommendation=recommendation,
+    )
 
 
 def _is_path_excluded(file_path: str, rule: Rule) -> bool:

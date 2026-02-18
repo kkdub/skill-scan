@@ -6,9 +6,9 @@ from pathlib import Path
 
 import pytest
 
-from skill_scan.models import Finding, Rule, Severity
-from skill_scan.rules.engine import match_line
+from skill_scan.models import Rule, Severity
 from skill_scan.rules.loader import load_rules
+from tests.unit.rule_helpers import match_rule, rule_findings
 
 RULES_PATH = (
     Path(__file__).resolve().parents[2] / "src" / "skill_scan" / "rules" / "data" / "prompt_injection.toml"
@@ -19,15 +19,6 @@ RULES_PATH = (
 def rules() -> list[Rule]:
     """Load prompt injection rules once for the module."""
     return load_rules(RULES_PATH)
-
-
-def _match(line: str, rules: list[Rule], rule_id: str) -> bool:
-    findings = match_line(line, 1, "test.md", rules)
-    return any(f.rule_id == rule_id for f in findings)
-
-
-def _findings(line: str, rules: list[Rule], rule_id: str) -> list[Finding]:
-    return [f for f in match_line(line, 1, "test.md", rules) if f.rule_id == rule_id]
 
 
 # -- PI-008: Short base64 decode patterns ------------------------------------
@@ -48,8 +39,8 @@ class TestPI008Base64Decode:
         ],
     )
     def test_detects_base64_decode(self, rules: list[Rule], line: str) -> None:
-        findings = _findings(line, rules, "PI-008")
-        assert len(findings) >= 1
+        findings = rule_findings(line, rules, "PI-008")
+        assert len(findings) == 1
         assert findings[0].severity == Severity.MEDIUM
 
     @pytest.mark.parametrize(
@@ -64,7 +55,7 @@ class TestPI008Base64Decode:
         ],
     )
     def test_allows_safe_base64(self, rules: list[Rule], line: str) -> None:
-        assert not _match(line, rules, "PI-008")
+        assert not match_rule(line, rules, "PI-008")
 
 
 # -- PI-009: Greek homoglyph detection --------------------------------------
@@ -84,7 +75,7 @@ class TestPI009GreekHomoglyphs:
         ],
     )
     def test_detects_greek_homoglyphs(self, rules: list[Rule], line: str) -> None:
-        findings = _findings(line, rules, "PI-009")
+        findings = rule_findings(line, rules, "PI-009")
         assert len(findings) >= 1
         assert findings[0].severity == Severity.MEDIUM
 
@@ -97,4 +88,4 @@ class TestPI009GreekHomoglyphs:
         ],
     )
     def test_allows_pure_latin_text(self, rules: list[Rule], line: str) -> None:
-        assert not _match(line, rules, "PI-009")
+        assert not match_rule(line, rules, "PI-009")

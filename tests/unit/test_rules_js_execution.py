@@ -6,9 +6,9 @@ from pathlib import Path
 
 import pytest
 
-from skill_scan.models import Finding, Rule, Severity
-from skill_scan.rules.engine import match_line
+from skill_scan.models import Rule, Severity
 from skill_scan.rules.loader import load_rules
+from tests.unit.rule_helpers import match_rule, rule_findings
 
 RULES_PATH = (
     Path(__file__).resolve().parents[2]
@@ -24,15 +24,6 @@ RULES_PATH = (
 def rules() -> list[Rule]:
     """Load JavaScript execution rules once for the module."""
     return load_rules(RULES_PATH)
-
-
-def _match(line: str, rules: list[Rule], rule_id: str) -> bool:
-    findings = match_line(line, 1, "test.md", rules)
-    return any(f.rule_id == rule_id for f in findings)
-
-
-def _findings(line: str, rules: list[Rule], rule_id: str) -> list[Finding]:
-    return [f for f in match_line(line, 1, "test.md", rules) if f.rule_id == rule_id]
 
 
 class TestJsexec001NodeCodeExecution:
@@ -53,8 +44,8 @@ class TestJsexec001NodeCodeExecution:
         ],
     )
     def test_detects_node_code_execution(self, rules: list[Rule], line: str) -> None:
-        findings = _findings(line, rules, "JSEXEC-001")
-        assert len(findings) >= 1
+        findings = rule_findings(line, rules, "JSEXEC-001")
+        assert len(findings) == 1
         assert findings[0].severity == Severity.CRITICAL
         assert findings[0].category == "malicious-code"
 
@@ -71,7 +62,7 @@ class TestJsexec001NodeCodeExecution:
         ],
     )
     def test_allows_safe_content(self, rules: list[Rule], line: str) -> None:
-        assert not _match(line, rules, "JSEXEC-001")
+        assert not match_rule(line, rules, "JSEXEC-001")
 
 
 class TestJsexec002EvalDynamicExecution:
@@ -91,8 +82,8 @@ class TestJsexec002EvalDynamicExecution:
         ],
     )
     def test_detects_eval_and_dynamic_exec(self, rules: list[Rule], line: str) -> None:
-        findings = _findings(line, rules, "JSEXEC-002")
-        assert len(findings) >= 1
+        findings = rule_findings(line, rules, "JSEXEC-002")
+        assert len(findings) == 1
         assert findings[0].severity == Severity.CRITICAL
         assert findings[0].category == "malicious-code"
 
@@ -109,7 +100,7 @@ class TestJsexec002EvalDynamicExecution:
         ],
     )
     def test_allows_safe_content(self, rules: list[Rule], line: str) -> None:
-        assert not _match(line, rules, "JSEXEC-002")
+        assert not match_rule(line, rules, "JSEXEC-002")
 
 
 class TestJsexec003ScriptInjection:
@@ -130,8 +121,8 @@ class TestJsexec003ScriptInjection:
         ],
     )
     def test_detects_script_injection(self, rules: list[Rule], line: str) -> None:
-        findings = _findings(line, rules, "JSEXEC-003")
-        assert len(findings) >= 1
+        findings = rule_findings(line, rules, "JSEXEC-003")
+        assert len(findings) == 1
         assert findings[0].severity == Severity.HIGH
         assert findings[0].category == "malicious-code"
 
@@ -147,4 +138,4 @@ class TestJsexec003ScriptInjection:
         ],
     )
     def test_allows_safe_content(self, rules: list[Rule], line: str) -> None:
-        assert not _match(line, rules, "JSEXEC-003")
+        assert not match_rule(line, rules, "JSEXEC-003")

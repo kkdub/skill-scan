@@ -6,13 +6,10 @@ authentication for the GitHub Contents API.
 
 from __future__ import annotations
 
-import logging
 import os
 from pathlib import Path
-from typing import Any
+from typing import Any  # httpx is conditionally imported
 from urllib.parse import urlparse
-
-logger = logging.getLogger(__name__)
 
 _ALLOWED_DOWNLOAD_HOSTS = frozenset({"raw.githubusercontent.com", "objects.githubusercontent.com"})
 _MAX_DOWNLOAD_SIZE = 10 * 1024 * 1024  # 10 MB

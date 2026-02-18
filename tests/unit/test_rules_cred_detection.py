@@ -7,8 +7,8 @@ from pathlib import Path
 import pytest
 
 from skill_scan.models import Rule
-from skill_scan.rules.engine import match_line
 from skill_scan.rules.loader import load_rules
+from tests.unit.rule_helpers import match_rule
 
 RULES_PATH = (
     Path(__file__).resolve().parents[2] / "src" / "skill_scan" / "rules" / "data" / "credential_exposure.toml"
@@ -18,11 +18,6 @@ RULES_PATH = (
 @pytest.fixture(scope="module")
 def rules() -> list[Rule]:
     return load_rules(RULES_PATH)
-
-
-def _match(line: str, rules: list[Rule], rule_id: str) -> bool:
-    findings = match_line(line, 1, "test.md", rules)
-    return any(f.rule_id == rule_id for f in findings)
 
 
 class TestCRED001HardcodedSecrets:
@@ -44,7 +39,7 @@ class TestCRED001HardcodedSecrets:
         ],
     )
     def test_detects_hardcoded_secrets(self, rules: list[Rule], malicious_input: str) -> None:
-        assert _match(malicious_input, rules, "CRED-001")
+        assert match_rule(malicious_input, rules, "CRED-001")
 
     @pytest.mark.parametrize(
         "safe_input",
@@ -63,7 +58,7 @@ class TestCRED001HardcodedSecrets:
         ],
     )
     def test_excludes_placeholders(self, rules: list[Rule], safe_input: str) -> None:
-        assert not _match(safe_input, rules, "CRED-001")
+        assert not match_rule(safe_input, rules, "CRED-001")
 
 
 class TestCRED002CredentialsInLLMContext:
@@ -81,7 +76,7 @@ class TestCRED002CredentialsInLLMContext:
         ],
     )
     def test_detects_credential_sharing_instructions(self, rules: list[Rule], malicious_input: str) -> None:
-        assert _match(malicious_input, rules, "CRED-002")
+        assert match_rule(malicious_input, rules, "CRED-002")
 
     @pytest.mark.parametrize(
         "safe_input",
@@ -95,7 +90,7 @@ class TestCRED002CredentialsInLLMContext:
         ],
     )
     def test_excludes_security_warnings(self, rules: list[Rule], safe_input: str) -> None:
-        assert not _match(safe_input, rules, "CRED-002")
+        assert not match_rule(safe_input, rules, "CRED-002")
 
 
 class TestCRED003PlaintextPasswords:
@@ -112,7 +107,7 @@ class TestCRED003PlaintextPasswords:
         ],
     )
     def test_detects_plaintext_passwords(self, rules: list[Rule], malicious_input: str) -> None:
-        assert _match(malicious_input, rules, "CRED-003")
+        assert match_rule(malicious_input, rules, "CRED-003")
 
     @pytest.mark.parametrize(
         "safe_input",
@@ -131,4 +126,4 @@ class TestCRED003PlaintextPasswords:
         ],
     )
     def test_excludes_placeholders_and_env_vars(self, rules: list[Rule], safe_input: str) -> None:
-        assert not _match(safe_input, rules, "CRED-003")
+        assert not match_rule(safe_input, rules, "CRED-003")

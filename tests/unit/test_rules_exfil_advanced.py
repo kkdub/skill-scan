@@ -7,8 +7,8 @@ from pathlib import Path
 import pytest
 
 from skill_scan.models import Rule
-from skill_scan.rules.engine import match_line
 from skill_scan.rules.loader import load_rules
+from tests.unit.rule_helpers import match_rule
 
 RULES_PATH = (
     Path(__file__).resolve().parents[2] / "src" / "skill_scan" / "rules" / "data" / "data_exfiltration.toml"
@@ -19,11 +19,6 @@ RULES_PATH = (
 def rules() -> list[Rule]:
     """Load exfiltration rules once for the entire module."""
     return load_rules(RULES_PATH)
-
-
-def _match(line: str, rules: list[Rule], rule_id: str) -> bool:
-    findings = match_line(line, 1, "test.md", rules)
-    return any(f.rule_id == rule_id for f in findings)
 
 
 # -- EXFIL-005: Python HTTP client exfiltration ----------------------------
@@ -47,7 +42,7 @@ class TestExfil005:
         ],
     )
     def test_detects_http_exfil(self, rules: list[Rule], line: str) -> None:
-        assert _match(line, rules, "EXFIL-005")
+        assert match_rule(line, rules, "EXFIL-005")
 
     @pytest.mark.parametrize(
         "line",
@@ -58,12 +53,12 @@ class TestExfil005:
         ],
     )
     def test_allows_safe_http(self, rules: list[Rule], line: str) -> None:
-        assert not _match(line, rules, "EXFIL-005")
+        assert not match_rule(line, rules, "EXFIL-005")
 
     def test_get_not_flagged_as_post(self, rules: list[Rule]) -> None:
         """Ensure requests.get does not false-positive as requests.post."""
         line = "resp = requests.get('https://example.com')"
-        assert not _match(line, rules, "EXFIL-005")
+        assert not match_rule(line, rules, "EXFIL-005")
 
 
 # -- EXFIL-006: Raw socket and DNS exfiltration ----------------------------
@@ -88,7 +83,7 @@ class TestExfil006:
         ],
     )
     def test_detects_socket_dns_exfil(self, rules: list[Rule], line: str) -> None:
-        assert _match(line, rules, "EXFIL-006")
+        assert match_rule(line, rules, "EXFIL-006")
 
     @pytest.mark.parametrize(
         "line",
@@ -101,7 +96,7 @@ class TestExfil006:
         ],
     )
     def test_allows_safe_socket(self, rules: list[Rule], line: str) -> None:
-        assert not _match(line, rules, "EXFIL-006")
+        assert not match_rule(line, rules, "EXFIL-006")
 
 
 # -- EXFIL-007: Mail and messaging exfiltration ----------------------------
@@ -122,7 +117,7 @@ class TestExfil007:
         ],
     )
     def test_detects_mail_ws_exfil(self, rules: list[Rule], line: str) -> None:
-        assert _match(line, rules, "EXFIL-007")
+        assert match_rule(line, rules, "EXFIL-007")
 
     @pytest.mark.parametrize(
         "line",
@@ -133,4 +128,4 @@ class TestExfil007:
         ],
     )
     def test_allows_safe_mail(self, rules: list[Rule], line: str) -> None:
-        assert not _match(line, rules, "EXFIL-007")
+        assert not match_rule(line, rules, "EXFIL-007")

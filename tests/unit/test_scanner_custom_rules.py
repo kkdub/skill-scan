@@ -40,8 +40,9 @@ def test_scan_custom_rule_matches_content(tmp_path: Path) -> None:
     result = scan(skill_dir, config=cfg)
 
     custom_findings = [f for f in result.findings if f.rule_id == "CUSTOM-001"]
-    assert len(custom_findings) >= 1
+    assert len(custom_findings) == 1
     assert custom_findings[0].category == "custom"
+    assert custom_findings[0].file == "readme.md"
 
 
 def test_scan_custom_rule_merged_with_defaults(tmp_path: Path) -> None:

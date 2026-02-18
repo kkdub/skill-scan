@@ -7,8 +7,8 @@ from pathlib import Path
 import pytest
 
 from skill_scan.models import Rule
-from skill_scan.rules.engine import match_line
 from skill_scan.rules.loader import load_rules
+from tests.unit.rule_helpers import match_rule
 
 RULES_PATH = (
     Path(__file__).resolve().parents[2] / "src" / "skill_scan" / "rules" / "data" / "supply_chain.toml"
@@ -18,11 +18,6 @@ RULES_PATH = (
 @pytest.fixture(scope="module")
 def rules() -> list[Rule]:
     return load_rules(RULES_PATH)
-
-
-def _match(line: str, rules: list[Rule], rule_id: str) -> bool:
-    findings = match_line(line, 1, "test.md", rules)
-    return any(f.rule_id == rule_id for f in findings)
 
 
 class TestSC001RemoteInstructionFetching:
@@ -43,7 +38,7 @@ class TestSC001RemoteInstructionFetching:
         ],
     )
     def test_sc001_detects_remote_fetching(self, rules: list[Rule], malicious_input: str) -> None:
-        assert _match(malicious_input, rules, "SC-001")
+        assert match_rule(malicious_input, rules, "SC-001")
 
     @pytest.mark.parametrize(
         "safe_input",
@@ -56,7 +51,7 @@ class TestSC001RemoteInstructionFetching:
         ],
     )
     def test_sc001_excludes_attribution_and_docs(self, rules: list[Rule], safe_input: str) -> None:
-        assert not _match(safe_input, rules, "SC-001")
+        assert not match_rule(safe_input, rules, "SC-001")
 
 
 class TestSC002UnpinnedDependencies:
@@ -72,7 +67,7 @@ class TestSC002UnpinnedDependencies:
         ],
     )
     def test_sc002_detects_unpinned_install(self, rules: list[Rule], malicious_input: str) -> None:
-        assert _match(malicious_input, rules, "SC-002")
+        assert match_rule(malicious_input, rules, "SC-002")
 
     @pytest.mark.parametrize(
         "safe_input",
@@ -87,7 +82,7 @@ class TestSC002UnpinnedDependencies:
         ],
     )
     def test_sc002_excludes_pinned_and_file_installs(self, rules: list[Rule], safe_input: str) -> None:
-        assert not _match(safe_input, rules, "SC-002")
+        assert not match_rule(safe_input, rules, "SC-002")
 
 
 class TestSC003BroadFilesystemAccess:
@@ -109,7 +104,7 @@ class TestSC003BroadFilesystemAccess:
         ],
     )
     def test_sc003_detects_traversal_and_system_paths(self, rules: list[Rule], malicious_input: str) -> None:
-        assert _match(malicious_input, rules, "SC-003")
+        assert match_rule(malicious_input, rules, "SC-003")
 
     @pytest.mark.parametrize(
         "safe_input",
@@ -122,7 +117,7 @@ class TestSC003BroadFilesystemAccess:
         ],
     )
     def test_sc003_excludes_safe_paths(self, rules: list[Rule], safe_input: str) -> None:
-        assert not _match(safe_input, rules, "SC-003")
+        assert not match_rule(safe_input, rules, "SC-003")
 
 
 class TestSC004SocialEngineeringClickFix:
@@ -141,7 +136,7 @@ class TestSC004SocialEngineeringClickFix:
         ],
     )
     def test_sc004_detects_social_engineering(self, rules: list[Rule], malicious_input: str) -> None:
-        assert _match(malicious_input, rules, "SC-004")
+        assert match_rule(malicious_input, rules, "SC-004")
 
     @pytest.mark.parametrize(
         "safe_input",
@@ -155,4 +150,4 @@ class TestSC004SocialEngineeringClickFix:
         ],
     )
     def test_sc004_excludes_legitimate_instructions(self, rules: list[Rule], safe_input: str) -> None:
-        assert not _match(safe_input, rules, "SC-004")
+        assert not match_rule(safe_input, rules, "SC-004")

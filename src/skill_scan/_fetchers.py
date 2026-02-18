@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import tempfile
 from pathlib import Path
-from typing import Any, Protocol, runtime_checkable
+from typing import Any, Protocol, runtime_checkable  # Any: httpx is conditionally imported
 
 from skill_scan._github_api import (
     FetchError,
@@ -105,29 +105,49 @@ class GitHubFetcher:
         local_dir: Path,
         file_count: int,
     ) -> int:
-        """Process a single item from the Contents API response."""
-        item_type = item.get("type", "")
-        name = item.get("name", "")
-        validate_entry_name(name)
+        """Execute I/O for a single Contents API item."""
+        action = _plan_item_action(item, file_count, self._max_files)
+        if action is None:
+            return file_count
+        kind, name, target = action
+        if kind == "download":
+            download_file(client, target, local_dir / name)
+            return file_count + 1
+        # kind == "recurse"
+        sub_dir = local_dir / name
+        sub_dir.mkdir(parents=True, exist_ok=True)
+        return self._fetch_dir(client, owner_repo, ref, target, sub_dir, file_count)
 
-        if item_type == "file":
-            if file_count >= self._max_files:
-                msg = f"Repository exceeds {self._max_files} file limit (FS-007)"
-                raise FetchError(msg)
-            download_url = item.get("download_url")
-            if download_url:
-                validate_download_url(download_url)
-                download_file(client, download_url, local_dir / name)
-                file_count += 1
-        elif item_type == "dir":
-            sub_dir = local_dir / name
-            sub_dir.mkdir(parents=True, exist_ok=True)
-            file_count = self._fetch_dir(
-                client,
-                owner_repo,
-                ref,
-                item.get("path", ""),
-                sub_dir,
-                file_count,
-            )
-        return file_count
+
+def _plan_item_action(item: dict[str, Any], file_count: int, max_files: int) -> tuple[str, str, str] | None:
+    """Decide what action to take for a GitHub Contents API item.
+
+    Pure decision function — validates the item and determines the action
+    without performing any I/O.
+
+    Returns:
+        ("download", name, url) for file items with a download URL.
+        ("recurse", name, api_path) for directory items.
+        None for unknown or no-op items.
+
+    Raises:
+        FetchError: If name validation fails or file limit exceeded.
+    """
+    name = item.get("name", "")
+    validate_entry_name(name)
+    item_type = item.get("type", "")
+
+    if item_type == "file":
+        if file_count >= max_files:
+            msg = f"Repository exceeds {max_files} file limit (FS-007)"
+            raise FetchError(msg)
+        download_url = item.get("download_url")
+        if download_url:
+            validate_download_url(download_url)
+            return ("download", name, download_url)
+        return None
+
+    if item_type == "dir":
+        return ("recurse", name, item.get("path", ""))
+
+    return None

@@ -8,6 +8,7 @@ content_scanner. This module coordinates the high-level flow and wires them toge
 from __future__ import annotations
 
 import time
+from collections.abc import Callable
 from pathlib import Path
 
 from skill_scan._fetchers import LocalFetcher, SkillFetcher
@@ -29,9 +30,11 @@ def scan(
     path: str | Path,
     config: ScanConfig | None = None,
     fetcher: SkillFetcher | None = None,
+    *,
+    clock: Callable[[], float] = time.monotonic,
 ) -> ScanResult:
     """Scan a skill directory and return aggregated results."""
-    start = time.monotonic()
+    start = clock()
 
     resolved_fetcher = fetcher or LocalFetcher()
     skill_dir = resolved_fetcher.fetch(str(path))
@@ -41,12 +44,14 @@ def scan(
     entries, resolved_root = walk_skill_dir(skill_dir)
     files, fs_findings = classify_entries(entries, resolved_root, cfg)
     rules = _prepare_rules(cfg)
-    findings, bytes_scanned, content_skipped = scan_all_files(files, skill_dir, rules)
+    findings, bytes_scanned, content_skipped = scan_all_files(
+        files, skill_dir, rules, max_file_size=cfg.max_file_size
+    )
 
     binary_skipped = sum(1 for f in fs_findings if f.rule_id == _RULE_BINARY)
     all_findings = tuple(schema_findings + fs_findings + findings)
     degraded = _build_degraded_reasons(content_skipped, binary_skipped)
-    duration = time.monotonic() - start
+    duration = clock() - start
     return ScanResult(
         findings=all_findings,
         counts=count_by_severity(all_findings),
