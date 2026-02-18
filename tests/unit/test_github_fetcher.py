@@ -8,53 +8,12 @@ import httpx
 import pytest
 import respx
 
-from skill_scan._fetchers import GitHubFetcher, SkillFetcher
-from skill_scan._github_api import parse_source
+from skill_scan._fetchers import GitHubFetcher, SkillFetcher, _plan_item_action
+from skill_scan._github_api import FetchError
 from tests.constants import HTTP_OK
 from tests.unit.github_fetcher_helpers import contents_response, dir_item, file_item
 
 _API_BASE = "https://api.github.com/repos"
-
-
-class TestParseSource:
-    """Tests for the parse_source helper."""
-
-    def test_owner_repo_without_ref(self) -> None:
-        owner_repo, ref = parse_source("octocat/hello-world")
-        assert owner_repo == "octocat/hello-world"
-        assert ref is None
-
-    def test_owner_repo_with_ref(self) -> None:
-        owner_repo, ref = parse_source("octocat/hello-world@v1.0")
-        assert owner_repo == "octocat/hello-world"
-        assert ref == "v1.0"
-
-    def test_owner_repo_with_branch_ref(self) -> None:
-        owner_repo, ref = parse_source("octocat/hello-world@main")
-        assert owner_repo == "octocat/hello-world"
-        assert ref == "main"
-
-    def test_invalid_format_no_slash(self) -> None:
-        with pytest.raises(ValueError, match="expected 'owner/repo'"):
-            parse_source("just-a-name")
-
-    def test_invalid_format_empty_owner(self) -> None:
-        with pytest.raises(ValueError, match="expected 'owner/repo'"):
-            parse_source("/repo")
-
-    def test_invalid_format_empty_repo(self) -> None:
-        with pytest.raises(ValueError, match="expected 'owner/repo'"):
-            parse_source("owner/")
-
-    def test_invalid_format_empty_ref(self) -> None:
-        with pytest.raises(ValueError, match="empty ref"):
-            parse_source("owner/repo@")
-
-    def test_ref_with_at_sign(self) -> None:
-        """Ref containing @ splits at first @ after owner/repo."""
-        owner_repo, ref = parse_source("owner/repo@feature@2")
-        assert owner_repo == "owner/repo"
-        assert ref == "feature@2"
 
 
 class TestGitHubFetcherProtocol:
@@ -164,3 +123,26 @@ class TestGitHubFetcherSuccess:
         finally:
             if fetcher.tmp_dir:
                 shutil.rmtree(fetcher.tmp_dir, ignore_errors=True)
+
+
+class TestPlanItemAction:
+    """Tests for _plan_item_action — pure decision, no I/O needed."""
+
+    def test_file_item_returns_download(self) -> None:
+        item = file_item("readme.md", "")
+        result = _plan_item_action(item, file_count=0, max_files=100)
+        assert result == ("download", "readme.md", item["download_url"])
+
+    def test_dir_item_returns_recurse(self) -> None:
+        item = dir_item("src", "")
+        result = _plan_item_action(item, file_count=0, max_files=100)
+        assert result == ("recurse", "src", "src")
+
+    def test_file_limit_exceeded_raises(self) -> None:
+        item = file_item("extra.py", "")
+        with pytest.raises(FetchError, match="file limit"):
+            _plan_item_action(item, file_count=5, max_files=5)
+
+    def test_unknown_type_returns_none(self) -> None:
+        item = {"type": "submodule", "name": "vendor"}
+        assert _plan_item_action(item, file_count=0, max_files=100) is None

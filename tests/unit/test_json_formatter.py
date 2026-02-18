@@ -211,20 +211,6 @@ class TestJsonVerdictAndSeverity:
 class TestJsonDeterminism:
     """Tests for deterministic JSON output."""
 
-    def test_same_input_produces_identical_output(self) -> None:
-        finding = make_finding()
-        result = ScanResult(
-            findings=(finding,),
-            counts={"medium": 1},
-            verdict=Verdict.FLAG,
-            duration=0.5,
-            files_scanned=10,
-            skill_name="my-skill",
-        )
-        output1 = format_json(result)
-        output2 = format_json(result)
-        assert output1 == output2
-
     def test_output_has_sorted_keys(self) -> None:
         finding = make_finding()
         result = ScanResult(

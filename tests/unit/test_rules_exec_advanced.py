@@ -6,9 +6,9 @@ from pathlib import Path
 
 import pytest
 
-from skill_scan.models import Finding, Rule, Severity
-from skill_scan.rules.engine import match_line
+from skill_scan.models import Rule, Severity
 from skill_scan.rules.loader import load_rules
+from tests.unit.rule_helpers import match_rule, rule_findings
 
 RULES_PATH = (
     Path(__file__).resolve().parents[2] / "src" / "skill_scan" / "rules" / "data" / "malicious_code.toml"
@@ -19,15 +19,6 @@ RULES_PATH = (
 def rules() -> list[Rule]:
     """Load malicious code rules once for the module."""
     return load_rules(RULES_PATH)
-
-
-def _match(line: str, rules: list[Rule], rule_id: str) -> bool:
-    findings = match_line(line, 1, "test.md", rules)
-    return any(f.rule_id == rule_id for f in findings)
-
-
-def _findings(line: str, rules: list[Rule], rule_id: str) -> list[Finding]:
-    return [f for f in match_line(line, 1, "test.md", rules) if f.rule_id == rule_id]
 
 
 class TestExec006DynamicIndirection:
@@ -47,8 +38,8 @@ class TestExec006DynamicIndirection:
         ],
     )
     def test_detects_dynamic_indirection(self, rules: list[Rule], line: str) -> None:
-        findings = _findings(line, rules, "EXEC-006")
-        assert len(findings) >= 1
+        findings = rule_findings(line, rules, "EXEC-006")
+        assert len(findings) == 1
         assert findings[0].severity == Severity.HIGH
         assert findings[0].category == "malicious-code"
 
@@ -64,7 +55,7 @@ class TestExec006DynamicIndirection:
         ],
     )
     def test_allows_safe_content(self, rules: list[Rule], line: str) -> None:
-        assert not _match(line, rules, "EXEC-006")
+        assert not match_rule(line, rules, "EXEC-006")
 
 
 class TestExec007UnsafeDeserialization:
@@ -86,8 +77,8 @@ class TestExec007UnsafeDeserialization:
         ],
     )
     def test_detects_unsafe_deserialization(self, rules: list[Rule], line: str) -> None:
-        findings = _findings(line, rules, "EXEC-007")
-        assert len(findings) >= 1
+        findings = rule_findings(line, rules, "EXEC-007")
+        assert len(findings) == 1
         assert findings[0].severity == Severity.CRITICAL
         assert findings[0].category == "malicious-code"
 
@@ -105,7 +96,7 @@ class TestExec007UnsafeDeserialization:
         ],
     )
     def test_allows_safe_content(self, rules: list[Rule], line: str) -> None:
-        assert not _match(line, rules, "EXEC-007")
+        assert not match_rule(line, rules, "EXEC-007")
 
 
 class TestExec008PowerShellCradle:
@@ -126,8 +117,8 @@ class TestExec008PowerShellCradle:
         ],
     )
     def test_detects_powershell_cradle(self, rules: list[Rule], line: str) -> None:
-        findings = _findings(line, rules, "EXEC-008")
-        assert len(findings) >= 1
+        findings = rule_findings(line, rules, "EXEC-008")
+        assert len(findings) == 1
         assert findings[0].severity == Severity.HIGH
         assert findings[0].category == "malicious-code"
 
@@ -145,4 +136,4 @@ class TestExec008PowerShellCradle:
         ],
     )
     def test_allows_safe_content(self, rules: list[Rule], line: str) -> None:
-        assert not _match(line, rules, "EXEC-008")
+        assert not match_rule(line, rules, "EXEC-008")

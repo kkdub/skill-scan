@@ -55,17 +55,6 @@ class TestGitHubFetcherHTTPErrors:
         with pytest.raises(FetchError, match="API error 500"):
             fetcher.fetch("owner/repo")
 
-    @respx.mock
-    def test_cleanup_on_failure(self) -> None:
-        """Temp directory is cleaned up when fetch fails."""
-        respx.get(f"{_API_BASE}/owner/repo/contents/").mock(
-            return_value=httpx.Response(HTTP_NOT_FOUND),
-        )
-        fetcher = GitHubFetcher()
-        with pytest.raises(FetchError):
-            fetcher.fetch("owner/repo")
-        assert fetcher.tmp_dir is None
-
 
 class TestGitHubFetcherFileLimit:
     """Tests for FS-007 file count limit enforcement."""

@@ -79,7 +79,7 @@ class ScanResult:
 @dataclass(slots=True, frozen=True)
 class FileEntry:
     """Filesystem metadata for a single entry in a skill directory.
-    
+
     Raw filesystem data only — no classification decisions.
     is_symlink indicates whether path is a symlink (internal or external).
     Classification logic determines if a symlink is external by comparing

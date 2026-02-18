@@ -9,9 +9,50 @@ import httpx
 import pytest
 import respx
 
-from skill_scan._github_api import FetchError, download_file
+from skill_scan._github_api import FetchError, download_file, parse_source
 from skill_scan._github_api import validate_download_url, validate_entry_name
 from tests.constants import HTTP_NOT_FOUND, HTTP_OK
+
+
+class TestParseSource:
+    """Tests for the parse_source helper."""
+
+    def test_owner_repo_without_ref(self) -> None:
+        owner_repo, ref = parse_source("octocat/hello-world")
+        assert owner_repo == "octocat/hello-world"
+        assert ref is None
+
+    def test_owner_repo_with_ref(self) -> None:
+        owner_repo, ref = parse_source("octocat/hello-world@v1.0")
+        assert owner_repo == "octocat/hello-world"
+        assert ref == "v1.0"
+
+    def test_owner_repo_with_branch_ref(self) -> None:
+        owner_repo, ref = parse_source("octocat/hello-world@main")
+        assert owner_repo == "octocat/hello-world"
+        assert ref == "main"
+
+    def test_invalid_format_no_slash(self) -> None:
+        with pytest.raises(ValueError, match="expected 'owner/repo'"):
+            parse_source("just-a-name")
+
+    def test_invalid_format_empty_owner(self) -> None:
+        with pytest.raises(ValueError, match="expected 'owner/repo'"):
+            parse_source("/repo")
+
+    def test_invalid_format_empty_repo(self) -> None:
+        with pytest.raises(ValueError, match="expected 'owner/repo'"):
+            parse_source("owner/")
+
+    def test_invalid_format_empty_ref(self) -> None:
+        with pytest.raises(ValueError, match="empty ref"):
+            parse_source("owner/repo@")
+
+    def test_ref_with_at_sign(self) -> None:
+        """Ref containing @ splits at first @ after owner/repo."""
+        owner_repo, ref = parse_source("owner/repo@feature@2")
+        assert owner_repo == "owner/repo"
+        assert ref == "feature@2"
 
 
 class TestValidateEntryName:
@@ -42,21 +83,27 @@ class TestValidateEntryName:
             validate_entry_name("")
 
     def test_accepts_normal_name(self) -> None:
+        raised = True
         validate_entry_name("SKILL.md")
-        assert True
+        raised = False
+        assert not raised
 
     def test_accepts_double_dot_in_filename(self) -> None:
         """Filenames like 'file..txt' are legitimate and should be accepted."""
+        raised = True
         validate_entry_name("file..txt")
-        assert True
+        raised = False
+        assert not raised
 
 
 class TestValidateDownloadUrl:
     """Tests for SSRF prevention in download URLs."""
 
     def test_accepts_raw_githubusercontent(self) -> None:
+        raised = True
         validate_download_url("https://raw.githubusercontent.com/owner/repo/main/file.md")
-        assert True
+        raised = False
+        assert not raised
 
     def test_rejects_attacker_host(self) -> None:
         with pytest.raises(FetchError, match="Untrusted download host"):

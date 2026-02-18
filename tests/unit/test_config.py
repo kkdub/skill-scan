@@ -48,13 +48,6 @@ def test_scan_config_is_frozen() -> None:
         config.max_file_size = 1_000_000  # type: ignore[misc]
 
 
-def test_load_config_returns_scan_config() -> None:
-    """load_config() returns a ScanConfig instance."""
-    config = load_config()
-
-    assert isinstance(config, ScanConfig)
-
-
 def test_load_config_returns_defaults() -> None:
     """load_config() returns ScanConfig with default values."""
     config = load_config()
@@ -152,7 +145,7 @@ def test_load_config_invalid_toml_raises_error(tmp_path: Path) -> None:
     bad_file = tmp_path / "bad.toml"
     bad_file.write_text("[invalid\nthis is not valid toml", encoding="utf-8")
 
-    with pytest.raises(tomllib.TOMLDecodeError):
+    with pytest.raises(tomllib.TOMLDecodeError, match="Expected '\\]'"):
         load_config(bad_file)
 
 

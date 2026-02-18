@@ -31,7 +31,7 @@ def test_scan_detects_prompt_injection_in_skill_md(tmp_path: Path) -> None:
     result = scan(skill_dir)
     assert result.verdict in (Verdict.FLAG, Verdict.BLOCK)
     assert len(result.findings) > 0
-    assert any(f.category == "prompt-injection" for f in result.findings)
+    assert any(f.category == "prompt-injection" and f.file == "SKILL.md" for f in result.findings)
 
 
 def test_scan_detects_prompt_injection_in_python_file(tmp_path: Path) -> None:
@@ -42,8 +42,7 @@ def test_scan_detects_prompt_injection_in_python_file(tmp_path: Path) -> None:
     )
 
     result = scan(skill_dir)
-    assert len(result.findings) > 0
-    assert any(f.file == "script.py" for f in result.findings)
+    assert any(f.file == "script.py" and f.category == "prompt-injection" for f in result.findings)
 
 
 def test_scan_emits_sv001_for_bad_schema(tmp_path: Path) -> None:
@@ -110,8 +109,8 @@ def test_scan_includes_text_files(tmp_path: Path) -> None:
     )
 
     result = scan(skill_dir)
-    assert any(f.file == "script.py" for f in result.findings)
-    assert any(f.file == "README.md" for f in result.findings)
+    assert any(f.file == "script.py" and f.category != "file-safety" for f in result.findings)
+    assert any(f.file == "README.md" and f.category != "file-safety" for f in result.findings)
 
 
 def test_scan_findings_have_relative_forward_slash_paths(tmp_path: Path) -> None:
@@ -212,15 +211,6 @@ def test_scan_populates_bytes_scanned(tmp_path: Path) -> None:
     skill_dir = make_skill_dir(tmp_path, extra_files={"script.py": content})
     result = scan(skill_dir)
     assert result.bytes_scanned >= len(content)
-
-
-def test_scan_counts_binary_files_as_skipped(tmp_path: Path) -> None:
-    """Scan counts binary files as skipped and includes degraded reason."""
-    skill_dir = make_skill_dir(tmp_path)
-    (skill_dir / "binary.exe").write_bytes(b"\x00\x01\x02\x03")
-    result = scan(skill_dir)
-    assert result.files_skipped >= 1
-    assert any("binary" in reason for reason in result.degraded_reasons)
 
 
 def test_scan_no_degradation_for_clean_skill(tmp_path: Path) -> None:

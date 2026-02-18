@@ -146,7 +146,7 @@ class TestLoadRules:
             load_rules(toml_path)
 
     def test_load_rules_missing_file_raises_file_not_found(self, tmp_path: Path) -> None:
-        with pytest.raises(FileNotFoundError):
+        with pytest.raises(FileNotFoundError, match="nonexistent"):
             load_rules(tmp_path / "nonexistent.toml")
 
     def test_load_rules_empty_rules_table_returns_empty_list(self, tmp_path: Path) -> None:

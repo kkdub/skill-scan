@@ -70,7 +70,7 @@ def _gather_entry(
     try:
         size = file_path.stat().st_size
     except OSError:
-        return None
+        size = 0
 
     return FileEntry(
         path=file_path,

@@ -7,8 +7,8 @@ from pathlib import Path
 import pytest
 
 from skill_scan.models import Rule
-from skill_scan.rules.engine import match_line
 from skill_scan.rules.loader import load_rules
+from tests.unit.rule_helpers import match_rule
 
 RULES_PATH = (
     Path(__file__).resolve().parents[2] / "src" / "skill_scan" / "rules" / "data" / "data_exfiltration.toml"
@@ -19,11 +19,6 @@ RULES_PATH = (
 def rules() -> list[Rule]:
     """Load exfiltration rules once for the entire module."""
     return load_rules(RULES_PATH)
-
-
-def _match(line: str, rules: list[Rule], rule_id: str) -> bool:
-    findings = match_line(line, 1, "test.md", rules)
-    return any(f.rule_id == rule_id for f in findings)
 
 
 # -- EXFIL-001: Silent outbound requests --------------------------------
@@ -43,7 +38,7 @@ class TestExfil001:
         ],
     )
     def test_detects_silent_outbound(self, rules: list[Rule], line: str) -> None:
-        assert _match(line, rules, "EXFIL-001")
+        assert match_rule(line, rules, "EXFIL-001")
 
     @pytest.mark.parametrize(
         "line",
@@ -54,7 +49,7 @@ class TestExfil001:
         ],
     )
     def test_allows_documentation(self, rules: list[Rule], line: str) -> None:
-        assert not _match(line, rules, "EXFIL-001")
+        assert not match_rule(line, rules, "EXFIL-001")
 
 
 # -- EXFIL-002: Sensitive path access ------------------------------------
@@ -76,7 +71,7 @@ class TestExfil002:
         ],
     )
     def test_detects_sensitive_paths(self, rules: list[Rule], line: str) -> None:
-        assert _match(line, rules, "EXFIL-002")
+        assert match_rule(line, rules, "EXFIL-002")
 
     @pytest.mark.parametrize(
         "line",
@@ -87,7 +82,7 @@ class TestExfil002:
         ],
     )
     def test_allows_educational_context(self, rules: list[Rule], line: str) -> None:
-        assert not _match(line, rules, "EXFIL-002")
+        assert not match_rule(line, rules, "EXFIL-002")
 
 
 # -- EXFIL-003: Webhook/C2 patterns -------------------------------------
@@ -107,7 +102,7 @@ class TestExfil003:
         ],
     )
     def test_detects_webhook_c2(self, rules: list[Rule], line: str) -> None:
-        assert _match(line, rules, "EXFIL-003")
+        assert match_rule(line, rules, "EXFIL-003")
 
     @pytest.mark.parametrize(
         "line",
@@ -118,7 +113,7 @@ class TestExfil003:
         ],
     )
     def test_allows_documentation(self, rules: list[Rule], line: str) -> None:
-        assert not _match(line, rules, "EXFIL-003")
+        assert not match_rule(line, rules, "EXFIL-003")
 
 
 # -- EXFIL-004: Environment harvesting ----------------------------------
@@ -138,7 +133,7 @@ class TestExfil004:
         ],
     )
     def test_detects_env_harvesting(self, rules: list[Rule], line: str) -> None:
-        assert _match(line, rules, "EXFIL-004")
+        assert match_rule(line, rules, "EXFIL-004")
 
     @pytest.mark.parametrize(
         "line",
@@ -151,4 +146,4 @@ class TestExfil004:
         ],
     )
     def test_allows_single_var_access(self, rules: list[Rule], line: str) -> None:
-        assert not _match(line, rules, "EXFIL-004")
+        assert not match_rule(line, rules, "EXFIL-004")

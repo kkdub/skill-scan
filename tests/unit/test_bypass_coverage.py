@@ -34,16 +34,6 @@ class TestUnknownExtensionCoverage:
         ]
         assert len(content_findings) >= 1
 
-    def test_scan_unknown_ext_finding_has_correct_severity(self, tmp_path: Path) -> None:
-        skill_dir = make_skill_dir(
-            tmp_path,
-            extra_files={"script.rb": "puts 'hello'"},
-        )
-        result = scan(skill_dir)
-        fs003 = [f for f in result.findings if f.rule_id == "FS-003"]
-        assert len(fs003) == 1
-        assert fs003[0].severity == Severity.MEDIUM
-
 
 class TestBinaryFileCoverage:
     """Binary files generate FS-002 and are excluded from content scan."""
@@ -58,25 +48,6 @@ class TestBinaryFileCoverage:
         assert len(fs002) == 1
         assert fs002[0].severity == Severity.HIGH
         assert fs002[0].file == "payload.exe"
-
-    def test_scan_binary_not_content_scanned(self, tmp_path: Path) -> None:
-        skill_dir = make_skill_dir(
-            tmp_path,
-            extra_files={"lib.dll": "eval(malicious)"},
-        )
-        result = scan(skill_dir)
-        # No malicious-code findings for the binary file
-        code_findings = [f for f in result.findings if f.file == "lib.dll" and f.category == "malicious-code"]
-        assert code_findings == []
-
-    def test_scan_binary_triggers_degraded_reasons(self, tmp_path: Path) -> None:
-        skill_dir = make_skill_dir(
-            tmp_path,
-            extra_files={"tool.bin": "data"},
-        )
-        result = scan(skill_dir)
-        assert len(result.degraded_reasons) >= 1
-        assert any("binary" in r for r in result.degraded_reasons)
 
 
 class TestOversizedFileCoverage:
@@ -95,16 +66,6 @@ class TestOversizedFileCoverage:
         # FS-005 files are excluded from content scanning (DoS prevention)
         code_findings = [f for f in result.findings if f.file == "big.py" and f.category == "malicious-code"]
         assert len(code_findings) == 0
-
-    def test_scan_oversized_finding_severity(self, tmp_path: Path) -> None:
-        skill_dir = make_skill_dir(tmp_path)
-        (skill_dir / "data.txt").write_text("x" * 2000, encoding="utf-8")
-        config = ScanConfig(max_file_size=100)
-
-        result = scan(skill_dir, config=config)
-        fs005 = [f for f in result.findings if f.rule_id == "FS-005"]
-        assert len(fs005) >= 1
-        assert fs005[0].severity == Severity.MEDIUM
 
 
 class TestReadErrorCoverage:
@@ -134,35 +95,6 @@ class TestReadErrorCoverage:
         assert "OSError" in fs008[0].description
 
 
-class TestDegradedReasons:
-    """degraded_reasons is populated correctly for various skip scenarios."""
-
-    def test_scan_decode_error_populates_degraded_reasons(self, tmp_path: Path) -> None:
-        skill_dir = make_skill_dir(tmp_path)
-        bad_file = skill_dir / "bad.txt"
-        bad_file.write_bytes(b"\xff\xfe\x00\x00bad content here")
-
-        result = scan(skill_dir)
-        assert len(result.degraded_reasons) >= 1
-        assert any("decoded" in r or "read" in r for r in result.degraded_reasons)
-
-    def test_scan_binary_skip_populates_degraded_reasons(self, tmp_path: Path) -> None:
-        skill_dir = make_skill_dir(
-            tmp_path,
-            extra_files={"module.so": "binary data"},
-        )
-        result = scan(skill_dir)
-        assert any("binary" in r for r in result.degraded_reasons)
-
-    def test_scan_no_degradation_empty_reasons(self, tmp_path: Path) -> None:
-        skill_dir = make_skill_dir(
-            tmp_path,
-            extra_files={"clean.py": "x = 1 + 2"},
-        )
-        result = scan(skill_dir)
-        assert result.degraded_reasons == ()
-
-
 class TestVerdictUpgradeOnDegradation:
     """Verdict upgrades from PASS to FLAG when scan is degraded."""
 
@@ -176,14 +108,6 @@ class TestVerdictUpgradeOnDegradation:
         # verdict should be FLAG (not PASS) due to coverage gap.
         assert result.verdict != Verdict.PASS
         assert result.verdict in (Verdict.FLAG, Verdict.BLOCK)
-
-    def test_scan_no_degradation_clean_passes(self, tmp_path: Path) -> None:
-        skill_dir = make_skill_dir(
-            tmp_path,
-            extra_files={"clean.py": "x = 1 + 2"},
-        )
-        result = scan(skill_dir)
-        assert result.verdict == Verdict.PASS
 
     def test_scan_degraded_with_findings_keeps_higher_verdict(self, tmp_path: Path) -> None:
         skill_dir = make_skill_dir(

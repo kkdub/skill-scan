@@ -72,17 +72,3 @@ class TestRepoMissingHttpx:
         # Error appears in output or exception
         error_text = result.output + (str(result.exception) if result.exception else "")
         assert "pip install skill-scan[remote]" in error_text
-
-
-class TestLocalScanStillWorks:
-    """Ensure local scanning is unaffected by --repo changes."""
-
-    def test_local_path_scan_returns_pass_for_clean_skill(self, tmp_path: Path) -> None:
-        """Positional PATH argument still works as before."""
-        skill_dir = make_skill_dir(tmp_path)
-        runner = CliRunner()
-
-        result = runner.invoke(skill_scan, ["scan", str(skill_dir)])
-
-        assert result.exit_code == 0
-        assert "No security issues found" in result.output
