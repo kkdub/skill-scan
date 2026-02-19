@@ -1,0 +1,200 @@
+id: "PLAN-009"
+title: "Rule Discoverability, Authoring Aid, and CI Validation"
+type: implementation
+status: Done
+created: 2026-02-17
+priority: medium
+
+linked_spec: null
+
+description: |
+  A user wanting to add a rule today must: open 10 individual TOML files to
+  check what exists, reverse-engineer the field format from examples, and
+  hope they didn't typo a field name (discovered only at runtime). There's
+  no catalog, no template, and no CI validation of rule file structure.
+
+  Goals:
+    1. Discoverability — one place to see all rules (RULES.md catalog)
+    2. Authoring — a copy-paste template with documented fields (template.toml)
+    3. Validation — catch structural errors in CI, not at runtime (test suite)
+
+  NOT in scope: No format migration (TOML stays), no CLI changes, no new
+  production dependencies, no changes to existing rule files or production code.
+
+requirements:
+  extraction_status: done
+  extracted_at: 2026-02-17
+  spec_hash: null
+  items:
+    - id: R-TEMPLATE
+      description: "Documented TOML template covering every _parse_rule() field"
+      status: done
+      spec_ref: "Goal 2: Authoring aid"
+      notes: "Lives in src/skill_scan/rules/ but outside data/ so it is not loaded."
+
+    - id: R-VALIDATION
+      description: "CI test suite that validates all TOML rule files structurally"
+      status: done
+      spec_ref: "Goal 3: CI validation"
+      notes: "Parametrized per-file so failures name the broken file."
+
+    - id: R-CATALOG
+      description: "Auto-generated RULES.md listing all rules grouped by category"
+      status: done
+      spec_ref: "Goal 1: Discoverability"
+      notes: "Script generates it; freshness test catches stale catalogs."
+
+  uncovered: []
+
+utilities_audit:
+  status: done
+  search_performed:
+    - "Verified load_default_rules() globs data/*.toml — template.toml is safe outside data/"
+    - "Verified load_rules() already validates required fields, severity enum, regex compilation"
+    - "Checked scripts/ convention from check_code_patterns.py (sys.path, dataclass patterns)"
+  categories:
+    error_handling:
+      needed: false
+    validation:
+      needed: false
+      notes: "load_rules() already validates; this plan just wraps it in a test."
+    types:
+      needed: true
+      notes: "RuleInfo frozen dataclass in generator script for catalog rendering."
+    configuration:
+      needed: false
+    http_client:
+      needed: false
+  infrastructure_parts: []
+
+parts:
+  - id: a
+    title: "Rule authoring template"
+    status: Done
+    requirements_covered: [R-TEMPLATE]
+    files:
+      - "src/skill_scan/rules/template.toml"
+    criteria:
+      - "File exists at src/skill_scan/rules/template.toml"
+      - "load_default_rules() does NOT include EXAMPLE-001"
+      - "Every field from _parse_rule() (loader.py:100-131) is documented"
+      - "Valid TOML (pre-commit check-toml passes)"
+      - "Under 250 lines"
+
+  - id: b
+    title: "CI validation test"
+    status: Done
+    requirements_covered: [R-VALIDATION]
+    files:
+      - "tests/unit/test_rule_validation.py"
+    criteria:
+      - "File exists at tests/unit/test_rule_validation.py"
+      - "Parametrized per TOML file (failures name the broken file)"
+      - "load_rules(path) succeeds and returns non-empty list (per file)"
+      - "Every rule has at least one pattern"
+      - "Every rule has non-empty description and recommendation"
+      - "No duplicate rule IDs across all files (cross-file test)"
+      - "make check passes"
+      - "Under 250 lines"
+
+  - id: c
+    title: "Rules catalog generator and RULES.md"
+    status: Done
+    depends_on: [a, b]
+    requirements_covered: [R-CATALOG]
+    files:
+      - "scripts/generate_rules_catalog.py"
+      - "RULES.md"
+      - "Makefile"
+    criteria:
+      - "scripts/generate_rules_catalog.py under 250 lines"
+      - "RULES.md lists all 73 rules (64 pattern + 9 procedural)"
+      - "Rules grouped by category in fixed display order"
+      - "Markdown tables with columns: Rule ID, Severity, Description, Confidence"
+      - "Header explains catalog; footer points to template.toml for authoring"
+      - "Auto-generated warning so people don't hand-edit"
+      - "Makefile has rules-catalog target that regenerates RULES.md"
+      - "Freshness test in test_rule_validation.py catches stale catalogs"
+      - "make check passes"
+
+allowed_files:
+  - "src/skill_scan/rules/template.toml"
+  - "tests/unit/test_rule_validation.py"
+  - "scripts/generate_rules_catalog.py"
+  - "RULES.md"
+  - "Makefile"
+
+forbidden:
+  - "src/skill_scan/**/*.py"
+  - "src/skill_scan/rules/data/**"
+  - "pyproject.toml"
+  - ".env*"
+
+acceptance_criteria:
+  - "All requirements (R-TEMPLATE, R-VALIDATION, R-CATALOG) have status: done"
+  - "All parts (a, b, c) have status: Done"
+  - "make check passes"
+  - "template.toml not loaded by scanner (EXAMPLE-001 absent from scan output)"
+  - "All TOML rule files pass validation test"
+  - "RULES.md freshness test passes"
+  - "No production code modified"
+  - "All new files under 250 lines"
+
+stop_condition: |
+  When all parts are Done, make check passes, and RULES.md freshness test
+  confirms the catalog matches the generator output.
+
+work_log:
+  - date: 2026-02-17
+    action: "Implemented all 3 parts (a-c)"
+    details: |
+      Part a: template.toml (38 lines) documenting all _parse_rule() fields
+      with one complete EXAMPLE-001 section. Placed in rules/ but outside
+      data/ so load_default_rules() glob doesn't pick it up.
+
+      Part b: test_rule_validation.py (75 lines) with 3 test classes:
+      TestRuleFileValidation (parametrized per-file: load, patterns, descriptions),
+      TestRuleUniqueness (duplicate IDs, minimum count), TestRulesCatalog
+      (RULES.md freshness via in-memory generation comparison).
+
+      Part c: generate_rules_catalog.py (162 lines) with RuleInfo dataclass,
+      9 static procedural rules (FS-001..008, SV-001), category ordering,
+      markdown table rendering. Makefile rules-catalog target added.
+      RULES.md generated: 73 rules across 8 categories.
+
+evidence:
+  - type: make_check
+    result: "All pre-commit hooks pass"
+    date: 2026-02-17
+  - type: test_run
+    result: "All tests pass including new rule validation and freshness tests"
+    date: 2026-02-17
+
+handoff:
+  stopped_at: null
+  current_state: "Plan complete. All parts implemented and tested."
+  next_steps: []
+  blockers: []
+  scope:
+    files:
+      - "src/skill_scan/rules/template.toml"
+      - "tests/unit/test_rule_validation.py"
+      - "scripts/generate_rules_catalog.py"
+      - "RULES.md"
+      - "Makefile"
+    functions:
+      - "generate_catalog() -> str"
+      - "collect_rules() -> dict[str, list[RuleInfo]]"
+    components:
+      - "Rule authoring template (template.toml)"
+      - "CI validation test suite (test_rule_validation.py)"
+      - "Catalog generator (generate_rules_catalog.py + RULES.md)"
+  decisions:
+    - "template.toml placed in rules/ not rules/data/ so the data glob ignores it"
+    - "Freshness test imports generator and compares in-memory output to committed file"
+    - "Procedural rules (FS-*, SV-001) are static metadata in the generator script"
+    - "Category display order is hardcoded for stable catalog layout"
+    - "RuleInfo frozen dataclass used for uniform rendering of pattern and procedural rules"
+  open_questions: []
+
+errors: []
