@@ -25,7 +25,7 @@ Based on the skill-bank → skill-scan setup pattern.
 | `pyproject.toml` | Yes | `project_name`, `package_name`, `description`, `python_version`, `dependencies`, build-system, tool configs (ruff, mypy, pytest) |
 | `.python-version` | Yes | `python_version` |
 | `.gitignore` | No | Standard across projects |
-| `.env.example` | Minimal | Project-specific env vars |
+
 | `Makefile` | Yes | `agent_dir` in EXCLUDE_DIRS and MYPY_EXCLUDE |
 | `CLAUDE.md` | Yes | `project_name`, `package_name`, `description`, stack, structure |
 | `README.md` | Yes | `project_name`, `description` |
