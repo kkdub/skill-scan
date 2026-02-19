@@ -23,7 +23,7 @@ repos:
         name: Trim Trailing Whitespace
       - id: end-of-file-fixer
         name: Fix End of Files
-        exclude: ^\.repomap/
+
       - id: check-added-large-files
         name: Check Large Files
         args:
@@ -104,21 +104,6 @@ repos:
         files: ^tests/.*\.py$
         pass_filenames: true
 
-      - id: repomap-index
-        name: RepoMap Index
-        entry: tools/repomap/repomap.sh index
-        language: system
-        pass_filenames: false
-        always_run: true
-        stages: [pre-commit]
-
-      - id: repomap-index-check
-        name: RepoMap Index Check (pre-push)
-        entry: tools/repomap/repomap.sh check
-        language: system
-        pass_filenames: false
-        always_run: true
-        stages: [pre-push]
 
   - repo: https://github.com/PyCQA/bandit
     rev: 1.8.3

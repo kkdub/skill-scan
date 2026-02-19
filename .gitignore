@@ -44,10 +44,6 @@ coverage.xml
 .DS_Store
 Thumbs.db
 
-# Repomap
-.repomap/
-.repomap.tags.cache.v1/
-tools/repomap/.venv/
 
 # Temporary
 *.tmp
