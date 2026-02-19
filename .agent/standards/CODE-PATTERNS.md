@@ -108,5 +108,5 @@ src/skill_scan/
 
 | File | Purpose |
 |---|---|
-| `.agents/standards/code-rules.json` | Enforceable rules |
-| `.agents/standards/TEST-PATTERNS.md` | Test writing standards |
+| `.agent/standards/code-rules.json` | Enforceable rules |
+| `.agent/standards/TEST-PATTERNS.md` | Test writing standards |

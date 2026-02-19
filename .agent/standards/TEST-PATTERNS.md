@@ -126,7 +126,7 @@ Per public function, test:
 
 | File | Purpose |
 |---|---|
-| `.agents/standards/code-rules.json` | Enforceable rules |
-| `.agents/standards/CODE-PATTERNS.md` | Design guidance |
+| `.agent/standards/code-rules.json` | Enforceable rules |
+| `.agent/standards/CODE-PATTERNS.md` | Design guidance |
 | `tests/conftest.py` | Shared fixtures |
 | `tests/constants.py` | HTTP status constants |
