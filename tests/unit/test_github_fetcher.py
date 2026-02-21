@@ -5,11 +5,9 @@ from __future__ import annotations
 import shutil
 
 import httpx
-import pytest
 import respx
 
 from skill_scan._fetchers import GitHubFetcher, SkillFetcher, _plan_item_action
-from skill_scan._github_api import FetchError
 from tests.constants import HTTP_OK
 from tests.unit.github_fetcher_helpers import contents_response, dir_item, file_item
 
@@ -130,19 +128,14 @@ class TestPlanItemAction:
 
     def test_file_item_returns_download(self) -> None:
         item = file_item("readme.md", "")
-        result = _plan_item_action(item, file_count=0, max_files=100)
+        result = _plan_item_action(item)
         assert result == ("download", "readme.md", item["download_url"])
 
     def test_dir_item_returns_recurse(self) -> None:
         item = dir_item("src", "")
-        result = _plan_item_action(item, file_count=0, max_files=100)
+        result = _plan_item_action(item)
         assert result == ("recurse", "src", "src")
-
-    def test_file_limit_exceeded_raises(self) -> None:
-        item = file_item("extra.py", "")
-        with pytest.raises(FetchError, match="file limit"):
-            _plan_item_action(item, file_count=5, max_files=5)
 
     def test_unknown_type_returns_none(self) -> None:
         item = {"type": "submodule", "name": "vendor"}
-        assert _plan_item_action(item, file_count=0, max_files=100) is None
+        assert _plan_item_action(item) is None

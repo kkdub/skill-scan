@@ -56,39 +56,24 @@ class TestGitHubFetcherHTTPErrors:
             fetcher.fetch("owner/repo")
 
 
-class TestGitHubFetcherFileLimit:
-    """Tests for FS-007 file count limit enforcement."""
+class TestGitHubFetcherManyFiles:
+    """Verify the fetcher handles repos with many files (no hard limit)."""
 
     @respx.mock
-    def test_exceeds_max_files_raises_fetch_error(self) -> None:
-        """Exceeding max_files raises FetchError."""
-        many_files = [file_item(f"file{i}.txt") for i in range(6)]
+    def test_many_files_downloaded_successfully(self) -> None:
+        """Fetcher downloads all files without a hard file-count error."""
+        many_files = [file_item(f"file{i}.txt") for i in range(150)]
         respx.get(f"{_API_BASE}/owner/repo/contents/").mock(
             return_value=contents_response(many_files),
         )
-        for i in range(5):
+        for i in range(150):
             respx.get(f"https://raw.githubusercontent.com/test/file{i}.txt").mock(
                 return_value=httpx.Response(HTTP_OK, content=b"data"),
             )
-        fetcher = GitHubFetcher(max_files=5)
-        with pytest.raises(FetchError, match="file limit"):
-            fetcher.fetch("owner/repo")
-
-    @respx.mock
-    def test_at_max_files_succeeds(self) -> None:
-        """Exactly max_files does not raise."""
-        files = [file_item(f"file{i}.txt") for i in range(3)]
-        respx.get(f"{_API_BASE}/owner/repo/contents/").mock(
-            return_value=contents_response(files),
-        )
-        for i in range(3):
-            respx.get(f"https://raw.githubusercontent.com/test/file{i}.txt").mock(
-                return_value=httpx.Response(HTTP_OK, content=b"data"),
-            )
-        fetcher = GitHubFetcher(max_files=3)
+        fetcher = GitHubFetcher()
         try:
             result = fetcher.fetch("owner/repo")
-            assert len(list(result.iterdir())) == 3
+            assert len(list(result.iterdir())) == 150
         finally:
             if fetcher.tmp_dir:
                 shutil.rmtree(fetcher.tmp_dir, ignore_errors=True)

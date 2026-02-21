@@ -20,8 +20,6 @@ from skill_scan._github_api import (
     validate_entry_name,
 )
 
-_DEFAULT_MAX_FILES = 100
-
 
 @runtime_checkable
 class SkillFetcher(Protocol):
@@ -46,9 +44,8 @@ class LocalFetcher:
 class GitHubFetcher:
     """Fetches skills from GitHub via the Contents API."""
 
-    def __init__(self, skill_path: str = "", max_files: int = _DEFAULT_MAX_FILES) -> None:
+    def __init__(self, skill_path: str = "") -> None:
         self._skill_path = skill_path
-        self._max_files = max_files
         self._tmp_dir: Path | None = None
 
     @property
@@ -65,7 +62,7 @@ class GitHubFetcher:
         headers = build_headers()
         try:
             with httpx.Client(headers=headers, timeout=30.0) as client:
-                self._fetch_dir(client, owner_repo, ref, self._skill_path, self._tmp_dir, 0)
+                self._fetch_dir(client, owner_repo, ref, self._skill_path, self._tmp_dir)
         except Exception:  # noqa: ERROR-003
             import shutil
 
@@ -81,9 +78,8 @@ class GitHubFetcher:
         ref: str | None,
         api_path: str,
         local_dir: Path,
-        file_count: int,
-    ) -> int:
-        """Recursively fetch directory contents. Returns updated file count."""
+    ) -> None:
+        """Recursively fetch directory contents."""
         url = f"https://api.github.com/repos/{owner_repo}/contents/{api_path}"
         params: dict[str, str] = {"ref": ref} if ref else {}
 
@@ -93,8 +89,7 @@ class GitHubFetcher:
             raise FetchError(msg)
 
         for item in items:
-            file_count = self._process_item(client, owner_repo, ref, item, local_dir, file_count)
-        return file_count
+            self._process_item(client, owner_repo, ref, item, local_dir)
 
     def _process_item(
         self,
@@ -103,23 +98,22 @@ class GitHubFetcher:
         ref: str | None,
         item: dict[str, Any],
         local_dir: Path,
-        file_count: int,
-    ) -> int:
+    ) -> None:
         """Execute I/O for a single Contents API item."""
-        action = _plan_item_action(item, file_count, self._max_files)
+        action = _plan_item_action(item)
         if action is None:
-            return file_count
+            return
         kind, name, target = action
         if kind == "download":
             download_file(client, target, local_dir / name)
-            return file_count + 1
+            return
         # kind == "recurse"
         sub_dir = local_dir / name
         sub_dir.mkdir(parents=True, exist_ok=True)
-        return self._fetch_dir(client, owner_repo, ref, target, sub_dir, file_count)
+        self._fetch_dir(client, owner_repo, ref, target, sub_dir)
 
 
-def _plan_item_action(item: dict[str, Any], file_count: int, max_files: int) -> tuple[str, str, str] | None:
+def _plan_item_action(item: dict[str, Any]) -> tuple[str, str, str] | None:
     """Decide what action to take for a GitHub Contents API item.
 
     Pure decision function — validates the item and determines the action
@@ -131,16 +125,13 @@ def _plan_item_action(item: dict[str, Any], file_count: int, max_files: int) -> 
         None for unknown or no-op items.
 
     Raises:
-        FetchError: If name validation fails or file limit exceeded.
+        FetchError: If name validation fails.
     """
     name = item.get("name", "")
     validate_entry_name(name)
     item_type = item.get("type", "")
 
     if item_type == "file":
-        if file_count >= max_files:
-            msg = f"Repository exceeds {max_files} file limit (FS-007)"
-            raise FetchError(msg)
         download_url = item.get("download_url")
         if download_url:
             validate_download_url(download_url)
