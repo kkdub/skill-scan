@@ -1,112 +1,382 @@
 # Code Patterns: Design Guidance for Python 3.13+
 
-> **Purpose**: Situational design guidance agents consult *before* making architectural decisions.
-> **Not rules** — enforceable constraints live in `code-rules.json`. This document answers
-> "how should I structure this?" not "what must I check?"
->
-> **Format**: Each pattern follows SITUATION → DECIDE → EXAMPLE → TRAP.
-> Cross-references to `code-rules.json` rule IDs appear where relevant.
+## Section 1: Generic Rules
+
+### Antipatterns
+
+| Rule ID | Severity | Rule |
+|---------|----------|------|
+| ANTI-001 | error | IF function has mutable default THEN use None and initialize inside |
+| ANTI-003 | error | IF need shared state THEN use class attributes or dependency injection |
+| ANTI-004 | warning | IF creating background task THEN store reference and handle completion |
+| ANTI-005 | warning | IF checking type THEN use isinstance() |
+| ANTI-006 | info | IF lambda has complex logic THEN convert to named function |
+| ANTI-007 | warning | IF building string in loop THEN use ''.join() |
+| ANTI-008 | warning | IF using home directory THEN use Path.home() |
+| ANTI-009 | warning | IF parsing JSON THEN handle JSONDecodeError explicitly |
+| ANTI-010 | warning | IF using semaphore THEN use context manager |
+
+### Architecture
+
+| Rule ID | Severity | Rule |
+|---------|----------|------|
+| ARCH-001 | error | IF function has decisions AND I/O THEN split into pure decision function and I/O orchestrator |
+| ARCH-002 | error | IF function needs current time THEN accept time as parameter |
+| ARCH-003 | error | IF function has business logic AND logging THEN return result object with metadata, log at boundary |
+| ARCH-004 | error | IF function decides AND executes THEN split into classifier (returns decision) and executor (acts on decision) |
+| ARCH-005 | error | IF writing business logic THEN keep it pure (no I/O); IF need I/O THEN do it in service/adapter layer |
+
+### Async
+
+| Rule ID | Severity | Rule |
+|---------|----------|------|
+| ASYNC-001 | error | IF tasks are dependent/transactional THEN TaskGroup; IF tasks are independent and partial results OK THEN gather(return_exceptions=True) |
+| ASYNC-002 | error | IF need timeout on async operation THEN use asyncio.timeout context |
+| ASYNC-003 | error | IF function has no await THEN remove async keyword |
+| ASYNC-004 | error | IF calling async function THEN use await (or pass to TaskGroup/create_task) |
+| ASYNC-005 | error | IF need delay in async THEN use await asyncio.sleep() |
+| ASYNC-006 | error | IF file I/O in async function THEN use aiofiles |
+
+### Control
+
+| Rule ID | Severity | Rule |
+|---------|----------|------|
+| CONTROL-001 | error | IF 3+ conditionals for same variable THEN use match/case |
+
+### Dataclasses
+
+| Rule ID | Severity | Rule |
+|---------|----------|------|
+| DATA-001 | error | IF defining dataclass THEN add slots=True, frozen=True unless mutability needed |
+| DATA-002 | error | IF dataclass field has mutable default THEN use field(default_factory=...) |
+
+### Design
+
+| Rule ID | Severity | Rule |
+|---------|----------|------|
+| DESIGN-001 | error | IF same code block appears in 2+ places THEN extract to shared helper |
+| DESIGN-002 | error | IF solution seems complex THEN ask 'is there a simpler way?' |
+
+### Errors
+
+| Rule ID | Severity | Rule |
+|---------|----------|------|
+| ERROR-001 | error | IF catching exceptions THEN specify exception type |
+| ERROR-002 | error | IF raising in except block THEN add from e |
+| ERROR-003 | warning | IF catching broad exception THEN log and either re-raise or handle specifically |
+
+### Fastapi
+
+| Rule ID | Severity | Rule |
+|---------|----------|------|
+| FASTAPI-001 | error | IF using same dependency in multiple endpoints THEN create type alias |
+| FASTAPI-002 | error | IF dependency returns service THEN use Protocol type |
+
+### Files
+
+| Rule ID | Severity | Rule |
+|---------|----------|------|
+| FILE-001 | error | IF doing path operations THEN use pathlib.Path |
+| FILE-002 | error | IF opening file THEN use with context manager |
+
+### Inheritance
+
+| Rule ID | Severity | Rule |
+|---------|----------|------|
+| INHERIT-001 | error | IF method overrides parent/protocol THEN add @override decorator |
+| INHERIT-002 | error | IF adding behavior via inheritance THEN consider protocol + composition instead |
+
+### Pydantic
+
+| Rule ID | Severity | Rule |
+|---------|----------|------|
+| PYDANTIC-001 | error | IF defining Pydantic model THEN add model_config = ConfigDict(extra='forbid') |
+| PYDANTIC-002 | error | IF API model field THEN add Field with description and constraints |
+| PYDANTIC-003 | error | IF validating across fields THEN use @model_validator |
+
+### Runtime
+
+| Rule ID | Severity | Rule |
+|---------|----------|------|
+| RUNTIME-001 | error | IF validating input THEN use explicit if/raise instead of assert |
+| RUNTIME-002 | error | IF need shared state THEN use class attributes, closures, or dependency injection |
+
+### Security
+
+| Rule ID | Severity | Rule |
+|---------|----------|------|
+| SECURITY-001 | error | IF using subprocess THEN use shell=False with list of arguments |
+
+### Shell
+
+| Rule ID | Severity | Rule |
+|---------|----------|------|
+| SHELL-001 | error | IF printing error message in shell THEN redirect to stderr |
+| SHELL-002 | error | IF writing shell script THEN add set -e at top |
+| SHELL-003 | error | IF using variable in shell THEN wrap in double quotes |
+
+### Size
+
+| Rule ID | Severity | Rule |
+|---------|----------|------|
+| SIZE-001 | error | IF file > 500 lines THEN identify responsibilities and split into modules |
+| SIZE-002 | error | IF function > 50 lines THEN extract logical sections to helper functions |
+
+### Strings
+
+| Rule ID | Severity | Rule |
+|---------|----------|------|
+| STRING-001 | error | IF formatting strings THEN use f-string |
+
+### Structure
+
+| Rule ID | Severity | Rule |
+|---------|----------|------|
+| STRUCTURE-001 | warning | IF file handles multiple unrelated concerns THEN split by responsibility into focused modules |
+| STRUCTURE-002 | info | IF package has __init__.py THEN define __all__ listing public exports |
+| STRUCTURE-003 | info | IF importing from project modules THEN use absolute import path |
+
+### Types
+
+| Rule ID | Severity | Rule |
+|---------|----------|------|
+| TYPE-001 | error | IF you see Optional[X] THEN replace with X | None |
+| TYPE-002 | error | IF importing Callable/Mapping/Sequence from typing THEN use collections.abc |
+| TYPE-003 | error | IF method returns own class instance THEN use Self |
+| TYPE-004 | error | IF defining type alias THEN use type keyword |
+| TYPE-005 | error | IF need unknown type THEN use object (or add # type: ignore comment) |
+| TYPE-006 | error | IF function accepts collection THEN use Iterable/Sequence; IF returns THEN use list/dict/tuple |
+| TYPE-007 | error | IF function/method is public (no _ prefix) THEN annotate all parameters and return type |
 
 ---
 
-## 1. Separating Decisions from I/O
+## Section 2: Project-Specific Patterns
 
-**SITUATION**: Function mixes conditional logic with side effects (HTTP, logging, filesystem).
+## Separating Decisions from I/O
 
-**DECIDE**: Split into a pure decision function and an I/O orchestrator.
-
-**Related rules**: ARCH-001, ARCH-003, ARCH-004
+Split functions that mix conditional logic with side effects into a pure decision function and an I/O orchestrator.
 
 ```python
-# Pure decision — no I/O, trivially testable
+# Pure decision -- no I/O, trivially testable
 def classify_finding(finding: Finding) -> Severity:
     if finding.matched_text and finding.rule_id.startswith("PI-"):
         return Severity.CRITICAL
     return Severity.LOW
 
-# Orchestrator — coordinates I/O based on decision
+# Orchestrator -- coordinates I/O based on decision
 def scan_file(path: Path, rules: list[Rule]) -> list[Finding]:
     content = path.read_text()
     return [f for rule in rules if (f := rule.check(content))]
 ```
 
-**TRAP**: "The decision is only one line." It will grow. Extract early.
+**Trap**: "The decision is only one line." It will grow. Extract early.
 
----
+## Injecting Time
 
-## 2. Injecting Time
-
-**SITUATION**: Function needs current time (cache expiry, rate limit checks).
-
-**DECIDE**: Accept time as a parameter. Never call `datetime.now()` inside business logic.
-
-**Related rules**: ARCH-002
+Accept time as a parameter; never call datetime.now() inside business logic.
 
 ```python
 def is_cache_stale(cached_at: datetime, now: datetime, ttl: timedelta) -> bool:
     return (now - cached_at) > ttl
 ```
 
-**TRAP**: `now: datetime = datetime.now(UTC)` as default — evaluated once at definition time.
+**Trap**: now: datetime = datetime.now(UTC) as default -- evaluated once at definition time.
 
----
+## Returning Results Instead of Logging
 
-## 3. Returning Results Instead of Logging
-
-**SITUATION**: Function performs work and you want to log what happened.
-
-**DECIDE**: Return a result object. Let the caller handle logging.
-
-**Related rules**: ARCH-003
+Return a result object from functions that perform work; let the caller handle logging.
 
 ```python
 @dataclass(slots=True, frozen=True)
 class ScanResult:
     findings: list[Finding]
-    counts: dict[str, int]
     verdict: str
-    duration: float
 
-# Boundary layer logs the result
 result = scan(skill_path)
 logger.info("Scan complete", verdict=result.verdict, findings=len(result.findings))
 ```
 
----
+## Project Organization
 
-## 4. Project Organization
-
-This project uses **layered** organization:
+Use layered organization with pure models, a core engine, and a boundary CLI.
 
 ```
 src/skill_scan/
-├── cli.py            # CLI entry points
-├── config.py         # Configuration loading
-├── models.py         # Data models (pure)
-├── scanner.py        # Core scan engine
-├── rules/            # Detection rule definitions
-└── [future modules]
+  cli.py        # CLI entry points (logging, user output)
+  config.py     # Configuration loading
+  models.py     # Data models (pure, no I/O)
+  scanner.py    # Core scan engine
+  rules/        # Detection rule definitions
+```
+
+## Type System
+
+Use modern Python 3.13+ type syntax throughout.
+
+```python
+# Correct
+def get_user(id: int) -> User | None: ...
+from collections.abc import Callable, Sequence
+type Predicate = Callable[[str], bool]
+
+# Wrong
+from typing import Optional, Callable  # TYPE-001, TYPE-002
+```
+
+## Prepare-Compute-Commit Pattern
+
+Use private `_prepare_*` functions to validate inputs and build typed context dataclasses. The prepare function either returns a fully-populated context object or raises a domain exception -- it never returns an error string or a partial result.
+
+```python
+@dataclass(slots=True, frozen=True)
+class _EditContext:
+    file_path: str
+    section: Section
+    lines: list[str]
+
+def _prepare_edit_context(
+    file_path: str,
+    section_id: str,
+    ctx: Context | None,
+    *,
+    ensure_repo_set_func: Callable[..., None],
+    get_text_content_cached_func: Callable[..., tuple[str, list[str]]],
+) -> _EditContext:
+    """Validate and build context. Raises on failure."""
+    ensure_repo_set_func(ctx)            # raises RepositoryNotSetError
+    ensure_markdown_file(file_path)      # raises NotMarkdownFileError
+    content, lines = get_text_content_cached_func(file_path, ctx)
+    sections = parse_sections(content)
+    section = resolve_section_or_raise(sections, section_id)  # raises SectionNotFoundError
+    return _EditContext(file_path=file_path, section=section, lines=lines)
 ```
 
 **Rules**:
-- Models are pure — no I/O, no logging
-- Scanner handles file reading and rule application
-- CLI is the boundary layer (logging, user output)
+- `_prepare_*` NEVER returns error strings or `Context | str` unions.
+- `_prepare_*` either returns a typed context dataclass or raises.
+- Downstream `_compute_*` and `_commit_*` helpers can assume inputs are already valid.
 
----
+## Exception-Based Error Flow
 
-## 5. Type System
+Domain exceptions are defined in `src/errors.py`. Guard functions (`ensure_*`) raise on failure and return `None` on success. There are no partial-result tuples or sentinel string returns.
 
-- Use `X | None` not `Optional[X]` (TYPE-001)
-- Import from `collections.abc` for `Callable`, `Sequence` (TYPE-002)
-- Use `Self` for methods returning own type (TYPE-003)
-- Type hints on all public functions (TYPE-007)
+```python
+# CORRECT: guard raises or returns None
+def ensure_markdown_file(file_path: str) -> None:
+    if not file_path.endswith(".md"):
+        raise NotMarkdownFileError(file_path)
 
----
+# CORRECT: fetch returns clean value or raises
+def get_content(file_path: str, ctx: Context | None, ...) -> tuple[str, list[str]]:
+    raw = fetch_raw(file_path, ctx)          # raises InvalidTextEncodingError on bad bytes
+    return raw, raw.splitlines(keepends=True)
 
-## Related Files
+# WRONG: triple-tuple with error sentinel
+def get_content(...) -> tuple[str, list[str], str | None]: ...  # never do this
 
-| File | Purpose |
-|---|---|
-| `.agent/standards/code-rules.json` | Enforceable rules |
-| `.agent/standards/TEST-PATTERNS.md` | Test writing standards |
+# WRONG: str | None guard return
+def ensure_markdown_file(file_path: str) -> str | None: ...     # never do this
+
+# WRONG: for-early-error chain
+for early_err in [validate_a(), validate_b()]:
+    if early_err:
+        return error_response(early_err)    # never do this
+```
+
+**Rules**:
+- No `(value, lines, error)` triple-tuple returns -- functions return clean values or raise.
+- No `str | None` guard returns -- guards raise or return `None`.
+- No `for early_err in [...]` chains.
+- All domain exceptions inherit from the base class in `src/errors.py`.
+
+## Tool Boundary Exception Catch
+
+The outermost `*_impl` function for each MCP tool is the single exception boundary. It wraps the prepare-compute-commit chain in a `try/except Exception` block and converts any exception to a structured JSON error response via `exception_to_error_response()`.
+
+```python
+def delete_section_impl(
+    file_path: str,
+    section_id: str,
+    ctx: Context | None,
+    *,
+    ensure_repo_set_func: Callable[..., None],
+    get_text_content_cached_func: Callable[..., tuple[str, list[str]]],
+    write_func: Callable[..., str],
+) -> str:
+    try:
+        context = _prepare_delete_context(
+            file_path, section_id, ctx,
+            ensure_repo_set_func=ensure_repo_set_func,
+            get_text_content_cached_func=get_text_content_cached_func,
+        )                                    # may raise RepositoryNotSetError, SectionNotFoundError, etc.
+        result = _compute_deletion(context)  # pure logic, may raise
+        return _commit_and_respond(context, result, write_func=write_func)
+    except Exception as e:
+        return exception_to_error_response(e)
+```
+
+Full exception flow:
+1. Guard inside `_prepare_*` raises (e.g. `NotMarkdownFileError("report.txt")`)
+2. Exception propagates up through `_compute_*` / `_commit_*` without being caught
+3. Boundary `except Exception` catches it
+4. `exception_to_error_response(e)` maps it to `{"success": false, "code": "not_markdown_file", "error": "..."}`
+
+**Rules**:
+- Exactly ONE `try/except Exception` per tool impl, at the outermost level.
+- Never catch exceptions inside `_prepare_*`, `_compute_*`, or `_commit_*` helpers.
+- Never return error strings from helpers -- raise instead.
+
+## Filename Sanitization (SEC-001)
+
+Sanitize any user-controlled string used as a filename by stripping everything except safe characters, then verify the final path stays inside the target directory as defense-in-depth.
+
+```python
+def _sanitize_filename(name: str) -> str:
+    """Strip all chars except [a-zA-Z0-9_-]. Returns '_' if result is empty."""
+    sanitized = re.sub(r"[^a-zA-Z0-9_-]", "_", name)
+    return sanitized if sanitized else "_"
+
+def _verify_path_containment(file_path: Path, save_path: Path) -> None:
+    """Raise ValueError if file_path escapes save_path (defense-in-depth)."""
+    if not file_path.resolve().is_relative_to(save_path.resolve()):
+        raise ValueError(f"Path traversal blocked: {file_path} is not inside {save_path}")
+```
+
+> Trap: replacing only `.` with `_` is insufficient — path separators (`/`, `\`) and null bytes also bypass directory containment.
+
+## Output Formatter Pattern
+
+Output formatters are pure functions that take a `ScanResult` and return a string. No I/O, no side effects. New formats get their own module, are registered in `cli.py`'s format `Choice`, and exported via `__init__.__all__`.
+
+```python
+# sarif_formatter.py (or json_formatter.py)
+def format_sarif(result: ScanResult) -> str:
+    """Format a ScanResult as a SARIF 2.1.0 JSON string."""
+    data = {...}
+    return json.dumps(data, indent=2)
+```
+
+> Trap: adding I/O or side effects inside a formatter breaks testability and violates ARCH-001.
+
+## Facade Re-export Pattern
+
+When splitting a large module into sibling files, keep the original file as a facade: it retains the orchestrator/entry-point functions and types, then re-exports all names from sibling files at the BOTTOM. This preserves every existing import path and mock.patch target.
+
+```python
+# original_module.py  (facade)
+
+# ... local definitions stay here (types, orchestrator functions) ...
+
+# re-exports at BOTTOM -- backward-compat for all consumers
+from src.package.original_module_helpers import (  # noqa: E402, F401
+    _helper_a,
+    _helper_b,
+    PublicHelper,
+)
+```
+
+**Rules**:
+- Re-exports go at the BOTTOM of the facade, after all local definitions (prevents circular imports).
+- Re-export ALL names (public and private) so every existing consumer import path continues to work.
+- Sibling files import types/constants from the facade; the facade imports implementations from siblings (one-way in each direction, resolved by bottom-of-file placement).
+- Use lazy imports inside function bodies when a sibling needs something from the facade that is not yet defined at import time (breaks the circular dependency without a package conversion).

@@ -1,0 +1,17 @@
+- id: skill-scan
+  name: Scan agent skills for security issues
+  description: |
+    Scans agent skill directories for prompt injection, malicious code,
+    and data exfiltration risks. Configure the skill path via args in
+    your .pre-commit-config.yaml:
+
+      repos:
+        - repo: https://github.com/your-org/skill-scan
+          rev: v1.0.0
+          hooks:
+            - id: skill-scan
+              args: ['./skills']
+  entry: skill-scan scan
+  language: python
+  pass_filenames: false
+  types: [directory]
