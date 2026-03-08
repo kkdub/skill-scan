@@ -7,7 +7,7 @@ Security scanner for agent skills — detects prompt injection, malicious code, 
 - **73 detection rules** across 8 categories: prompt injection, malicious code, data exfiltration, credential exposure, supply chain, tool abuse, file safety, and schema validation
 - **Multilingual prompt injection detection** — covers English, Arabic, Chinese, French, German, Japanese, Korean, Russian, and Spanish
 - **Local and remote scanning** — scan a directory on disk or fetch from GitHub
-- **Multiple output formats** — human-readable text or machine-readable JSON
+- **Multiple output formats** — human-readable text, machine-readable JSON, or SARIF v2.1.0 for GitHub Code Scanning
 - **CI-friendly** — `--fail-on` flag exits with code 2 when findings exceed a severity threshold
 - **Zero runtime dependencies** beyond `click` — core engine uses stdlib only
 
@@ -55,6 +55,9 @@ skill-scan scan --repo owner/repo@branch --skill-path skills/my-skill
 # JSON output (for CI pipelines or programmatic use)
 skill-scan scan path/to/skill/ --format json
 
+# SARIF output (for GitHub Code Scanning / GitLab SAST)
+skill-scan scan path/to/skill/ --format sarif
+
 # Quiet mode (verdict only)
 skill-scan scan path/to/skill/ --quiet
 
@@ -69,6 +72,53 @@ skill-scan scan path/to/skill/ --fail-on high
 
 ```bash
 skill-scan validate path/to/SKILL.md
+```
+
+## GitHub Action
+
+Add skill-scan to any GitHub Actions workflow:
+
+```yaml
+- uses: kkdub/skill-scan@main
+  with:
+    path: ./skills/my-skill   # local path (default: .)
+    fail-on: high             # exit code 2 if high or critical findings
+    format: sarif             # text | json | sarif
+```
+
+For remote repo scanning:
+
+```yaml
+- uses: kkdub/skill-scan@main
+  with:
+    repo: owner/repo@main
+    fail-on: high
+```
+
+When `format: sarif`, the action writes `skill-scan-results.sarif` and automatically uploads it to GitHub Code Scanning via `github/codeql-action/upload-sarif`.
+
+**Inputs**
+
+| Input | Default | Description |
+|-------|---------|-------------|
+| `path` | `.` | Local skill directory to scan |
+| `repo` | — | Remote GitHub repo (`owner/repo` or `owner/repo@ref`) |
+| `fail-on` | — | Severity threshold for non-zero exit (`critical`, `high`, `medium`, `low`, `info`) |
+| `format` | `text` | Output format: `text`, `json`, or `sarif` |
+| `config` | — | Path to a skill-scan TOML config file |
+
+## Pre-commit Hook
+
+Add skill-scan as a pre-commit hook:
+
+```yaml
+# .pre-commit-config.yaml
+repos:
+  - repo: https://github.com/kkdub/skill-scan
+    rev: v1.0.0
+    hooks:
+      - id: skill-scan
+        args: ['./skills']   # path to your skill directory
 ```
 
 ## Detection categories
@@ -99,13 +149,16 @@ Custom rules can be authored using the [rule template](src/skill_scan/rules/temp
 ## Python API
 
 ```python
-from skill_scan import scan, Severity
+from skill_scan import scan, format_sarif, Severity
 
 result = scan("path/to/skill/")
 print(result.verdict)  # Verdict.PASS or Verdict.BLOCK
 
 for finding in result.findings:
     print(f"[{finding.severity.name}] {finding.rule_id}: {finding.description}")
+
+# SARIF output for programmatic use
+sarif_output = format_sarif(result)  # returns SARIF v2.1.0 JSON string
 ```
 
 ## Development

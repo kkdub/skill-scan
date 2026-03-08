@@ -1,0 +1,126 @@
+plan: PLAN-013
+generated_at: "2026-03-06"
+
+requirements:
+
+  # --- Explicit requirements ---
+
+  - id: R001
+    requirement: "AST analyzer detects unsafe function calls in Python files (eval, exec, os.system, subprocess with shell=True)"
+    category: functional
+    contract:
+      given: "A .py file containing eval(user_input)"
+      when: "AST analysis runs on the file"
+      then: "Finding produced for unsafe eval() call with correct file and line number"
+    verify: test::tests/unit/test_ast_analyzer.py
+    status: pending
+
+  - id: R002
+    requirement: "AST analyzer catches string concatenation evasions (e.g., getattr(__builtins__, 'ev'+'al'))"
+    category: functional
+    contract:
+      given: "A .py file containing getattr(__builtins__, 'ev' + 'al')(payload)"
+      when: "AST analysis runs on the file"
+      then: "Finding produced for dynamic attribute access constructing 'eval'"
+    verify: test::tests/unit/test_ast_analyzer.py
+    status: pending
+
+  - id: R003
+    requirement: "AST analyzer detects unsafe deserialization (pickle.loads, yaml.load without SafeLoader, marshal.loads)"
+    category: functional
+    contract:
+      given: "A .py file containing pickle.loads(data)"
+      when: "AST analysis runs on the file"
+      then: "Finding produced for unsafe deserialization"
+    verify: test::tests/unit/test_ast_analyzer.py
+    status: pending
+
+  - id: R004
+    requirement: "AST analyzer detects __import__() and importlib.import_module() dynamic imports"
+    category: functional
+    contract:
+      given: "A .py file containing __import__('os').system('rm -rf /')"
+      when: "AST analysis runs on the file"
+      then: "Finding produced for dynamic import with correct line number"
+    verify: test::tests/unit/test_ast_analyzer.py
+    status: pending
+
+  - id: R005
+    requirement: "AST analysis supplements regex rules — both run on .py files, findings are deduplicated"
+    category: functional
+    contract:
+      given: "A .py file with eval() that triggers both EXEC-002 regex and AST detection"
+      when: "Full scan runs (regex + AST)"
+      then: "Only one finding per detection (deduplicated by rule_id + line)"
+    verify: test::tests/unit/test_ast_analyzer.py
+    status: pending
+
+  - id: R006
+    requirement: "AST analysis only runs on .py files; non-Python files are unaffected"
+    category: functional
+    contract:
+      given: "A skill directory with .py, .md, .yaml, and .sh files"
+      when: "Scan runs"
+      then: "AST analysis runs only on .py files; other files scanned with regex only"
+    verify: test::tests/unit/test_ast_analyzer.py
+    status: pending
+
+  - id: R007
+    requirement: "Files with syntax errors fall back to regex-only scanning (no crash)"
+    category: reliability
+    contract:
+      given: "A .py file with invalid Python syntax"
+      when: "AST analysis is attempted"
+      then: "SyntaxError is caught, file is scanned with regex only, no finding produced for parse failure"
+    verify: test::tests/unit/test_ast_analyzer.py
+    status: pending
+
+  # --- Implicit requirements ---
+
+  - id: R-IMP001
+    requirement: "AST analyzer is a pure module (no I/O) — takes parsed AST and returns findings"
+    category: reliability
+    verify: null
+    status: pending
+
+  - id: R-IMP002
+    requirement: "AST analyzer uses stdlib only (ast module)"
+    category: reliability
+    verify: null
+    status: pending
+
+  - id: R-IMP003
+    requirement: "ast_analyzer.py stays under 250 lines"
+    category: reliability
+    verify: null
+    status: pending
+
+  - id: R-IMP004
+    requirement: "AST findings use the same Finding model and existing rule IDs where applicable"
+    category: functional
+    contract:
+      given: "An AST-detected eval() call"
+      when: "Finding is produced"
+      then: "Finding uses rule_id='EXEC-002' (same as regex rule for eval), with severity and category matching"
+    verify: test::tests/unit/test_ast_analyzer.py
+    status: pending
+
+  # --- Effectiveness requirements ---
+
+  - id: R-EFF001
+    requirement: "AST analysis catches >= 80% of string concatenation evasion techniques"
+    category: effectiveness
+    threshold: ">=0.80"
+    acceptance:
+      - "Parametrized test with 10+ evasion variants (concat, join, chr, format) — at least 8 detected"
+    verify: test::tests/unit/test_ast_analyzer.py
+    status: pending
+
+  - id: R-EFF002
+    requirement: "AST analysis produces zero false positives on safe code patterns"
+    category: effectiveness
+    threshold: "0"
+    acceptance:
+      - "Test with safe patterns (ast.literal_eval, safe_eval wrappers, subprocess with shell=False) — zero findings"
+    verify: test::tests/unit/test_ast_analyzer.py
+    status: pending

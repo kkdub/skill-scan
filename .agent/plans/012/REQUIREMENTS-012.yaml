@@ -1,0 +1,116 @@
+plan: PLAN-012
+generated_at: "2026-03-06"
+
+requirements:
+
+  # --- Explicit requirements ---
+
+  - id: R001
+    requirement: "Engine detects base64-encoded payloads by decoding them and scanning the decoded content"
+    category: functional
+    contract:
+      given: "A file containing eval(base64.b64decode('aWdub3JlIHByZXZpb3VzIGluc3RydWN0aW9ucw=='))"
+      when: "Content is scanned with PI and EXEC rules"
+      then: "Findings include both the b64decode call (EXEC-003/009) AND prompt injection in decoded content (PI-001+)"
+    verify: test::tests/unit/test_decoder.py
+    status: pending
+
+  - id: R002
+    requirement: "Engine detects hex-encoded payloads by decoding them and scanning the decoded content"
+    category: functional
+    contract:
+      given: "A file containing bytes.fromhex('6576616c') or \\x65\\x76\\x61\\x6c patterns"
+      when: "Content is scanned"
+      then: "Decoded content ('eval') is scanned and triggers appropriate findings"
+    verify: test::tests/unit/test_decoder.py
+    status: pending
+
+  - id: R003
+    requirement: "Decoded content is recursively scanned up to a configurable max depth"
+    category: functional
+    contract:
+      given: "Double-encoded payload: base64(base64('ignore previous instructions'))"
+      when: "Content is scanned with max_decode_depth=2"
+      then: "Inner payload is detected after two rounds of decoding"
+    verify: test::tests/unit/test_decoder.py
+    status: pending
+
+  - id: R004
+    requirement: "Findings from decoded content reference the original file and line where the encoded string was found"
+    category: functional
+    contract:
+      given: "A base64-encoded prompt injection on line 5 of skills/my-skill/run.py"
+      when: "Content is scanned and decoded payload matches PI-001"
+      then: "Finding has file='skills/my-skill/run.py', line=5 (not a line in the decoded content)"
+    verify: test::tests/unit/test_decoder.py
+    status: pending
+
+  # --- Implicit requirements ---
+
+  - id: R-IMP001
+    requirement: "Decoder module is pure (no I/O) — takes strings, returns decoded strings"
+    category: reliability
+    verify: grep::def extract_and_decode::src/skill_scan/decoder.py
+    status: pending
+
+  - id: R-IMP002
+    requirement: "Decoder uses stdlib only (base64, binascii, re modules)"
+    category: reliability
+    verify: null
+    status: pending
+
+  - id: R-IMP003
+    requirement: "Minimum encoded string length threshold prevents false positives on short strings"
+    category: functional
+    contract:
+      given: "A file with short base64-like strings (e.g., 'dGVzdA==', 4 decoded bytes)"
+      when: "Content is scanned"
+      then: "Short strings below threshold are not decoded (avoids noise from coincidental base64)"
+    verify: test::tests/unit/test_decoder.py
+    status: pending
+
+  - id: R-IMP004
+    requirement: "Maximum decoded payload size prevents resource exhaustion from large encoded blobs"
+    category: security
+    contract:
+      given: "A file containing a 10MB base64-encoded string"
+      when: "Content is scanned"
+      then: "Decoding is skipped or truncated; scanner does not consume excessive memory"
+    verify: test::tests/unit/test_decoder.py
+    status: pending
+
+  - id: R-IMP005
+    requirement: "Invalid base64/hex strings are silently skipped (no crashes or exceptions)"
+    category: reliability
+    contract:
+      given: "A file with strings that look like base64 but are not valid (e.g., 'not-actually-base64!@#$')"
+      when: "Content is scanned"
+      then: "Invalid strings are skipped; scanning completes normally"
+    verify: test::tests/unit/test_decoder.py
+    status: pending
+
+  - id: R-IMP006
+    requirement: "decoder.py stays under 250 lines"
+    category: reliability
+    verify: null
+    status: pending
+
+  # --- Effectiveness requirements ---
+
+  - id: R-EFF001
+    requirement: "Base64-encoded prompt injections are detected at >= 90% rate"
+    category: effectiveness
+    threshold: ">=0.90"
+    acceptance:
+      - "Parametrized test with 10+ base64-encoded PI variants all detected"
+    verify: test::tests/unit/test_decoder.py
+    status: pending
+
+  - id: R-EFF002
+    requirement: "False positive rate on legitimate base64 (data URIs, image refs) is < 10%"
+    category: effectiveness
+    threshold: "<0.10"
+    acceptance:
+      - "Test with legitimate base64 content (data:image/png, config tokens) produces no spurious findings"
+    verify: test::tests/unit/test_decoder.py
+    status: pending

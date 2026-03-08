@@ -228,8 +228,25 @@
       "correctPattern": "def should_sync(source) -> bool: return source.is_stale()  # Pure decision\ndef sync_source(source): logger.info(...); if not should_sync(source): return ...; data = fetch_from_remote(...)  # I/O orchestration",
       "antiPattern": "def sync_source(source): logger.info(...); if source.is_stale(): data = fetch_from_remote(...); logger.info(...)",
       "autofix": null,
-      "decisionSignals": ["if", "match", "raise", "conditionals", "any()", "all()", "validation", "return based on condition"],
-      "infrastructureSignals": ["database queries", "HTTP requests", "filesystem operations", "logging", "datetime.now()", "subprocess", "environment variables"]
+      "decisionSignals": [
+        "if",
+        "match",
+        "raise",
+        "conditionals",
+        "any()",
+        "all()",
+        "validation",
+        "return based on condition"
+      ],
+      "infrastructureSignals": [
+        "database queries",
+        "HTTP requests",
+        "filesystem operations",
+        "logging",
+        "datetime.now()",
+        "subprocess",
+        "environment variables"
+      ]
     },
     "ARCH-002": {
       "name": "Inject Time as a Parameter",
@@ -583,8 +600,8 @@
       "name": "File Size Limit",
       "category": "size",
       "description": "Files should be < 500 lines. Split large files into focused modules.",
-      "ifThen": "IF file > 500 lines THEN identify responsibilities and split into modules",
-      "detectHeuristic": "wc -l file.py shows > 500",
+      "ifThen": "IF file > 300 lines THEN identify responsibilities and split into modules",
+      "detectHeuristic": "wc -l file.py shows > 300",
       "correctPattern": "Split into api/health.py, api/audit.py, api/debug.py",
       "antiPattern": "main.py with 544 lines mixing health, audit, debug endpoints",
       "autofix": null,
