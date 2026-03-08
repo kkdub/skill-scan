@@ -1,53 +1,62 @@
 # Test Patterns: pytest Standards for Python 3.13+
 
-> **Purpose**: Test writing standards for any agent writing or modifying tests.
->
-> **Format**: Each pattern follows SITUATION → DECIDE → EXAMPLE → TRAP.
+## Section 1: Generic Rules
+
+### Assertions
+
+| Rule ID | Severity | Rule |
+|---------|----------|------|
+| TEST-001 | error | IF asserting HTTP status code THEN use named constant from tests/constants.py |
+| TEST-005 | warning | IF comparing float values THEN use pytest.approx() |
+| TEST-006 | error | IF testing exception THEN use pytest.raises(SpecificError, match='pattern') |
+| TEST-010 | error | IF writing test THEN include at least one assert |
+
+### Mocking
+
+| Rule ID | Severity | Rule |
+|---------|----------|------|
+| TEST-004 | error | IF mocking external HTTP calls THEN use @respx.mock + respx.get/post().mock() |
+| TEST-008 | error | IF isolating code under test THEN mock its dependencies, not itself |
+
+### Naming
+
+| Rule ID | Severity | Rule |
+|---------|----------|------|
+| TEST-007 | warning | IF naming test function THEN use test_<unit>_<behavior>_<condition> pattern |
+
+### Parametrize
+
+| Rule ID | Severity | Rule |
+|---------|----------|------|
+| PARAM-001 | info | IF testing same behavior with multiple inputs THEN use @pytest.mark.parametrize |
 
 ---
 
-## Quick Reference
+## Section 2: Project-Specific Patterns
 
-| Task | Pattern | Rule |
-|------|---------|------|
-| HTTP status | `assert response.status_code == HTTP_OK` | TEST-001 |
-| Float compare | `assert value == pytest.approx(3.14)` | TEST-005 |
-| Exception | `with pytest.raises(ValueError, match="msg"):` | TEST-006 |
-| Test names | `test_<unit>_<behavior>_<condition>` | TEST-007 |
-| Mock target | Mock dependencies, not code under test | TEST-008 |
-| Assertions | Every test must assert something | TEST-010 |
-| Multiple inputs | `@pytest.mark.parametrize(...)` | PARAM-001 |
-| HTTP mocking | `@respx.mock` + `respx.get(url).mock(...)` | TEST-004 |
+## HTTP Status Constants
 
----
-
-## 1. HTTP Status Constants (TEST-001)
-
-Use named constants from `tests/constants.py`. Never magic numbers.
+Use named constants from tests/constants.py instead of magic numbers for HTTP status assertions.
 
 ```python
 from tests.constants import HTTP_OK
 assert response.status_code == HTTP_OK
 ```
 
----
+## Exception Assertions
 
-## 2. Exception Assertions (TEST-006)
-
-Use specific type AND match string:
+Assert on both exception type and message to catch the right error.
 
 ```python
 with pytest.raises(ValueError, match="must be positive"):
     process_data(value=-5)
 ```
 
-**TRAP**: `pytest.raises(Exception)` catches everything — you'll never know if a different error fires.
+**Trap**: pytest.raises(Exception) catches everything -- a different error may slip through undetected.
 
----
+## HTTP Mocking with respx
 
-## 3. HTTP Mocking with respx (TEST-004)
-
-Mock HTTP with `respx`, not `unittest.mock.patch`:
+Mock external HTTP calls with respx, not unittest.mock.patch.
 
 ```python
 @respx.mock
@@ -59,35 +68,29 @@ async def test_api_client_fetches_data() -> None:
     assert result.accepted == []
 ```
 
----
+## Mock Dependencies
 
-## 4. Mock Dependencies, Not Code Under Test (TEST-008)
+Mock a unit's dependencies, not the unit itself.
 
 ```python
-# CORRECT — mock the dependency
 def test_search_uses_client(mock_client: MagicMock) -> None:
     service = SearchService(client=mock_client)
     service.search("query")
     mock_client.get.assert_called_once()
-
-# WRONG — mocking code being tested
-@patch("skill_scan.SearchService.search")  # tests the mock, not SearchService
 ```
 
----
+## Test Names
 
-## 5. Test Names (TEST-007)
-
-Pattern: `test_<unit>_<behavior>_<condition>`
+Follow the pattern test_<unit>_<behavior>_<condition> for self-documenting tests.
 
 ```python
 def test_scan_detects_prompt_injection_in_skill_md() -> None: ...
 def test_verdict_returns_block_when_critical_finding() -> None: ...
 ```
 
----
+## Parametrize
 
-## 6. Parametrize for Multiple Inputs (PARAM-001)
+Use @pytest.mark.parametrize when testing the same behavior with multiple inputs.
 
 ```python
 @pytest.mark.parametrize("pattern,expected_severity", [
@@ -98,35 +101,26 @@ def test_prompt_injection_detection(pattern: str, expected_severity: str) -> Non
     assert detect(pattern).severity == expected_severity
 ```
 
----
+## Coverage Strategy
 
-## 7. Coverage Strategy
+For every public function, write tests covering happy path, edge cases, and error cases.
 
-Per public function, test:
-1. **Happy path** — normal inputs, expected behavior
-2. **Edge cases** — empty inputs, boundary values
-3. **Error cases** — invalid inputs, expected exceptions
-
----
+```
+Per public function:
+  1. Happy path -- normal inputs, expected behavior
+  2. Edge cases -- empty inputs, boundary values
+  3. Error cases -- invalid inputs, expected exceptions
+```
 
 ## Anti-Patterns Summary
 
+Quick lookup of what NOT to do and its correct replacement.
+
 | Anti-Pattern | Correct Pattern | Rule |
 |---|---|---|
-| `assert resp.status_code == 404` | `== HTTP_NOT_FOUND` | TEST-001 |
-| `assert result == 3.14` | `== pytest.approx(3.14)` | TEST-005 |
-| `pytest.raises(Exception)` | `pytest.raises(SpecificError, match=...)` | TEST-006 |
-| `def test_user():` | `def test_user_returns_none_for_missing_id():` | TEST-007 |
-| `@patch("myapp.Service.method")` | Inject mock via constructor | TEST-008 |
+| assert resp.status_code == 404 | == HTTP_NOT_FOUND | TEST-001 |
+| assert result == 3.14 | == pytest.approx(3.14) | TEST-005 |
+| pytest.raises(Exception) | pytest.raises(SpecificError, match=...) | TEST-006 |
+| def test_user(): | def test_user_returns_none_for_missing_id(): | TEST-007 |
+| @patch("myapp.Service.method") | Inject mock via constructor | TEST-008 |
 | Test without assertions | Always assert something | TEST-010 |
-
----
-
-## Related Files
-
-| File | Purpose |
-|---|---|
-| `.agent/standards/code-rules.json` | Enforceable rules |
-| `.agent/standards/CODE-PATTERNS.md` | Design guidance |
-| `tests/conftest.py` | Shared fixtures |
-| `tests/constants.py` | HTTP status constants |

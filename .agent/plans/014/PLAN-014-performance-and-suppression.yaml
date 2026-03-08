@@ -1,0 +1,240 @@
+id: "PLAN-014"
+title: "Concurrent Scanning & Inline Suppression"
+type: implementation
+status: Proposed
+created: 2026-03-06
+
+linked_spec: null
+
+description: |
+  Two operational improvements that make skill-scan faster and more usable
+  for legitimate developers:
+
+  1. Concurrent scanning: Wrap file scanning in ProcessPoolExecutor. The existing
+     models (Finding, Rule, ScanResult) are frozen dataclasses, making them
+     process-safe. Skip multiprocessing for small file counts to avoid overhead.
+
+  2. Inline suppression: Support # noqa: RULE-ID comments to suppress specific
+     findings. Bare # noqa (no rule ID) is NOT supported — this is a security
+     scanner, and blanket suppression defeats the purpose. Suppressed findings
+     are counted in ScanResult.suppressed_count so auditors can see when
+     suppressions are used.
+
+requirements:
+  file: REQUIREMENTS-014.yaml
+  ids:
+    - R001      # Concurrent scanning with ProcessPoolExecutor
+    - R002      # Identical results to sequential
+    - R003      # Configurable worker count
+    - R004      # Small file counts skip multiprocessing
+    - R005      # Inline noqa suppression
+    - R006      # Multiple rule IDs in noqa
+    - R007      # suppressed_count in ScanResult
+    - R008      # Formatters report suppressed count
+    - R-IMP001  # Fallback to sequential
+    - R-IMP002  # Case/whitespace tolerant noqa parsing
+    - R-IMP003  # Bare noqa not supported
+    - R-IMP004  # No new deps
+    - R-IMP005  # suppressed_count field with default 0
+  uncovered: []
+
+utilities_audit:
+  status: complete
+  search_performed:
+    - query: "Reviewed content_scanner.py scan_all_files() loop"
+      found: "Lines 20-37: sequential for loop over files, calls _scan_file() per file. Clean separation — each file scanned independently."
+    - query: "Reviewed models.py for mutability"
+      found: "Finding, Rule, ScanResult all frozen=True, slots=True. Process-safe for concurrent scanning."
+    - query: "Reviewed engine.py for noqa integration point"
+      found: "match_line() returns findings per line. Noqa filtering fits as a post-filter after match_line() or in _apply_rules()."
+    - query: "Reviewed formatters.py and json_formatter.py"
+      found: "formatters.py _header() and _verdict_banner() report file counts. json_formatter.py format_json() builds output dict. Both need suppressed_count addition."
+  categories:
+    error_handling:
+      needed: false
+    validation:
+      needed: false
+    logging:
+      needed: false
+    types:
+      needed: false
+    configuration:
+      needed: false
+    http_client:
+      needed: false
+  infrastructure_parts: []
+
+environment:
+  status: assessed
+  build:
+    tool: make
+    install_cmd: "make install"
+    check_cmd: "make check"
+    prerequisites: ["Python 3.13", "uv"]
+  runtime_services: []
+  changes:
+    new_dependencies: []
+    env_vars: []
+    schema_changes: []
+    ci_changes: []
+    build_changes: []
+
+# Skeleton: opt-out
+# Category: brownfield single-layer changes
+# Justification: Concurrency wraps existing loop in content_scanner.py.
+# Suppression adds post-filter in engine.py. Both are modifications to
+# existing modules, not new cross-layer features.
+
+parts:
+  - id: a
+    title: "Concurrent file scanning with ProcessPoolExecutor"
+    status: Pending
+    requirements_covered: [R001, R002, R003, R004, R-IMP001, R-IMP004]
+    approach:
+      - step: "Add concurrency to scan_all_files() in content_scanner.py"
+        files: [src/skill_scan/content_scanner.py]
+        notes: >
+          Add MIN_FILES_FOR_CONCURRENCY constant (e.g., 8). Below this threshold,
+          keep existing sequential loop. Above, use concurrent.futures.ProcessPoolExecutor
+          with max_workers=min(os.cpu_count() or 4, 8). Submit _scan_file() calls,
+          collect results via as_completed(). Aggregate findings, bytes_scanned,
+          files_skipped identically to sequential path. Wrap in try/except to fall
+          back to sequential if multiprocessing fails (e.g., platform limitation).
+          content_scanner.py is currently 121 lines — room for ~130 lines of additions.
+      - step: "Add max_workers to ScanConfig"
+        files: [src/skill_scan/config.py]
+        notes: >
+          Add max_workers: int = 0 to ScanConfig (0 means auto-detect).
+          Add to _SCAN_FIELDS for TOML config loading. Thread through
+          scan_all_files() from scanner.py.
+      - step: "Write tests for concurrent scanning"
+        files: [tests/unit/test_content_scanner.py]
+        notes: >
+          Test that concurrent and sequential produce identical results.
+          Test that small file counts use sequential path. Test max_workers
+          config threading. Test fallback on ProcessPoolExecutor failure
+          (mock to raise RuntimeError).
+    criteria:
+      - "scan_all_files() uses ProcessPoolExecutor for file counts >= MIN_FILES_FOR_CONCURRENCY"
+      - "scan_all_files() uses sequential loop for small file counts"
+      - "Concurrent results are identical to sequential (findings, bytes, skipped)"
+      - "max_workers is configurable in ScanConfig with default auto-detect"
+      - "Fallback to sequential on multiprocessing failure"
+      - "content_scanner.py stays under 250 lines"
+      - "All existing tests still pass"
+
+  - id: b
+    title: "Inline suppression via # noqa: RULE-ID comments"
+    status: Pending
+    requirements_covered: [R005, R006, R007, R008, R-IMP002, R-IMP003, R-IMP005]
+    approach:
+      - step: "Add suppressed_count field to ScanResult model"
+        files: [src/skill_scan/models.py]
+        notes: >
+          Add suppressed_count: int = 0 to ScanResult. Frozen dataclass, default 0
+          ensures backward compatibility. No other model changes needed.
+      - step: "Create suppression.py with noqa parsing and filtering"
+        files: [src/skill_scan/suppression.py]
+        notes: >
+          Pure module. Functions:
+          parse_noqa(line: str) -> frozenset[str] — extracts rule IDs from # noqa: RULE-ID[, RULE-ID].
+          Returns empty frozenset if no noqa or bare noqa (no rule IDs).
+          filter_suppressed(findings: list[Finding], lines: list[str]) -> tuple[list[Finding], int] —
+          filters findings whose rule_id appears in the noqa set for their line.
+          Returns (remaining_findings, suppressed_count).
+          Regex: r'#\s*noqa:\s*([\w-]+(?:\s*,\s*[\w-]+)*)' (case-insensitive).
+      - step: "Integrate suppression into content_scanner.py"
+        files: [src/skill_scan/content_scanner.py]
+        notes: >
+          In _apply_rules() or _scan_file(), after getting findings from match_content(),
+          call filter_suppressed(). Return suppressed_count alongside findings.
+          Thread suppressed_count up through scan_all_files() to scanner.py, where
+          it's set on ScanResult.
+      - step: "Update formatters to report suppressed count"
+        files: [src/skill_scan/formatters.py, src/skill_scan/json_formatter.py]
+        notes: >
+          formatters.py _header(): add "Suppressed: N findings via noqa" line when > 0.
+          json_formatter.py format_json(): add "suppressed_count" key to output dict.
+          SARIF formatter (if PLAN-011 is merged first) should also include it.
+      - step: "Write tests for suppression"
+        files: [tests/unit/test_suppression.py]
+        notes: >
+          Test parse_noqa with valid/invalid/bare/multi-rule comments.
+          Test filter_suppressed with matching and non-matching rule IDs.
+          Test case insensitivity and whitespace tolerance.
+          Test bare # noqa does NOT suppress.
+          Test suppressed_count is correct.
+          Test formatter output includes suppressed info.
+    criteria:
+      - "# noqa: EXEC-002 suppresses EXEC-002 finding on that line"
+      - "# noqa: PI-001, EXEC-002 suppresses both rules"
+      - "Bare # noqa (no rule ID) does NOT suppress any findings"
+      - "ScanResult.suppressed_count reflects number of suppressed findings"
+      - "Text formatter shows 'Suppressed: N findings via noqa' when > 0"
+      - "JSON formatter includes 'suppressed_count' key"
+      - "noqa parsing is case-insensitive and whitespace-tolerant"
+      - "suppression.py is under 250 lines"
+      - "All existing tests still pass"
+
+acceptance_scenarios:
+  - scenario: "Concurrent scanning produces same results as sequential"
+    invoke: "scan a 20-file skill directory with max_workers=2 and compare against sequential (max_workers=1)"
+    expect: "Identical findings list (order-independent), same bytes_scanned, same verdict"
+    test_file: null
+    status: pending
+
+  - scenario: "Inline noqa suppresses specific finding and is reported"
+    invoke: "scan a skill directory where line 5 has eval() with # noqa: EXEC-002"
+    expect: >
+      No EXEC-002 finding for line 5 in results. ScanResult.suppressed_count == 1.
+      Text output shows 'Suppressed: 1 findings via noqa'. Other findings unaffected.
+    test_file: null
+    status: pending
+
+allowed_files:
+  - "src/skill_scan/content_scanner.py"
+  - "src/skill_scan/config.py"
+  - "src/skill_scan/models.py"
+  - "src/skill_scan/suppression.py"
+  - "src/skill_scan/scanner.py"
+  - "src/skill_scan/formatters.py"
+  - "src/skill_scan/json_formatter.py"
+  - "tests/unit/test_content_scanner.py"
+  - "tests/unit/test_suppression.py"
+
+forbidden:
+  - "config/production/**"
+  - ".env*"
+
+acceptance_criteria:
+  - "All requirements have status: done"
+  - "All parts have status: Done"
+  - "All tests pass"
+  - "All acceptance scenarios have status: passing (if defined)"
+
+stop_condition: |
+  When all requirements are verified and all parts are complete.
+
+work_log: []
+evidence: []
+
+handoff:
+  stopped_at: null
+  current_state: null
+  next_steps: []
+  blockers: []
+  scope:
+    files: []
+    functions: []
+    components: []
+  decisions:
+    - "ProcessPoolExecutor (not ThreadPoolExecutor) — regex matching is CPU-bound"
+    - "MIN_FILES_FOR_CONCURRENCY threshold avoids overhead for small scans"
+    - "Bare # noqa is NOT supported — security scanner needs explicit rule IDs"
+    - "suppressed_count on ScanResult (not suppressed_findings list) — keeps model lean"
+    - "Suppression filtering happens after match_content(), not inside the engine"
+  open_questions: []
+  cross_part_knowledge: []
+  active_signals: []
+
+errors: []

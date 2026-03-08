@@ -1,0 +1,218 @@
+id: "PLAN-012"
+title: "Dynamic Payload Decoding"
+type: implementation
+status: Proposed
+created: 2026-03-06
+
+linked_spec: null
+
+description: |
+  Add a pre-processing step to the scan engine that detects base64 and hex-encoded
+  strings, decodes them in memory, and recursively scans the decoded content against
+  all detection rules. This catches prompt injections and malicious code hidden inside
+  encoded payloads that regex-only scanning would miss.
+
+  Currently EXEC-003/009 catch *calls* to b64decode, but don't inspect what's inside
+  the encoded string. This plan adds actual content inspection of encoded payloads.
+
+  Design: new decoder.py module with pure functions. Integrates into engine.py's
+  match_content() flow as an additional pass after line/file matching — similar to
+  how normalize_text works as a secondary pass.
+
+requirements:
+  file: REQUIREMENTS-012.yaml
+  ids:
+    - R001      # Base64 decode and scan
+    - R002      # Hex decode and scan
+    - R003      # Recursive decoding with depth limit
+    - R004      # Findings reference original file/line
+    - R-IMP001  # Decoder is pure
+    - R-IMP002  # Stdlib only
+    - R-IMP003  # Min length threshold
+    - R-IMP004  # Max payload size
+    - R-IMP005  # Invalid strings skipped
+    - R-IMP006  # Under 250 lines
+    - R-EFF001  # Base64 PI detection rate >= 90%
+    - R-EFF002  # False positive rate < 10%
+  uncovered: []
+
+utilities_audit:
+  status: complete
+  search_performed:
+    - query: "Reviewed engine.py match_content() flow"
+      found: "match_content() applies line rules, file rules, then normalized variants. Decoder pass fits as a 4th stage."
+    - query: "Reviewed normalizer.py pattern"
+      found: "normalize_text() is called per-line and per-file in engine.py. Decoder follows same integration pattern."
+    - query: "Checked for existing base64/decode utilities"
+      found: "None in src/. Rules EXEC-003/009 detect b64decode calls via regex but don't decode content."
+  categories:
+    error_handling:
+      needed: false
+    validation:
+      needed: false
+    logging:
+      needed: false
+    types:
+      needed: false
+    configuration:
+      needed: false
+    http_client:
+      needed: false
+  infrastructure_parts: []
+
+environment:
+  status: assessed
+  build:
+    tool: make
+    install_cmd: "make install"
+    check_cmd: "make check"
+    prerequisites: ["Python 3.13", "uv"]
+  runtime_services: []
+  changes:
+    new_dependencies: []
+    env_vars: []
+    schema_changes: []
+    ci_changes: []
+    build_changes: []
+
+# Skeleton: opt-out
+# Category: brownfield single-layer extension
+# Justification: Adding a pre-processing pass to existing engine. Single module
+# (decoder.py) integrated into one call site (engine.py match_content).
+
+parts:
+  - id: a
+    title: "Decoder module — extract and decode encoded payloads"
+    status: Pending
+    requirements_covered: [R-IMP001, R-IMP002, R-IMP003, R-IMP004, R-IMP005, R-IMP006]
+    verify_group: decode-and-scan
+    approach:
+      - step: "Create decoder.py with extraction and decoding functions"
+        files: [src/skill_scan/decoder.py]
+        notes: >
+          Pure module, stdlib only (base64, binascii, re). Key functions:
+          extract_encoded_strings(content) -> list[EncodedPayload] — finds base64 and hex
+          strings using regex. decode_payload(payload) -> str | None — attempts decode,
+          returns None on failure. EncodedPayload is a frozen dataclass with fields:
+          encoded_text, encoding_type ('base64'|'hex'), line_num, start_offset.
+          Constants: MIN_ENCODED_LENGTH=24 (avoids short false positives),
+          MAX_DECODED_SIZE=100_000 (100KB limit per payload), MAX_DECODE_DEPTH=2.
+      - step: "Add base64 extraction regex and decoder"
+        files: [src/skill_scan/decoder.py]
+        notes: >
+          Base64 regex: match strings inside quotes or standalone blocks of [A-Za-z0-9+/=]{24,}.
+          Must handle: raw strings, f-strings, triple-quoted strings. Filter out data:image/
+          URIs and known non-payload patterns. decode via base64.b64decode with validate=True.
+      - step: "Add hex extraction regex and decoder"
+        files: [src/skill_scan/decoder.py]
+        notes: >
+          Hex patterns: bytes.fromhex('...'), \x41\x42\x43 sequences, 0x-prefixed hex blocks.
+          Decode via bytes.fromhex(). Filter out CSS color codes (#fff, #a0b1c2).
+      - step: "Write unit tests for decoder module"
+        files: [tests/unit/test_decoder.py]
+        notes: >
+          Test extraction of base64 and hex strings. Test decoding valid and invalid payloads.
+          Test min length filtering. Test max size truncation. Test data:image/ exclusion.
+          Test recursive decode depth. Test that invalid base64/hex is silently skipped.
+    criteria:
+      - "extract_encoded_strings() finds base64 strings >= MIN_ENCODED_LENGTH in content"
+      - "extract_encoded_strings() finds hex-encoded strings (bytes.fromhex, \\x sequences)"
+      - "decode_payload() returns decoded UTF-8 string or None for invalid payloads"
+      - "Strings shorter than MIN_ENCODED_LENGTH are not extracted"
+      - "Payloads larger than MAX_DECODED_SIZE are skipped"
+      - "Invalid base64/hex strings return None (no exceptions raised)"
+      - "data:image/ URIs are excluded from extraction"
+      - "decoder.py is under 250 lines"
+
+  - id: b
+    title: "Engine integration — scan decoded payloads and produce findings"
+    status: Pending
+    depends_on: [a]
+    requirements_covered: [R001, R002, R003, R004, R-EFF001, R-EFF002]
+    verify_group: decode-and-scan
+    approach:
+      - step: "Add decoded-content scanning pass to match_content()"
+        files: [src/skill_scan/rules/engine.py]
+        notes: >
+          After existing line/file/normalized passes, add a decode pass:
+          call extract_encoded_strings(content), decode each, scan decoded text
+          with match_content() recursively (respecting MAX_DECODE_DEPTH counter).
+          Add _decoded_content_findings() helper following the pattern of
+          _normalized_line_findings(). Pass depth counter to prevent infinite recursion.
+          Prefix finding descriptions with "[decoded]" so users know the match was in
+          decoded content. Findings keep original file path and line number from the
+          encoded string's location.
+      - step: "Write integration tests — encoded payloads caught by scanning"
+        files: [tests/unit/test_decoder.py]
+        notes: >
+          Test full pipeline: base64-encoded PI text -> match_content() -> finding with
+          PI rule. Test hex-encoded eval() -> finding with EXEC rule. Test double-encoded
+          payload at depth 2. Test that legitimate base64 (image data, config tokens)
+          produces no false positives. Test findings reference original line, not decoded
+          line. Test that engine.py stays under 250 lines (currently 229).
+    criteria:
+      - "match_content() decodes base64 payloads and scans decoded text against all rules"
+      - "match_content() decodes hex payloads and scans decoded text against all rules"
+      - "Recursive decoding works up to MAX_DECODE_DEPTH=2"
+      - "Findings from decoded content have correct original file path and line number"
+      - "Finding descriptions are prefixed with '[decoded]' for decoded-content matches"
+      - "Legitimate base64 content (data:image, config tokens) does not produce false positives"
+      - "engine.py stays under 250 lines after changes"
+      - "All tests pass including effectiveness tests"
+
+acceptance_scenarios:
+  - scenario: "Base64-encoded prompt injection detected through decoding"
+    invoke: "scan a skill directory containing a file with eval(base64.b64decode('aWdub3JlIHByZXZpb3VzIGluc3RydWN0aW9ucw=='))"
+    expect: >
+      Findings include EXEC-003 (b64decode call) AND a PI-rule finding from the decoded
+      text 'ignore previous instructions', with file/line pointing to the original source
+    test_file: null
+    status: pending
+
+  - scenario: "Legitimate base64 content is not flagged"
+    invoke: "scan a skill directory with data:image/png;base64,iVBOR... and base64 config tokens"
+    expect: "No findings from decoded content (data URIs excluded, short tokens below threshold)"
+    test_file: null
+    status: pending
+
+allowed_files:
+  - "src/skill_scan/decoder.py"
+  - "src/skill_scan/rules/engine.py"
+  - "tests/unit/test_decoder.py"
+
+forbidden:
+  - "config/production/**"
+  - ".env*"
+
+acceptance_criteria:
+  - "All requirements have status: done"
+  - "All parts have status: Done"
+  - "All tests pass"
+  - "All acceptance scenarios have status: passing (if defined)"
+
+stop_condition: |
+  When all requirements are verified and all parts are complete.
+
+work_log: []
+evidence: []
+
+handoff:
+  stopped_at: null
+  current_state: null
+  next_steps: []
+  blockers: []
+  scope:
+    files: []
+    functions: []
+    components: []
+  decisions:
+    - "Decoder integrates as a 4th pass in match_content(), after line/file/normalized passes"
+    - "MIN_ENCODED_LENGTH=24 to avoid false positives on short strings"
+    - "MAX_DECODED_SIZE=100KB and MAX_DECODE_DEPTH=2 for safety"
+    - "Findings from decoded content keep original file/line, prefixed with [decoded]"
+    - "data:image/ URIs excluded from extraction to reduce false positives"
+  open_questions: []
+  cross_part_knowledge: []
+  active_signals: []
+
+errors: []
