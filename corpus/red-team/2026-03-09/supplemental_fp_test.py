@@ -29,7 +29,7 @@ FP_CASES = [
     ("x = 'system' + '_config'\n", "Concat building 'system_config'"),
     ("log.info('entering eval mode')\n", "Log message containing 'eval'"),
     ("import yaml\nyaml.load(data, yaml.SafeLoader)\n",
-     "yaml.load with positional SafeLoader (safe but flagged)"),
+     "yaml.load with positional SafeLoader (safe)"),
 ]
 
 

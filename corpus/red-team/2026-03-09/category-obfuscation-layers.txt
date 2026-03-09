@@ -3,11 +3,11 @@
 getattr(__builtins__, chr(101)+chr(118)+chr(97)+chr(108))('1+1')
 
 # join-getattr-import: join-built '__import__' in getattr
-# Status: EVADED
+# Status: DETECTED
 getattr(__builtins__, ''.join(['__','im','po','rt','__']))('os')
 
 # double-indirection-chr: chr() with arithmetic expressions (not plain int constants)
-# Status: EVADED
+# Status: DETECTED
 x = chr(51+50) + chr(60+58) + chr(48+49) + chr(54+54)
 
 # lambda-eval: eval() inside lambda (should detect the eval call itself)

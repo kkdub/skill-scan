@@ -23,7 +23,7 @@ x = 'ev' + '\x00' + 'al'
 x = 'e' + 'v' + 'a' + 'l' + 'e' + 'v' + 'a' + 'l' + 'e' + 'v' + 'a' + 'l' + 'e' + 'v' + 'a' + 'l' + 'e' + 'v' + 'a' + 'l
 
 # multiline-concat: Implicit string concat across lines (Python auto-concat)
-# Status: DETECTED
+# Status: EVADED
 x = ('ev'
      'al')
 

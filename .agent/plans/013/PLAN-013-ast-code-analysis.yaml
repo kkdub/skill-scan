@@ -233,12 +233,12 @@ handoff:
     - "SyntaxError = graceful fallback to regex-only (no finding for parse failure)"
     - "Integration point is content_scanner.py, not engine.py (keeps engine focused on regex)"
     - "String resolution extracted to _ast_helpers.py to keep ast_analyzer.py under 250 lines"
-    - "ast_analyzer.py is at exactly 250 lines — future additions require a split first"
+    - "ast_analyzer.py is at the 250-line limit — future additions require a split first"
   open_questions: []
   cross_part_knowledge:
     - "Module aliasing (import-as, from-import) is out of scope — requires import tracking"
     - "Variable aliasing (e = eval; e(x)) not detectable without data flow analysis"
   active_signals:
-    - "[INFO] ast_analyzer.py at 250-line limit"
+    - "[INFO] ast_analyzer.py at the 250-line limit"
 
 errors: []

@@ -178,3 +178,19 @@ class TestMapChrInJoin:
         code = "x = ''.join(map(chr, [101,120,101,99]))\n"
         findings = analyze_python(code, _FILE)
         assert any("exec" in f.matched_text for f in findings)
+
+
+class TestVeryLongStringConcatFP:
+    """Regression: very long repeated concat should not be a false positive.
+
+    'eval' * 100 builds 'evaleval...' which is NOT in _DANGEROUS_NAMES.
+    Known FP — ast_analyzer currently flags this because the resolved string
+    starts with a dangerous-name prefix in the BinOp tree. Marked as xfail
+    until the analyzer is hardened against this edge case.
+    """
+
+    @pytest.mark.xfail(reason="known FP: very-long-string-concat — tracked in corpus")
+    def test_very_long_eval_repeat_not_flagged(self) -> None:
+        code = "x = " + " + ".join([f"'{c}'" for c in "eval" * 100]) + "\n"
+        findings = analyze_python(code, _FILE)
+        assert not findings, "Long 'evaleval...' concat should not flag"

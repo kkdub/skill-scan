@@ -38,7 +38,7 @@ def analyze_python(content: str, file_path: str) -> list[Finding]:
     """
     try:
         tree = ast.parse(content)
-    except SyntaxError:
+    except (SyntaxError, ValueError):
         return []
 
     findings: list[Finding] = []

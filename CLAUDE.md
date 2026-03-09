@@ -33,7 +33,7 @@ make check    # All quality checks (run early, run often)
 - Core scanner engine and decoder use stdlib only (`re`, `pathlib`, `json`, `tomllib`, `base64`, `binascii`, `ast`)
 - Don't add deps without `uv` + `pyproject.toml`
 - **Max 250 lines per file** (source code in `src/` and `tests/`)
-- `ast_analyzer.py` is at exactly 250 lines — any addition requires a split first
+- `ast_analyzer.py` is at 250 lines (limit) — any addition requires a split first
 
 ## Project Structure
 

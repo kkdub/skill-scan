@@ -15,11 +15,11 @@ a = 'ev'; b = 'al'; x = f'{a}{b}'
 x = '%s%s' % ('ev', 'al')
 
 # [string-construction] bytes-decode-eval: bytes.decode() producing 'eval'
-# Expected: detect | Actual: EVADED
+# Expected: detect | Actual: DETECTED
 x = b'eval'.decode('utf-8')
 
 # [string-construction] bytes-decode-exec: bytes.decode() producing 'exec'
-# Expected: detect | Actual: EVADED
+# Expected: detect | Actual: DETECTED
 x = b'exec'.decode()
 
 # [string-construction] bytearray-eval: bytearray.decode() producing 'eval'
@@ -40,11 +40,11 @@ x = str(b'eval', 'utf-8')
 x = ''.join(reversed('lave'))
 
 # [string-construction] listcomp-join-eval: List comprehension with chr() in join building 'eval'
-# Expected: detect | Actual: EVADED
+# Expected: detect | Actual: DETECTED
 x = ''.join([chr(c) for c in [101, 118, 97, 108]])
 
 # [string-construction] map-chr-join-eval: map(chr, ...) + join building 'eval'
-# Expected: detect | Actual: EVADED
+# Expected: detect | Actual: DETECTED
 x = ''.join(map(chr, [101, 118, 97, 108]))
 
 # [string-construction] nested-chr-ord: chr(ord(...)) nesting building 'eval'
@@ -87,15 +87,15 @@ e = getattr(__builtins__, 'eval')
 e('1+1')
 
 # [indirect-calls] vars-builtins-eval: vars(__builtins__)['eval'] dynamic access
-# Expected: detect | Actual: DETECTED
+# Expected: detect | Actual: EVADED
 x = vars(__builtins__)['eval']('1+1')
 
 # [indirect-calls] globals-eval: globals() chain to eval
-# Expected: detect | Actual: DETECTED
+# Expected: detect | Actual: EVADED
 globals()['__builtins__']['eval']('1+1')
 
 # [indirect-calls] dict-access-eval: __dict__ access bypassing attribute detection
-# Expected: detect | Actual: DETECTED
+# Expected: detect | Actual: EVADED
 import os
 os.__dict__['system']('ls')
 
@@ -156,11 +156,11 @@ il.import_module('os')
 getattr(__builtins__, chr(101)+chr(118)+chr(97)+chr(108))('1+1')
 
 # [obfuscation-layers] join-getattr-import: join-built '__import__' in getattr
-# Expected: detect | Actual: EVADED
+# Expected: detect | Actual: DETECTED
 getattr(__builtins__, ''.join(['__','im','po','rt','__']))('os')
 
 # [obfuscation-layers] double-indirection-chr: chr() with arithmetic expressions (not plain int constants)
-# Expected: detect | Actual: EVADED
+# Expected: detect | Actual: DETECTED
 x = chr(51+50) + chr(60+58) + chr(48+49) + chr(54+54)
 
 # [obfuscation-layers] lambda-eval: eval() inside lambda (should detect the eval call itself)
@@ -178,7 +178,7 @@ fn = getattr(__builtins__, ''.join([chr(101),chr(118),chr(97),chr(108)]))
 fn('1+1')
 
 # [os-subprocess-evasion] os-popen: os.popen() -- not in the direct detection list?
-# Expected: detect | Actual: EVADED
+# Expected: detect | Actual: DETECTED
 import os
 os.popen('ls')
 
@@ -198,12 +198,12 @@ import subprocess
 subprocess.check_output('ls', shell=True)
 
 # [os-subprocess-evasion] os-execv: os.execv() family
-# Expected: detect | Actual: EVADED
+# Expected: detect | Actual: DETECTED
 import os
 os.execv('/bin/sh', ['/bin/sh', '-c', 'ls'])
 
 # [os-subprocess-evasion] os-spawnl: os.spawnl() family
-# Expected: detect | Actual: EVADED
+# Expected: detect | Actual: DETECTED
 import os
 os.spawnl(os.P_WAIT, '/bin/sh', 'sh', '-c', 'ls')
 
@@ -220,7 +220,7 @@ opts = {'shell': True}
 subprocess.run('ls', **opts)
 
 # [deserialization-evasion] shelve-open: shelve.open() uses pickle internally
-# Expected: detect | Actual: EVADED
+# Expected: detect | Actual: DETECTED
 import shelve
 db = shelve.open('data')
 
@@ -230,17 +230,17 @@ import yaml
 yaml.load(data, Loader=yaml.FullLoader)
 
 # [deserialization-evasion] yaml-unsafe-load: yaml.unsafe_load() explicitly unsafe
-# Expected: detect | Actual: EVADED
+# Expected: detect | Actual: DETECTED
 import yaml
 yaml.unsafe_load(data)
 
 # [deserialization-evasion] cloudpickle-loads: cloudpickle.loads() (pickle-based)
-# Expected: detect | Actual: EVADED
+# Expected: detect | Actual: DETECTED
 import cloudpickle
 cloudpickle.loads(data)
 
 # [deserialization-evasion] dill-loads: dill.loads() (pickle-based)
-# Expected: detect | Actual: EVADED
+# Expected: detect | Actual: DETECTED
 import dill
 dill.loads(data)
 
@@ -249,8 +249,8 @@ dill.loads(data)
 from pickle import loads
 loads(data)
 
-# [deserialization-evasion] yaml-positional-safeloader: yaml.load with positional SafeLoader (not keyword arg) -- should be safe but tool may miss
-# Expected: detect | Actual: DETECTED
+# [false-positives] yaml-positional-safeloader: yaml.load with positional SafeLoader (safe -- should not flag)
+# Expected: clean | Actual: CLEAN
 import yaml
 yaml.load(data, yaml.SafeLoader)
 
@@ -314,7 +314,7 @@ class Executor:
 x = 1
 
 # [false-positives] safe-string-system: Building 'system_config' should not flag (dangerous prefix but safe result)
-# Expected: clean | Actual: FALSE_POSITIVE
+# Expected: clean | Actual: CLEAN
 x = 'system' + '_config'
 
 # [false-positives] safe-getattr-system-info: getattr with 'system_info' -- contains 'system' but not exact match
@@ -350,7 +350,7 @@ x = 'ev' + '\x00' + 'al'
 x = 'e' + 'v' + 'a' + 'l' + 'e' + 'v' + 'a' + 'l' + 'e' + 'v' + 'a' + 'l' + 'e' + 'v' + 'a' + 'l' + 'e' + 'v' + 'a' + 'l
 
 # [edge-cases] multiline-concat: Implicit string concat across lines (Python auto-concat)
-# Expected: detect | Actual: DETECTED
+# Expected: detect | Actual: EVADED
 x = ('ev'
      'al')
 

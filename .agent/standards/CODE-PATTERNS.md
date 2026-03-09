@@ -357,7 +357,7 @@ if relative_path.endswith(".py"):
 return regex_findings
 ```
 
-> Trap: `ast_analyzer.py` is at exactly 250 lines. Any new detector must be split into a sibling module first (follow the Facade Re-export Pattern).
+> Trap: `ast_analyzer.py` is at the 250-line limit. Any new detector must be split into a sibling module first (follow the Facade Re-export Pattern).
 
 ## Multi-Pass Scanning in match_content()
 
