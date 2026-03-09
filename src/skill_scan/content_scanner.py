@@ -103,6 +103,8 @@ def _apply_rules(
     if not relative_path.endswith(".py"):
         return regex_findings
     ast_findings = analyze_python(content, relative_path)
+    active_ids = {r.rule_id for r in applicable}
+    ast_findings = [f for f in ast_findings if f.rule_id in active_ids]
     return _deduplicate(regex_findings, ast_findings)
 
 

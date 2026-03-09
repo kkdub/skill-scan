@@ -1,8 +1,8 @@
 """Supplemental false positive tests discovered during adversarial analysis.
 
-The _detect_string_concat_evasion detector walks ALL AST nodes including
-plain string constants. Any Constant node whose value matches a dangerous
-name triggers a finding -- even when the string is just data, not code.
+Validates that the AST analyzer does NOT flag safe code patterns (plain string
+literals, dict keys, comparisons, safe loaders) as dangerous -- only actual
+dynamic code construction should trigger findings.
 """
 
 from __future__ import annotations

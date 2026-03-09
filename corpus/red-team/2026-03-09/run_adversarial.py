@@ -565,11 +565,11 @@ CORPUS.append((
 
 # 6g: yaml.load with positional SafeLoader (not keyword)
 CORPUS.append((
-    "deserialization-evasion",
+    "false-positives",
     "yaml-positional-safeloader",
     "import yaml\nyaml.load(data, yaml.SafeLoader)\n",
-    True,  # This is actually SAFE -- should NOT flag. Testing if tool handles it.
-    "yaml.load with positional SafeLoader (not keyword arg) -- should be safe but tool may miss",
+    False,
+    "yaml.load with positional SafeLoader (safe -- should not flag)",
 ))
 
 

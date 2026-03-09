@@ -14,14 +14,6 @@ a = 'ev'; b = 'al'; x = f'{a}{b}'
 # Category: string-construction
 x = '%s%s' % ('ev', 'al')
 
-# bytes-decode-eval: bytes.decode() producing 'eval'
-# Category: string-construction
-x = b'eval'.decode('utf-8')
-
-# bytes-decode-exec: bytes.decode() producing 'exec'
-# Category: string-construction
-x = b'exec'.decode()
-
 # bytearray-eval: bytearray.decode() producing 'eval'
 # Category: string-construction
 x = bytearray(b'eval').decode()
@@ -38,14 +30,6 @@ x = str(b'eval', 'utf-8')
 # reversed-join-eval: reversed() + join building 'eval'
 # Category: string-construction
 x = ''.join(reversed('lave'))
-
-# listcomp-join-eval: List comprehension with chr() in join building 'eval'
-# Category: string-construction
-x = ''.join([chr(c) for c in [101, 118, 97, 108]])
-
-# map-chr-join-eval: map(chr, ...) + join building 'eval'
-# Category: string-construction
-x = ''.join(map(chr, [101, 118, 97, 108]))
 
 # nested-chr-ord: chr(ord(...)) nesting building 'eval'
 # Category: string-construction
@@ -76,6 +60,19 @@ x = bytes.fromhex('6576616c').decode()
 # Category: indirect-calls
 e = eval
 e('1+1')
+
+# vars-builtins-eval: vars(__builtins__)['eval'] dynamic access
+# Category: indirect-calls
+x = vars(__builtins__)['eval']('1+1')
+
+# globals-eval: globals() chain to eval
+# Category: indirect-calls
+globals()['__builtins__']['eval']('1+1')
+
+# dict-access-eval: __dict__ access bypassing attribute detection
+# Category: indirect-calls
+import os
+os.__dict__['system']('ls')
 
 # reduce-concat: functools.reduce to concatenate string
 # Category: indirect-calls
@@ -117,29 +114,6 @@ sys.modules['os'].system('ls')
 import importlib as il
 il.import_module('os')
 
-# join-getattr-import: join-built '__import__' in getattr
-# Category: obfuscation-layers
-getattr(__builtins__, ''.join(['__','im','po','rt','__']))('os')
-
-# double-indirection-chr: chr() with arithmetic expressions (not plain int constants)
-# Category: obfuscation-layers
-x = chr(51+50) + chr(60+58) + chr(48+49) + chr(54+54)
-
-# os-popen: os.popen() -- not in the direct detection list?
-# Category: os-subprocess-evasion
-import os
-os.popen('ls')
-
-# os-execv: os.execv() family
-# Category: os-subprocess-evasion
-import os
-os.execv('/bin/sh', ['/bin/sh', '-c', 'ls'])
-
-# os-spawnl: os.spawnl() family
-# Category: os-subprocess-evasion
-import os
-os.spawnl(os.P_WAIT, '/bin/sh', 'sh', '-c', 'ls')
-
 # subprocess-shell-variable: shell=<variable> instead of shell=True literal
 # Category: os-subprocess-evasion
 import subprocess
@@ -152,30 +126,15 @@ import subprocess
 opts = {'shell': True}
 subprocess.run('ls', **opts)
 
-# shelve-open: shelve.open() uses pickle internally
-# Category: deserialization-evasion
-import shelve
-db = shelve.open('data')
-
-# yaml-unsafe-load: yaml.unsafe_load() explicitly unsafe
-# Category: deserialization-evasion
-import yaml
-yaml.unsafe_load(data)
-
-# cloudpickle-loads: cloudpickle.loads() (pickle-based)
-# Category: deserialization-evasion
-import cloudpickle
-cloudpickle.loads(data)
-
-# dill-loads: dill.loads() (pickle-based)
-# Category: deserialization-evasion
-import dill
-dill.loads(data)
-
 # from-pickle-loads: from pickle import loads - bare function call
 # Category: deserialization-evasion
 from pickle import loads
 loads(data)
+
+# multiline-concat: Implicit string concat across lines (Python auto-concat)
+# Category: edge-cases
+x = ('ev'
+     'al')
 
 # decorator-eval: eval used as decorator
 # Category: edge-cases

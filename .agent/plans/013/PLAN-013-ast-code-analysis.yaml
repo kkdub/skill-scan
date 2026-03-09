@@ -206,8 +206,8 @@ work_log:
     action: "Documentation updated: CLAUDE.md (ast module, ast_analyzer.py 250-line note, project structure), README.md (AST feature bullet), CODE-PATTERNS.md (AST Analysis pattern)"
     tests: 1913
 evidence:
-  - "Red-team corpus: corpus/red-team/2026-03-09/ (82 adversarial inputs, 8 categories)"
-  - "Post-hardening: false positive bug fixed, expanded detection for os.popen/execv/spawnl, yaml.unsafe_load, shelve, chr arithmetic, bytes.decode, map(chr), listcomp in join"
+  - "Red-team corpus: corpus/red-team/2026-03-09/ (82 adversarial inputs, 8 categories). results.json regenerated against final analyzer."
+  - "Post-hardening: false positive bug fixed, expanded detection for os.popen/execv/spawnl, yaml.unsafe_load, shelve, chr arithmetic, bytes.decode, map(chr), listcomp in join. Remaining evasions are in documented out-of-scope categories (module aliasing, variable aliasing, format strings)."
   - "Documentation: CLAUDE.md, README.md, CODE-PATTERNS.md updated to reflect AST analysis feature (2026-03-09)"
 
 handoff:

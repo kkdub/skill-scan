@@ -49,22 +49,26 @@
       "id": "bytes-decode-eval",
       "code": "x = b'eval'.decode('utf-8')",
       "should_detect": true,
-      "detected": false,
-      "evaded": true,
-      "status": "EVADED",
+      "detected": true,
+      "evaded": false,
+      "status": "DETECTED",
       "description": "bytes.decode() producing 'eval'",
-      "findings": []
+      "findings": [
+        "EXEC-002"
+      ]
     },
     {
       "category": "string-construction",
       "id": "bytes-decode-exec",
       "code": "x = b'exec'.decode()",
       "should_detect": true,
-      "detected": false,
-      "evaded": true,
-      "status": "EVADED",
+      "detected": true,
+      "evaded": false,
+      "status": "DETECTED",
       "description": "bytes.decode() producing 'exec'",
-      "findings": []
+      "findings": [
+        "EXEC-002"
+      ]
     },
     {
       "category": "string-construction",
@@ -115,22 +119,26 @@
       "id": "listcomp-join-eval",
       "code": "x = ''.join([chr(c) for c in [101, 118, 97, 108]])",
       "should_detect": true,
-      "detected": false,
-      "evaded": true,
-      "status": "EVADED",
+      "detected": true,
+      "evaded": false,
+      "status": "DETECTED",
       "description": "List comprehension with chr() in join building 'eval'",
-      "findings": []
+      "findings": [
+        "EXEC-002"
+      ]
     },
     {
       "category": "string-construction",
       "id": "map-chr-join-eval",
       "code": "x = ''.join(map(chr, [101, 118, 97, 108]))",
       "should_detect": true,
-      "detected": false,
-      "evaded": true,
-      "status": "EVADED",
+      "detected": true,
+      "evaded": false,
+      "status": "DETECTED",
       "description": "map(chr, ...) + join building 'eval'",
-      "findings": []
+      "findings": [
+        "EXEC-002"
+      ]
     },
     {
       "category": "string-construction",
@@ -232,8 +240,7 @@
       "status": "DETECTED",
       "description": "getattr(__builtins__, 'eval') - plain string, no concat",
       "findings": [
-        "EXEC-006",
-        "EXEC-002"
+        "EXEC-006"
       ]
     },
     {
@@ -241,39 +248,33 @@
       "id": "vars-builtins-eval",
       "code": "x = vars(__builtins__)['eval']('1+1')",
       "should_detect": true,
-      "detected": true,
-      "evaded": false,
-      "status": "DETECTED",
+      "detected": false,
+      "evaded": true,
+      "status": "EVADED",
       "description": "vars(__builtins__)['eval'] dynamic access",
-      "findings": [
-        "EXEC-002"
-      ]
+      "findings": []
     },
     {
       "category": "indirect-calls",
       "id": "globals-eval",
       "code": "globals()['__builtins__']['eval']('1+1')",
       "should_detect": true,
-      "detected": true,
-      "evaded": false,
-      "status": "DETECTED",
+      "detected": false,
+      "evaded": true,
+      "status": "EVADED",
       "description": "globals() chain to eval",
-      "findings": [
-        "EXEC-002"
-      ]
+      "findings": []
     },
     {
       "category": "indirect-calls",
       "id": "dict-access-eval",
       "code": "import os\nos.__dict__['system']('ls')",
       "should_detect": true,
-      "detected": true,
-      "evaded": false,
-      "status": "DETECTED",
+      "detected": false,
+      "evaded": true,
+      "status": "EVADED",
       "description": "__dict__ access bypassing attribute detection",
-      "findings": [
-        "EXEC-002"
-      ]
+      "findings": []
     },
     {
       "category": "indirect-calls",
@@ -308,6 +309,8 @@
       "description": "Nested getattr with concat",
       "findings": [
         "EXEC-006",
+        "EXEC-002",
+        "EXEC-006",
         "EXEC-002"
       ]
     },
@@ -334,7 +337,6 @@
       "status": "DETECTED",
       "description": "compile() + exec() combination",
       "findings": [
-        "EXEC-002",
         "EXEC-002"
       ]
     },
@@ -423,22 +425,27 @@
       "id": "join-getattr-import",
       "code": "getattr(__builtins__, ''.join(['__','im','po','rt','__']))('os')",
       "should_detect": true,
-      "detected": false,
-      "evaded": true,
-      "status": "EVADED",
+      "detected": true,
+      "evaded": false,
+      "status": "DETECTED",
       "description": "join-built '__import__' in getattr",
-      "findings": []
+      "findings": [
+        "EXEC-006",
+        "EXEC-002"
+      ]
     },
     {
       "category": "obfuscation-layers",
       "id": "double-indirection-chr",
       "code": "x = chr(51+50) + chr(60+58) + chr(48+49) + chr(54+54)",
       "should_detect": true,
-      "detected": false,
-      "evaded": true,
-      "status": "EVADED",
+      "detected": true,
+      "evaded": false,
+      "status": "DETECTED",
       "description": "chr() with arithmetic expressions (not plain int constants)",
-      "findings": []
+      "findings": [
+        "EXEC-002"
+      ]
     },
     {
       "category": "obfuscation-layers",
@@ -485,11 +492,13 @@
       "id": "os-popen",
       "code": "import os\nos.popen('ls')",
       "should_detect": true,
-      "detected": false,
-      "evaded": true,
-      "status": "EVADED",
+      "detected": true,
+      "evaded": false,
+      "status": "DETECTED",
       "description": "os.popen() -- not in the direct detection list?",
-      "findings": []
+      "findings": [
+        "EXEC-002"
+      ]
     },
     {
       "category": "os-subprocess-evasion",
@@ -535,22 +544,26 @@
       "id": "os-execv",
       "code": "import os\nos.execv('/bin/sh', ['/bin/sh', '-c', 'ls'])",
       "should_detect": true,
-      "detected": false,
-      "evaded": true,
-      "status": "EVADED",
+      "detected": true,
+      "evaded": false,
+      "status": "DETECTED",
       "description": "os.execv() family",
-      "findings": []
+      "findings": [
+        "EXEC-002"
+      ]
     },
     {
       "category": "os-subprocess-evasion",
       "id": "os-spawnl",
       "code": "import os\nos.spawnl(os.P_WAIT, '/bin/sh', 'sh', '-c', 'ls')",
       "should_detect": true,
-      "detected": false,
-      "evaded": true,
-      "status": "EVADED",
+      "detected": true,
+      "evaded": false,
+      "status": "DETECTED",
       "description": "os.spawnl() family",
-      "findings": []
+      "findings": [
+        "EXEC-002"
+      ]
     },
     {
       "category": "os-subprocess-evasion",
@@ -579,11 +592,13 @@
       "id": "shelve-open",
       "code": "import shelve\ndb = shelve.open('data')",
       "should_detect": true,
-      "detected": false,
-      "evaded": true,
-      "status": "EVADED",
+      "detected": true,
+      "evaded": false,
+      "status": "DETECTED",
       "description": "shelve.open() uses pickle internally",
-      "findings": []
+      "findings": [
+        "EXEC-007"
+      ]
     },
     {
       "category": "deserialization-evasion",
@@ -603,33 +618,39 @@
       "id": "yaml-unsafe-load",
       "code": "import yaml\nyaml.unsafe_load(data)",
       "should_detect": true,
-      "detected": false,
-      "evaded": true,
-      "status": "EVADED",
+      "detected": true,
+      "evaded": false,
+      "status": "DETECTED",
       "description": "yaml.unsafe_load() explicitly unsafe",
-      "findings": []
+      "findings": [
+        "EXEC-007"
+      ]
     },
     {
       "category": "deserialization-evasion",
       "id": "cloudpickle-loads",
       "code": "import cloudpickle\ncloudpickle.loads(data)",
       "should_detect": true,
-      "detected": false,
-      "evaded": true,
-      "status": "EVADED",
+      "detected": true,
+      "evaded": false,
+      "status": "DETECTED",
       "description": "cloudpickle.loads() (pickle-based)",
-      "findings": []
+      "findings": [
+        "EXEC-007"
+      ]
     },
     {
       "category": "deserialization-evasion",
       "id": "dill-loads",
       "code": "import dill\ndill.loads(data)",
       "should_detect": true,
-      "detected": false,
-      "evaded": true,
-      "status": "EVADED",
+      "detected": true,
+      "evaded": false,
+      "status": "DETECTED",
       "description": "dill.loads() (pickle-based)",
-      "findings": []
+      "findings": [
+        "EXEC-007"
+      ]
     },
     {
       "category": "deserialization-evasion",
@@ -643,17 +664,15 @@
       "findings": []
     },
     {
-      "category": "deserialization-evasion",
+      "category": "false-positives",
       "id": "yaml-positional-safeloader",
       "code": "import yaml\nyaml.load(data, yaml.SafeLoader)",
-      "should_detect": true,
-      "detected": true,
+      "should_detect": false,
+      "detected": false,
       "evaded": false,
-      "status": "DETECTED",
-      "description": "yaml.load with positional SafeLoader (not keyword arg) -- should be safe but tool may miss",
-      "findings": [
-        "EXEC-007"
-      ]
+      "status": "CLEAN",
+      "description": "yaml.load with positional SafeLoader (safe -- should not flag)",
+      "findings": []
     },
     {
       "category": "false-positives",
@@ -803,13 +822,11 @@
       "id": "safe-string-system",
       "code": "x = 'system' + '_config'",
       "should_detect": false,
-      "detected": true,
-      "evaded": true,
-      "status": "FALSE_POSITIVE",
+      "detected": false,
+      "evaded": false,
+      "status": "CLEAN",
       "description": "Building 'system_config' should not flag (dangerous prefix but safe result)",
-      "findings": [
-        "EXEC-002"
-      ]
+      "findings": []
     },
     {
       "category": "false-positives",
@@ -906,13 +923,11 @@
       "id": "multiline-concat",
       "code": "x = ('ev'\n     'al')",
       "should_detect": true,
-      "detected": true,
-      "evaded": false,
-      "status": "DETECTED",
+      "detected": false,
+      "evaded": true,
+      "status": "EVADED",
       "description": "Implicit string concat across lines (Python auto-concat)",
-      "findings": [
-        "EXEC-002"
-      ]
+      "findings": []
     },
     {
       "category": "edge-cases",
