@@ -12,11 +12,14 @@ ReDoS mitigation:
 from __future__ import annotations
 
 import re
+from dataclasses import replace
 
+from skill_scan.decoder import MAX_DECODE_DEPTH, decode_payload, extract_encoded_strings
 from skill_scan.models import Finding, Rule
 from skill_scan.normalizer import normalize_text
 
 _MAX_MATCHED_TEXT = 200
+MAX_PAYLOADS_PER_FILE = 100
 
 
 def match_line(
@@ -56,7 +59,7 @@ def match_line(
             for pattern in rule.patterns:
                 match = pattern.search(line)
                 if match:
-                    if not _should_suppress_strict(line, rule, match):
+                    if not _should_suppress_strict(line, rule, match.span()):
                         findings.append(_make_finding(rule, file_path, line_num, match))
 
     return findings
@@ -99,23 +102,20 @@ def match_file(
                         continue
                 else:
                     line_start = content.rfind("\n", 0, match.start()) + 1
-                    local_match = _shift_match(match, -line_start)
-                    if _should_suppress_strict(line_text, rule, local_match):
+                    local_span = (match.start() - line_start, match.end() - line_start)
+                    if _should_suppress_strict(line_text, rule, local_span):
                         continue
                 findings.append(_make_finding(rule, file_path, line_num, match))
 
     return findings
 
 
-def match_content(content: str, file_path: str, rules: list[Rule]) -> list[Finding]:
-    """Apply line-scope and file-scope rules to file content.
+def match_content(content: str, file_path: str, rules: list[Rule], *, _depth: int = 0) -> list[Finding]:
+    """Apply line-scope, file-scope, and decoded-content rules to file content.
 
-    Line endings are normalized (CRLF/CR -> LF) before matching so rules
-    produce consistent findings regardless of platform line-ending style.
-
-    Each line is matched in its original form, then (if normalization changes
-    the text) matched again in normalized form to catch evasion via invisible
-    Unicode characters or exotic whitespace.
+    Line endings normalized to LF. Each line matched in original and (if
+    different) normalized form. Encoded payloads decoded and scanned
+    recursively up to MAX_DECODE_DEPTH.
     """
     content = content.replace("\r\n", "\n").replace("\r", "\n")
     line_rules = [r for r in rules if r.match_scope == "line"]
@@ -132,6 +132,9 @@ def match_content(content: str, file_path: str, rules: list[Rule]) -> list[Findi
         file_findings = match_file(content, file_path, file_rules)
         findings.extend(file_findings)
         findings.extend(_normalized_file_findings(content, file_path, file_rules, file_findings))
+
+    if _depth < MAX_DECODE_DEPTH:
+        findings.extend(_decoded_content_findings(content, file_path, rules, _depth))
 
     return findings
 
@@ -158,6 +161,24 @@ def _normalized_file_findings(
     return [f for f in match_file(norm_content, file_path, rules) if (f.rule_id, f.line) not in seen]
 
 
+def _decoded_content_findings(
+    content: str,
+    file_path: str,
+    rules: list[Rule],
+    depth: int,
+) -> list[Finding]:
+    """Decode encoded payloads and recursively scan decoded text."""
+    results: list[Finding] = []
+    for p in extract_encoded_strings(normalize_text(content))[:MAX_PAYLOADS_PER_FILE]:
+        decoded = decode_payload(p, depth=depth)
+        if decoded is None:
+            continue
+        for f in match_content(decoded, file_path, rules, _depth=depth + 1):
+            desc = f.description if f.description.startswith("[decoded]") else f"[decoded] {f.description}"
+            results.append(replace(f, file=file_path, line=p.line_num, description=desc))
+    return results
+
+
 def _make_finding(rule: Rule, file_path: str, line_num: int, match: re.Match[str]) -> Finding:
     """Create a Finding from a rule and regex match."""
     return Finding(
@@ -177,7 +198,7 @@ def _is_excluded(line: str, rule: Rule) -> bool:
     return any(ep.search(line) for ep in rule.exclude_patterns)
 
 
-def _should_suppress_strict(line: str, rule: Rule, primary_match: re.Match[str]) -> bool:
+def _should_suppress_strict(line: str, rule: Rule, primary_span: tuple[int, int]) -> bool:
     """In strict mode, suppress only if an overlapping exclude exists.
 
     Returns True (suppress) when an exclude pattern matches a region that
@@ -188,41 +209,10 @@ def _should_suppress_strict(line: str, rule: Rule, primary_match: re.Match[str])
     (piggybacking from a comment or unrelated part of the line) or when
     no exclude pattern matches at all.
     """
-    p_start, p_end = primary_match.span()
+    p_start, p_end = primary_span
     for ep in rule.exclude_patterns:
         for em in ep.finditer(line):
             e_start, e_end = em.span()
             if e_end > p_start and e_start < p_end:
                 return True
     return False
-
-
-class _ShiftedMatch:
-    """Lightweight wrapper to present a match with shifted span offsets."""
-
-    __slots__ = ("_match", "_offset")
-
-    def __init__(self, match: re.Match[str], offset: int) -> None:
-        self._match = match
-        self._offset = offset
-
-    def span(self) -> tuple[int, int]:
-        s, e = self._match.span()
-        return (s + self._offset, e + self._offset)
-
-    def start(self) -> int:
-        return self._match.start() + self._offset
-
-    def end(self) -> int:
-        return self._match.end() + self._offset
-
-    def group(self) -> str:
-        return self._match.group()
-
-    def groups(self) -> tuple[str | None, ...]:
-        return self._match.groups()
-
-
-def _shift_match(match: re.Match[str], offset: int) -> re.Match[str]:
-    """Return a match-like object with span shifted by offset."""
-    return _ShiftedMatch(match, offset)  # type: ignore[return-value]

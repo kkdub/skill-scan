@@ -30,7 +30,7 @@ make check    # All quality checks (run early, run often)
 - Rules enforced via `.agent/standards/code-rules.json`
 - Type hints on all public functions
 - Tests in `tests/`
-- Core scanner engine uses stdlib only (`re`, `pathlib`, `json`, `tomllib`)
+- Core scanner engine and decoder use stdlib only (`re`, `pathlib`, `json`, `tomllib`, `base64`, `binascii`)
 - Don't add deps without `uv` + `pyproject.toml`
 - **Max 250 lines per file** (source code in `src/` and `tests/`)
 

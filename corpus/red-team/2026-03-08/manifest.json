@@ -1,0 +1,82 @@
+{
+  "tool": "skill-scan decoder + engine integration",
+  "date": "2026-03-08",
+  "total_inputs": 85,
+  "categories": {
+    "base64_url_safe": {
+      "count": 3,
+      "evaded": 0,
+      "false_positives": 0
+    },
+    "base64_whitespace": {
+      "count": 9,
+      "evaded": 9,
+      "false_positives": 0
+    },
+    "comment_injection": {
+      "count": 2,
+      "evaded": 2,
+      "false_positives": 0
+    },
+    "encoding_prefix_evasion": {
+      "count": 6,
+      "evaded": 4,
+      "false_positives": 0
+    },
+    "false_positives": {
+      "count": 10,
+      "evaded": 0,
+      "false_positives": 1
+    },
+    "hex_variations": {
+      "count": 10,
+      "evaded": 4,
+      "false_positives": 0
+    },
+    "line_split_base64": {
+      "count": 6,
+      "evaded": 6,
+      "false_positives": 0
+    },
+    "mixed_encoding": {
+      "count": 4,
+      "evaded": 2,
+      "false_positives": 0
+    },
+    "non_quoted_base64": {
+      "count": 8,
+      "evaded": 0,
+      "false_positives": 0
+    },
+    "padding_manipulation": {
+      "count": 9,
+      "evaded": 6,
+      "false_positives": 0
+    },
+    "partial_encoding": {
+      "count": 2,
+      "evaded": 1,
+      "false_positives": 0
+    },
+    "quoting_styles": {
+      "count": 9,
+      "evaded": 0,
+      "false_positives": 0
+    },
+    "size_boundary": {
+      "count": 3,
+      "evaded": 2,
+      "false_positives": 0
+    },
+    "triple_encoding": {
+      "count": 2,
+      "evaded": 2,
+      "false_positives": 0
+    },
+    "unicode_homoglyph_b64": {
+      "count": 2,
+      "evaded": 2,
+      "false_positives": 0
+    }
+  }
+}
