@@ -16,6 +16,7 @@ import click
 from skill_scan.config import ScanConfig, load_config
 from skill_scan.formatters import OutputMode, format_text
 from skill_scan.json_formatter import format_json
+from skill_scan.sarif_formatter import format_sarif
 from skill_scan.models import ScanResult, Verdict
 from skill_scan.parser import SkillParseError, parse_skill_frontmatter
 from skill_scan.scanner import scan
@@ -60,7 +61,9 @@ def skill_scan() -> None:
 @click.option("--strict-schema", is_flag=True, default=False, help="Treat schema issues as medium severity")
 @click.option("--quiet", "-q", is_flag=True, default=False, help="Output only verdict summary")
 @click.option("--verbose", "-v", is_flag=True, default=False, help="Show all findings individually")
-@click.option("--format", "fmt", type=click.Choice(["text", "json"]), default="text", help="Output format")
+@click.option(
+    "--format", "fmt", type=click.Choice(["text", "json", "sarif"]), default="text", help="Output format"
+)
 @click.option(
     "--fail-on",
     "fail_on",
@@ -155,6 +158,8 @@ def _output_result(
     """Format and output scan result, then exit."""
     if fmt == "json":
         output = format_json(result)
+    elif fmt == "sarif":
+        output = format_sarif(result)
     else:
         mode = OutputMode.QUIET if quiet else OutputMode.VERBOSE if verbose else OutputMode.DEFAULT
         output = format_text(result, mode=mode)

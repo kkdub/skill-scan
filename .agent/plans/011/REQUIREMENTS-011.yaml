@@ -1,0 +1,128 @@
+plan: PLAN-011
+generated_at: "2026-03-06"
+
+requirements:
+
+  # --- Explicit requirements ---
+
+  - id: R001
+    requirement: "SARIF formatter produces valid SARIF v2.1.0 JSON with tool metadata and rule descriptions"
+    category: functional
+    contract:
+      given: "A ScanResult with findings across multiple rules and severities"
+      when: "format_sarif(result) is called"
+      then: >
+        Returns JSON string with: version='2.1.0', runs[0].tool.driver.name='skill-scan',
+        runs[0].tool.driver.rules[] containing rule metadata (id, shortDescription, fullDescription),
+        runs[0].results[] with ruleId, message.text, level, and locations[0] with artifactLocation.uri
+        and region.startLine for each finding
+    verify: test::tests/unit/test_sarif_formatter.py
+    status: done
+
+  - id: R002
+    requirement: "CLI accepts --format sarif and outputs SARIF JSON to stdout"
+    category: functional
+    contract:
+      given: "A skill directory with detectable issues"
+      when: "skill-scan scan --format sarif ./my-skill"
+      then: "stdout contains valid SARIF JSON; exit code follows existing verdict/fail-on logic"
+    verify: test::tests/unit/test_cli.py
+    status: done
+
+  - id: R003
+    requirement: "GitHub Action (action.yml) supports path, repo, fail-on, format, and config inputs"
+    category: functional
+    contract:
+      given: "A GitHub Actions workflow referencing kkdub/skill-scan@main"
+      when: "Action runs with inputs: path=./my-skill, fail-on=high, format=sarif"
+      then: "skill-scan executes with the specified arguments; SARIF output uploaded if format is sarif"
+    verify: file::action.yml
+    status: done
+
+  - id: R004
+    requirement: "Pre-commit hook (.pre-commit-hooks.yaml) enables skill-scan as a configurable hook"
+    category: functional
+    contract:
+      given: "A repo with .pre-commit-config.yaml referencing skill-scan with args: ['./my-skill']"
+      when: "pre-commit runs the hook"
+      then: "skill-scan scan is invoked on the specified path; non-zero exit on findings"
+    verify: file::.pre-commit-hooks.yaml
+    status: done
+
+  - id: R005
+    requirement: "SARIF output is compatible with GitHub Code Scanning (upload-sarif action)"
+    category: functional
+    contract:
+      given: "SARIF output from skill-scan"
+      when: "Uploaded via github/codeql-action/upload-sarif"
+      then: "GitHub displays findings as inline PR annotations with rule descriptions"
+    verify: manual
+    status: done
+
+  # --- Implicit requirements ---
+
+  - id: R-IMP001
+    requirement: "SARIF formatter is a pure function (no I/O, no side effects) following existing formatter pattern"
+    category: reliability
+    verify: grep::def format_sarif.*ScanResult.*str::src/skill_scan/sarif_formatter.py
+    status: done
+
+  - id: R-IMP002
+    requirement: "SARIF formatter uses stdlib only (json module) -- no new production dependencies"
+    category: reliability
+    verify: grep::^import json::src/skill_scan/sarif_formatter.py
+    status: done
+
+  - id: R-IMP003
+    requirement: "Finding severity maps to SARIF level correctly: critical/high->error, medium->warning, low/info->note"
+    category: functional
+    contract:
+      given: "Findings with each severity level (critical, high, medium, low, info)"
+      when: "format_sarif(result) is called"
+      then: >
+        critical and high findings have level='error',
+        medium findings have level='warning',
+        low and info findings have level='note'
+    verify: test::tests/unit/test_sarif_formatter.py
+    status: done
+
+  - id: R-IMP004
+    requirement: "format_sarif is exported from skill_scan.__init__.__all__"
+    category: ux
+    verify: grep::format_sarif::src/skill_scan/__init__.py
+    status: done
+
+  - id: R-IMP005
+    requirement: "GitHub Action handles both local path and remote repo (--repo) scanning"
+    category: functional
+    verify: file::action.yml
+    status: done
+
+  - id: R-IMP006
+    requirement: "SARIF includes tool.driver.rules[] with id, shortDescription.text, and fullDescription.text from rule metadata"
+    category: functional
+    contract:
+      given: "A ScanResult with findings from rules PI-001 and EXEC-003"
+      when: "format_sarif(result) is called"
+      then: >
+        runs[0].tool.driver.rules contains entries for PI-001 and EXEC-003,
+        each with id, shortDescription.text (rule description), and
+        fullDescription.text (rule recommendation)
+    verify: test::tests/unit/test_sarif_formatter.py
+    status: done
+
+  - id: R-IMP007
+    requirement: "sarif_formatter.py stays under 250 lines (project SIZE constraint)"
+    category: reliability
+    verify: null
+    status: done
+
+  - id: R-IMP008
+    requirement: "Findings without a line number produce SARIF results with region omitted"
+    category: functional
+    contract:
+      given: "A Finding with line=None (e.g., schema validation finding)"
+      when: "format_sarif(result) is called"
+      then: "The SARIF result has artifactLocation.uri but no region field"
+    verify: test::tests/unit/test_sarif_formatter.py
+    status: done

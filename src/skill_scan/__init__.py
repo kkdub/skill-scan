@@ -2,7 +2,18 @@
 
 from skill_scan.formatters import OutputMode
 from skill_scan.json_formatter import format_json
+from skill_scan.sarif_formatter import format_sarif
 from skill_scan.models import Finding, Rule, ScanResult, Severity, Verdict
 from skill_scan.scanner import scan
 
-__all__ = ["Finding", "OutputMode", "Rule", "ScanResult", "Severity", "Verdict", "format_json", "scan"]
+__all__ = [
+    "Finding",
+    "OutputMode",
+    "Rule",
+    "ScanResult",
+    "Severity",
+    "Verdict",
+    "format_json",
+    "format_sarif",
+    "scan",
+]
