@@ -11,6 +11,8 @@ Security scanner for agent skills — detects prompt injection, malicious code, 
 - **CI-friendly** — `--fail-on` flag exits with code 2 when findings exceed a severity threshold
 - **Encoded payload detection** — base64 and hex-encoded strings are decoded and recursively scanned, catching obfuscated injections that regex-only scanning misses
 - **AST-based Python analysis** — `.py` files are parsed with Python's `ast` module to catch evasion techniques that regex cannot detect (string concatenation building `eval`, `chr()`-based construction, `getattr` with dynamic names, unsafe deserialization)
+- **Concurrent scanning** — large skill directories (8+ files) are scanned in parallel using `ProcessPoolExecutor`, with automatic fallback to sequential scanning
+- **Inline suppression** — add `# noqa: RULE-ID` to any line to suppress a specific finding; bare `# noqa` is rejected (security scanner requires explicit rule IDs); suppressed counts are reported for auditability
 - **Zero runtime dependencies** beyond `click` — core engine uses stdlib only
 
 ## Installation
@@ -149,6 +151,13 @@ Pass a TOML config file to customize behavior:
 skill-scan scan path/to/skill/ --config scan.toml
 ```
 
+```toml
+[scan]
+max_workers = 4      # worker processes for concurrent scanning (0 = auto-detect, max 8)
+max_file_size = 500000
+max_file_count = 100
+```
+
 Custom rules can be authored using the [rule template](src/skill_scan/rules/template.toml).
 
 ## Python API
@@ -157,7 +166,8 @@ Custom rules can be authored using the [rule template](src/skill_scan/rules/temp
 from skill_scan import scan, format_sarif, Severity
 
 result = scan("path/to/skill/")
-print(result.verdict)  # Verdict.PASS or Verdict.BLOCK
+print(result.verdict)           # Verdict.PASS or Verdict.BLOCK
+print(result.suppressed_count)  # number of findings suppressed via # noqa
 
 for finding in result.findings:
     print(f"[{finding.severity.name}] {finding.rule_id}: {finding.description}")

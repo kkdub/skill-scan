@@ -25,7 +25,15 @@ class TestJsonStructure:
             skill_name="my-skill",
         )
         data = json.loads(format_json(result))
-        expected_keys = {"skill_name", "verdict", "files_scanned", "duration", "counts", "findings"}
+        expected_keys = {
+            "skill_name",
+            "verdict",
+            "files_scanned",
+            "duration",
+            "counts",
+            "findings",
+            "suppressed_count",
+        }
         assert set(data.keys()) == expected_keys
 
     def test_json_output_is_valid_json_with_null_skill_name(self) -> None:
@@ -46,6 +54,16 @@ class TestJsonStructure:
         data = json.loads(format_json(result))
         assert data["skill_name"] == "test-skill"
         assert data["files_scanned"] == 42
+
+    def test_suppressed_count_zero_by_default(self) -> None:
+        result = ScanResult(findings=(), counts={}, verdict=Verdict.PASS, duration=0.0)
+        data = json.loads(format_json(result))
+        assert data["suppressed_count"] == 0
+
+    def test_suppressed_count_reflects_value(self) -> None:
+        result = ScanResult(findings=(), counts={}, verdict=Verdict.PASS, duration=0.0, suppressed_count=3)
+        data = json.loads(format_json(result))
+        assert data["suppressed_count"] == 3
 
 
 class TestJsonFindings:

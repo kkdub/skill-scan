@@ -156,3 +156,43 @@ class TestFormatTextCoverageMetadata:
         result = ScanResult(findings=(), counts={}, verdict=Verdict.PASS, duration=0.1, files_skipped=0)
         output = format_text(result, mode=OutputMode.QUIET)
         assert "skipped" not in output
+
+
+class TestTextFormatterSuppressedOutput:
+    """Tests for text formatter suppressed count output."""
+
+    def test_header_shows_suppressed_when_positive(self) -> None:
+        result = ScanResult(
+            findings=(),
+            counts={},
+            verdict=Verdict.PASS,
+            duration=0.1,
+            files_scanned=3,
+            suppressed_count=2,
+        )
+        output = format_text(result)
+        assert "Suppressed: 2 findings via noqa" in output
+
+    def test_header_omits_suppressed_when_zero(self) -> None:
+        result = ScanResult(
+            findings=(),
+            counts={},
+            verdict=Verdict.PASS,
+            duration=0.1,
+            files_scanned=3,
+            suppressed_count=0,
+        )
+        output = format_text(result)
+        assert "Suppressed" not in output
+
+    def test_verbose_mode_shows_suppressed(self) -> None:
+        result = ScanResult(
+            findings=(),
+            counts={},
+            verdict=Verdict.PASS,
+            duration=0.1,
+            files_scanned=3,
+            suppressed_count=1,
+        )
+        output = format_text(result, mode=OutputMode.VERBOSE)
+        assert "Suppressed: 1 findings via noqa" in output

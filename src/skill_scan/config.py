@@ -52,6 +52,7 @@ class ScanConfig:
     max_total_size: int = 5_000_000  # 5MB
     max_file_count: int = 100
     strict_schema: bool = False
+    max_workers: int = 0  # 0 = auto-detect; passed to ProcessPoolExecutor
     suppress_rules: frozenset[str] = field(default_factory=frozenset)
     custom_rules: tuple[Rule, ...] = ()
 
@@ -109,6 +110,7 @@ _SCAN_FIELDS: dict[str, type] = {
     "max_file_size": int,
     "max_total_size": int,
     "max_file_count": int,
+    "max_workers": int,
     "strict_schema": bool,
 }
 

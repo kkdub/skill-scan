@@ -34,6 +34,7 @@ def format_json(result: ScanResult) -> str:
         "files_scanned": result.files_scanned,
         "findings": [_serialize_finding(f) for f in result.findings],
         "skill_name": result.skill_name,
+        "suppressed_count": result.suppressed_count,
         "verdict": result.verdict.value,
     }
     return json.dumps(data, sort_keys=True)

@@ -76,11 +76,7 @@ def _format_default(result: ScanResult) -> str:
 
 def _format_quiet(result: ScanResult) -> str:
     """Quiet mode: single verdict summary line."""
-    counts_str = ", ".join(
-        f"{result.counts.get(s.value, 0)} {s.value}"
-        for s in _SEVERITY_ORDER
-        if result.counts.get(s.value, 0) > 0
-    )
+    counts_str = _nonzero_counts_str(result.counts)
     suffix = f" ({counts_str})" if counts_str else ""
     line = f"Verdict: {result.verdict.value.upper()}{suffix}"
     if result.files_skipped:
@@ -103,6 +99,13 @@ def _format_verbose(result: ScanResult) -> str:
 # --- Structural helpers ---
 
 
+def _nonzero_counts_str(counts: dict[str, int]) -> str:
+    """Format non-zero severity counts as a comma-separated string."""
+    return ", ".join(
+        f"{counts.get(s.value, 0)} {s.value}" for s in _SEVERITY_ORDER if counts.get(s.value, 0) > 0
+    )
+
+
 def _header(result: ScanResult) -> str:
     name = result.skill_name or "unknown"
     parts = [f"skill-scan report: {name}"]
@@ -111,6 +114,8 @@ def _header(result: ScanResult) -> str:
     )
     if result.files_skipped:
         parts.append(f"  Skipped: {result.files_skipped} files")
+    if result.suppressed_count > 0:
+        parts.append(f"  Suppressed: {result.suppressed_count} findings via noqa")
     for reason in result.degraded_reasons:
         parts.append(f"  Warning: {reason}")
     return "\n".join(parts)
@@ -118,13 +123,9 @@ def _header(result: ScanResult) -> str:
 
 def _verdict_banner(result: ScanResult) -> str:
     lines: list[str] = ["------------------", f"Verdict: {result.verdict.value.upper()}"]
-    counts_parts = [
-        f"{result.counts.get(s.value, 0)} {s.value}"
-        for s in _SEVERITY_ORDER
-        if result.counts.get(s.value, 0) > 0
-    ]
-    if counts_parts:
-        lines.append(f"  {', '.join(counts_parts)}")
+    counts_str = _nonzero_counts_str(result.counts)
+    if counts_str:
+        lines.append(f"  {counts_str}")
     lines.append(f"  Scanned in {result.duration:.2f}s")
     return "\n".join(lines)
 

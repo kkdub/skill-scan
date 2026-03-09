@@ -13,7 +13,7 @@ requirements:
       when: "scan_all_files() is called"
       then: "Files are distributed across worker processes; results are equivalent to sequential scan"
     verify: test::tests/unit/test_content_scanner.py
-    status: pending
+    status: done
 
   - id: R002
     requirement: "Concurrent scanning produces identical results to sequential scanning"
@@ -23,7 +23,7 @@ requirements:
       when: "Results are compared"
       then: "Same findings (order-independent), same bytes_scanned, same files_skipped"
     verify: test::tests/unit/test_content_scanner.py
-    status: pending
+    status: done
 
   - id: R003
     requirement: "Worker count is configurable with a sensible default (os.cpu_count() or 4)"
@@ -33,7 +33,7 @@ requirements:
       when: "scan_all_files() runs"
       then: "Uses min(os.cpu_count(), 8) workers; can be overridden via ScanConfig"
     verify: test::tests/unit/test_content_scanner.py
-    status: pending
+    status: done
 
   - id: R004
     requirement: "Small file counts (< threshold) skip multiprocessing overhead and run sequentially"
@@ -43,7 +43,7 @@ requirements:
       when: "scan_all_files() is called"
       then: "Files are scanned sequentially (no ProcessPoolExecutor created)"
     verify: test::tests/unit/test_content_scanner.py
-    status: pending
+    status: done
 
   # --- Inline suppression requirements ---
 
@@ -55,7 +55,7 @@ requirements:
       when: "Line is scanned"
       then: "EXEC-002 finding is suppressed; other rules still fire on the same line"
     verify: test::tests/unit/test_suppression.py
-    status: pending
+    status: done
 
   - id: R006
     requirement: "Inline suppression works with multiple rule IDs: # noqa: PI-001, EXEC-002"
@@ -65,7 +65,7 @@ requirements:
       when: "Line is scanned"
       then: "Both PI-001 and EXEC-002 are suppressed; other rules still fire"
     verify: test::tests/unit/test_suppression.py
-    status: pending
+    status: done
 
   - id: R007
     requirement: "Suppressed findings are tracked in ScanResult.suppressed_count"
@@ -75,7 +75,7 @@ requirements:
       when: "Scan completes"
       then: "ScanResult.suppressed_count == 3; suppressed findings do not appear in findings tuple"
     verify: test::tests/unit/test_suppression.py
-    status: pending
+    status: done
 
   - id: R008
     requirement: "Text and JSON formatters report suppressed count when > 0"
@@ -85,7 +85,7 @@ requirements:
       when: "Formatted as text or JSON"
       then: "Output includes '3 findings suppressed via noqa' (text) or 'suppressed_count': 3 (JSON)"
     verify: test::tests/unit/test_suppression.py
-    status: pending
+    status: done
 
   # --- Implicit requirements ---
 
@@ -93,7 +93,7 @@ requirements:
     requirement: "ProcessPoolExecutor gracefully falls back to sequential on platforms that don't support multiprocessing"
     category: reliability
     verify: null
-    status: pending
+    status: done
 
   - id: R-IMP002
     requirement: "noqa comment parsing is case-insensitive and whitespace-tolerant"
@@ -103,7 +103,7 @@ requirements:
       when: "Parsed for suppression"
       then: "All variants correctly suppress PI-001"
     verify: test::tests/unit/test_suppression.py
-    status: pending
+    status: done
 
   - id: R-IMP003
     requirement: "Bare # noqa (no rule ID) is NOT supported — must specify rule IDs"
@@ -113,16 +113,16 @@ requirements:
       when: "Line is scanned"
       then: "No suppression occurs; all findings are reported as normal"
     verify: test::tests/unit/test_suppression.py
-    status: pending
+    status: done
 
   - id: R-IMP004
     requirement: "No new production dependencies for either feature"
     category: reliability
     verify: null
-    status: pending
+    status: done
 
   - id: R-IMP005
     requirement: "ScanResult.suppressed_count field added with default 0 (backward compatible)"
     category: reliability
     verify: grep::suppressed_count::src/skill_scan/models.py
-    status: pending
+    status: done

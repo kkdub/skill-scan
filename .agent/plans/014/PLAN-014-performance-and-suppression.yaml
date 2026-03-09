@@ -88,7 +88,7 @@ environment:
 parts:
   - id: a
     title: "Concurrent file scanning with ProcessPoolExecutor"
-    status: Pending
+    status: Done
     requirements_covered: [R001, R002, R003, R004, R-IMP001, R-IMP004]
     approach:
       - step: "Add concurrency to scan_all_files() in content_scanner.py"
@@ -125,7 +125,7 @@ parts:
 
   - id: b
     title: "Inline suppression via # noqa: RULE-ID comments"
-    status: Pending
+    status: Done
     requirements_covered: [R005, R006, R007, R008, R-IMP002, R-IMP003, R-IMP005]
     approach:
       - step: "Add suppressed_count field to ScanResult model"
@@ -180,16 +180,16 @@ acceptance_scenarios:
   - scenario: "Concurrent scanning produces same results as sequential"
     invoke: "scan a 20-file skill directory with max_workers=2 and compare against sequential (max_workers=1)"
     expect: "Identical findings list (order-independent), same bytes_scanned, same verdict"
-    test_file: null
-    status: pending
+    test_file: tests/unit/test_content_scanner.py
+    status: passing
 
   - scenario: "Inline noqa suppresses specific finding and is reported"
     invoke: "scan a skill directory where line 5 has eval() with # noqa: EXEC-002"
     expect: >
       No EXEC-002 finding for line 5 in results. ScanResult.suppressed_count == 1.
       Text output shows 'Suppressed: 1 findings via noqa'. Other findings unaffected.
-    test_file: null
-    status: pending
+    test_file: tests/unit/test_suppression.py
+    status: passing
 
 allowed_files:
   - "src/skill_scan/content_scanner.py"
@@ -215,24 +215,52 @@ acceptance_criteria:
 stop_condition: |
   When all requirements are verified and all parts are complete.
 
-work_log: []
-evidence: []
+work_log:
+  - part: a
+    status: Done
+    summary: "ProcessPoolExecutor concurrency in content_scanner.py, max_workers config, sequential fallback. 9 new tests."
+    files: [src/skill_scan/content_scanner.py, src/skill_scan/config.py, src/skill_scan/scanner.py, tests/unit/test_content_scanner.py]
+    tests: "1922 passed, 1 xfailed"
+  - part: b
+    status: Done
+    summary: "Inline noqa suppression: suppression.py (parse_noqa, filter_suppressed), integrated into _scan_file(), ScanResult.suppressed_count, formatter output. 37 new tests, then refactored to distribute across owning test modules."
+    files: [src/skill_scan/models.py, src/skill_scan/suppression.py, src/skill_scan/content_scanner.py, src/skill_scan/scanner.py, src/skill_scan/formatters.py, src/skill_scan/json_formatter.py, tests/unit/test_suppression.py, tests/unit/test_content_scanner.py, tests/unit/test_ast_integration.py, tests/unit/test_json_formatter.py, tests/unit/test_formatters_summary.py, tests/unit/test_models.py]
+    tests: "1958 passed, 1 xfailed"
+  - part: docs
+    status: Done
+    date: 2026-03-09
+    type: docs
+    note: "Updated CLAUDE.md (suppression.py structure, Architecture Notes section, concurrent.futures in stdlib list), README.md (concurrent scanning + inline suppression features, max_workers config example, suppressed_count in Python API), CODE-PATTERNS.md (Inline noqa Suppression pattern, Concurrent File Scanning pattern)."
+    files: [CLAUDE.md, README.md, .agent/standards/CODE-PATTERNS.md, .agent/plans/014/PLAN-014-performance-and-suppression.yaml]
+evidence:
+  - part: a
+    verification: "7/7 criteria met, first pass"
+    tests: "1922 passed"
+    file_sizes: {content_scanner.py: 207, config.py: 129, scanner.py: 112, test_content_scanner.py: 188}
+  - part: b
+    verification: "9/9 criteria met, first pass"
+    tests: "1958 passed"
+  - part: docs
+    verification: "CLAUDE.md, README.md, CODE-PATTERNS.md updated to reflect PLAN-014 changes"
+    files_updated: [CLAUDE.md, README.md, .agent/standards/CODE-PATTERNS.md]
 
 handoff:
-  stopped_at: null
-  current_state: null
-  next_steps: []
+  stopped_at: "All parts done, documentation complete"
+  current_state: "Both implementation parts verified (1958 passed). CLAUDE.md, README.md, and CODE-PATTERNS.md updated for concurrent scanning and inline suppression. Plan is ready for final status update and PR."
+  next_steps: ["Set plan status to Done", "Commit documentation updates", "Open PR"]
   blockers: []
   scope:
-    files: []
-    functions: []
-    components: []
+    files: [src/skill_scan/content_scanner.py, src/skill_scan/config.py, src/skill_scan/scanner.py, src/skill_scan/models.py, src/skill_scan/suppression.py, src/skill_scan/formatters.py, src/skill_scan/json_formatter.py]
+    functions: [scan_all_files, _resolve_workers, _scan_file, _read_file, parse_noqa, filter_suppressed]
+    components: [content_scanner, config, scanner, suppression, models, formatters, json_formatter]
   decisions:
     - "ProcessPoolExecutor (not ThreadPoolExecutor) — regex matching is CPU-bound"
-    - "MIN_FILES_FOR_CONCURRENCY threshold avoids overhead for small scans"
+    - "MIN_FILES_FOR_CONCURRENCY = 8, threshold avoids overhead for small scans"
+    - "_resolve_workers() caps at min(cpu_count or 4, 8); max_workers=0 means auto-detect"
     - "Bare # noqa is NOT supported — security scanner needs explicit rule IDs"
     - "suppressed_count on ScanResult (not suppressed_findings list) — keeps model lean"
-    - "Suppression filtering happens after match_content(), not inside the engine"
+    - "Suppression filtering happens in _scan_file() after _apply_rules(), works in both sequential and concurrent paths"
+    - "_read_file() extracted from _scan_file() to stay under function length limit"
   open_questions: []
   cross_part_knowledge: []
   active_signals: []
