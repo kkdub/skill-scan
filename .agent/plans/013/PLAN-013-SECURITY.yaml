@@ -6,7 +6,7 @@ deferred:
   - id: SEC-013-001
     severity: medium
     title: "RecursionError not caught in analyze_python"
-    files: ["src/skill_scan/ast_analyzer.py:39-42", "src/skill_scan/_ast_helpers.py:89-95"]
+    files: ["src/skill_scan/ast_analyzer.py:39-42", "src/skill_scan/_ast_helpers.py:89-118"]
     description: |
       _resolve_binop_add and _resolve_int_expr recurse without depth limits.
       RecursionError is not in the except clause of analyze_python().
