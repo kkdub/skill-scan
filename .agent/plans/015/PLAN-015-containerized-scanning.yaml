@@ -1,0 +1,143 @@
+id: "PLAN-015"
+title: "Containerized Scanning (Dockerfile)"
+type: implementation
+status: Proposed
+created: 2026-03-06
+
+linked_spec: null
+
+description: |
+  Provide a Dockerfile so users can run skill-scan in an isolated container.
+  This addresses the risk of scanning potentially malicious code — the container
+  cannot access the host filesystem beyond the mounted volume.
+
+  Uses python:3.13-slim base image, non-root user, minimal image with only
+  production dependencies. Single part — config-only, no application code changes.
+
+requirements:
+  file: REQUIREMENTS-015.yaml
+  ids:
+    - R001      # Dockerfile builds and runs
+    - R002      # Non-root user
+    - R003      # Volume mount scanning
+    - R004      # All CLI flags supported
+    - R-IMP001  # Minimal image
+    - R-IMP002  # .dockerignore
+    - R-IMP003  # Build from source
+  uncovered: []
+
+utilities_audit:
+  status: complete
+  search_performed:
+    - query: "Checked for existing Dockerfile"
+      found: "None exists"
+    - query: "Checked for existing .dockerignore"
+      found: "None exists"
+  categories:
+    error_handling:
+      needed: false
+    validation:
+      needed: false
+    logging:
+      needed: false
+    types:
+      needed: false
+    configuration:
+      needed: false
+    http_client:
+      needed: false
+  infrastructure_parts: []
+
+environment:
+  status: assessed
+  build:
+    tool: make
+    install_cmd: "make install"
+    check_cmd: "make check"
+    prerequisites: ["Python 3.13", "uv"]
+  runtime_services: []
+  changes:
+    new_dependencies: []
+    env_vars: []
+    schema_changes: []
+    ci_changes: []
+    build_changes:
+      - file: "Dockerfile"
+        description: "New Dockerfile for containerized scanning"
+      - file: ".dockerignore"
+        description: "Exclude non-production files from Docker context"
+
+# Skeleton: opt-out
+# Category: config-only change (no application logic)
+# Justification: Dockerfile and .dockerignore only. No source code changes.
+
+parts:
+  - id: a
+    title: "Dockerfile and .dockerignore"
+    status: Pending
+    requirements_covered: [R001, R002, R003, R004, R-IMP001, R-IMP002, R-IMP003]
+    approach:
+      - step: "Create .dockerignore"
+        files: [.dockerignore]
+        notes: >
+          Exclude: .git, .github, .agent, .venv, __pycache__, tests/, scripts/,
+          *.pyc, *.egg-info, .mypy_cache, .pytest_cache, .ruff_cache, Makefile,
+          *.md (except README.md and rule data). Keep src/, pyproject.toml, README.md.
+      - step: "Create Dockerfile"
+        files: [Dockerfile]
+        notes: >
+          FROM python:3.13-slim. Create non-root user 'scanner'. COPY source and
+          pyproject.toml. RUN pip install --no-cache-dir . (installs skill-scan from
+          source with click dependency). WORKDIR /scan. USER scanner.
+          ENTRYPOINT ["skill-scan"]. No uv in container — pip is sufficient for
+          production install. Keep image simple — no multi-stage needed since
+          there's no compilation step.
+    criteria:
+      - "Dockerfile uses python:3.13-slim base image"
+      - "Container runs as non-root user 'scanner'"
+      - "ENTRYPOINT is skill-scan (container acts as the CLI)"
+      - ".dockerignore excludes tests, .git, .agent, .github, .venv, __pycache__"
+      - "docker build succeeds without errors"
+      - "docker run skill-scan scan --help outputs help text"
+
+# Single-part plan — acceptance scenarios not required
+acceptance_scenarios: []
+
+allowed_files:
+  - "Dockerfile"
+  - ".dockerignore"
+
+forbidden:
+  - "config/production/**"
+  - ".env*"
+  - "src/**"
+
+acceptance_criteria:
+  - "All requirements have status: done"
+  - "All parts have status: Done"
+
+stop_condition: |
+  When Dockerfile builds and runs skill-scan successfully.
+
+work_log: []
+evidence: []
+
+handoff:
+  stopped_at: null
+  current_state: null
+  next_steps: []
+  blockers: []
+  scope:
+    files: []
+    functions: []
+    components: []
+  decisions:
+    - "python:3.13-slim over alpine (better compatibility, minimal size difference)"
+    - "pip install from source (not uv) — simpler for container, no dev tools needed"
+    - "Non-root user 'scanner' for defense-in-depth"
+    - "ENTRYPOINT not CMD — container IS the scanner"
+  open_questions: []
+  cross_part_knowledge: []
+  active_signals: []
+
+errors: []

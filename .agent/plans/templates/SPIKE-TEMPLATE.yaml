@@ -1,38 +1,66 @@
 # Spike Template
 # ==============
 # File naming: SPIKE-{NNN}-{short-slug}.yaml
+# Example: SPIKE-001-redis-vs-kafka.yaml
+#
 # Spikes are time-boxed research. They produce KNOWLEDGE, not code.
+# Use when you need to answer questions before committing to an approach.
 
 id: "SPIKE-XXX"
 title: "Spike: Brief research question"
 type: spike
 status: Proposed
-created: 2026-XX-XX
-priority: medium
+created: 2026-01-XX
+
+# ─────────────────────────────────────────────────────────────────────────────
+# RESEARCH SCOPE
+# ─────────────────────────────────────────────────────────────────────────────
 
 description: |
   Why this research is needed. What decision depends on the outcome.
 
-timebox: 4h
+timebox: 4h  # Maximum time to spend. Stop when timebox expires, even if incomplete.
 
 questions:
   - "Question 1 to answer"
   - "Question 2 to answer"
+  - "Question 3 to answer"
 
 deliverable: |
-  What to produce (usually a decision document or recommendation).
+  What to produce. Usually a decision document or recommendation.
+  Example: "docs/decisions/XXXX-redis-vs-kafka.md with recommendation and rationale"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# CONSTRAINTS
+# ─────────────────────────────────────────────────────────────────────────────
 
 allowed_files:
-  - "docs/**"
+  - "docs/**"  # Spikes produce documents, not production code
 
 forbidden:
-  - "src/**"
+  - "src/**"   # No production code changes during research
+
+# ─────────────────────────────────────────────────────────────────────────────
+# COMPLETION
+# ─────────────────────────────────────────────────────────────────────────────
 
 stop_condition: |
   Done when all questions are answered OR timebox expires.
+  Partial answers are acceptable - document what's known and what's still uncertain.
 
-findings: []
+# ─────────────────────────────────────────────────────────────────────────────
+# FINDINGS (filled during research)
+# ─────────────────────────────────────────────────────────────────────────────
 
-recommendation: null
+findings:
+  # - question: "Question 1"
+  #   answer: "What we learned"
+  #   confidence: high  # high | medium | low
+  #   sources:
+  #     - "URL or reference"
 
-next_steps: []
+recommendation: null  # Final recommendation after research
+
+next_steps:
+  # - "Create implementation plan based on findings"
+  # - "Schedule follow-up spike for remaining questions"
