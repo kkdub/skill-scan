@@ -36,9 +36,10 @@ runs:
 
     - name: Install skill-scan
       shell: bash
-      run: uv tool install skill-scan
+      run: uv tool install "$GITHUB_ACTION_PATH"
 
     - name: Run skill-scan (path mode)
+      id: scan-path
       if: inputs.repo == ''
       shell: bash
       env:
@@ -58,12 +59,15 @@ runs:
           ARGS+=(--config "$INPUT_CONFIG")
         fi
         if [ "$INPUT_FORMAT" = "sarif" ]; then
-          uv tool run skill-scan scan "${ARGS[@]}" > skill-scan-results.sarif
+          EXIT_CODE=0
+          uv tool run skill-scan scan "${ARGS[@]}" > skill-scan-results.sarif || EXIT_CODE=$?
+          echo "scan-exit-code=$EXIT_CODE" >> "$GITHUB_OUTPUT"
         else
           uv tool run skill-scan scan "${ARGS[@]}"
         fi
 
     - name: Run skill-scan (repo mode)
+      id: scan-repo
       if: inputs.repo != ''
       shell: bash
       env:
@@ -83,14 +87,26 @@ runs:
           ARGS+=(--config "$INPUT_CONFIG")
         fi
         if [ "$INPUT_FORMAT" = "sarif" ]; then
-          uv tool run skill-scan scan "${ARGS[@]}" > skill-scan-results.sarif
+          EXIT_CODE=0
+          uv tool run skill-scan scan "${ARGS[@]}" > skill-scan-results.sarif || EXIT_CODE=$?
+          echo "scan-exit-code=$EXIT_CODE" >> "$GITHUB_OUTPUT"
         else
           uv tool run skill-scan scan "${ARGS[@]}"
         fi
 
     - name: Upload SARIF results
-      if: inputs.format == 'sarif'
+      if: always() && inputs.format == 'sarif'
       uses: github/codeql-action/upload-sarif@v3
       with:
         sarif_file: skill-scan-results.sarif
       continue-on-error: true
+
+    - name: Propagate scan exit code
+      if: always() && inputs.format == 'sarif'
+      shell: bash
+      env:
+        PATH_EXIT: ${{ steps.scan-path.outputs.scan-exit-code }}
+        REPO_EXIT: ${{ steps.scan-repo.outputs.scan-exit-code }}
+      run: |
+        CODE="${PATH_EXIT:-${REPO_EXIT:-0}}"
+        exit "${CODE}"

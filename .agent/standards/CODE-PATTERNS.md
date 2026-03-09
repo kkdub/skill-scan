@@ -258,7 +258,7 @@ def _prepare_edit_context(
 
 ## Exception-Based Error Flow
 
-Domain exceptions are defined in `src/errors.py`. Guard functions (`ensure_*`) raise on failure and return `None` on success. There are no partial-result tuples or sentinel string returns.
+Domain exceptions are defined in their respective feature modules (for example, `src/skill_scan/_github_api.py` and `src/skill_scan/parser.py`). Guard functions (`ensure_*`) raise on failure and return `None` on success. There are no partial-result tuples or sentinel string returns.
 
 ```python
 # CORRECT: guard raises or returns None
@@ -287,7 +287,7 @@ for early_err in [validate_a(), validate_b()]:
 - No `(value, lines, error)` triple-tuple returns -- functions return clean values or raise.
 - No `str | None` guard returns -- guards raise or return `None`.
 - No `for early_err in [...]` chains.
-- All domain exceptions inherit from the base class in `src/errors.py`.
+- Domain exceptions are defined in their respective feature modules.
 
 ## Tool Boundary Exception Catch
 

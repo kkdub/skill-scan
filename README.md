@@ -79,6 +79,7 @@ skill-scan validate path/to/SKILL.md
 Add skill-scan to any GitHub Actions workflow:
 
 ```yaml
+- uses: actions/checkout@v4   # required for path mode
 - uses: kkdub/skill-scan@main
   with:
     path: ./skills/my-skill   # local path (default: .)
@@ -86,7 +87,9 @@ Add skill-scan to any GitHub Actions workflow:
     format: sarif             # text | json | sarif
 ```
 
-For remote repo scanning:
+> **Tip:** Pin to a release tag (e.g., `@v1.0.0`) instead of `@main` for reproducible builds.
+
+For remote repo scanning (no checkout needed):
 
 ```yaml
 - uses: kkdub/skill-scan@main
