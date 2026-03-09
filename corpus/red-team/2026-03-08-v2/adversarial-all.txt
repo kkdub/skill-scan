@@ -1,0 +1,34 @@
+# Adversarial Corpus for decoder.py + engine.py
+# Generated: 2026-03-09
+# Total inputs: 234 (210 TP tests, 24 FP tests)
+#
+# Categories:
+#   b64-standard (22): Standard base64-encoded PI phrases in quotes
+#   b64-no-padding (10): Base64 without padding characters
+#   b64-extra-padding (10): Base64 with extra padding characters
+#   b64-unquoted (10): Base64 without quotes
+#   b64-single-quote (10): Base64 in single quotes
+#   evasion-concat (10): Base64 split into concatenated <24-char chunks
+#   evasion-multiline (10): Base64 split across multiple lines
+#   evasion-urlsafe-b64 (10): URL-safe base64 encoding
+#   evasion-zwsp (10): Zero-width spaces injected into base64
+#   evasion-indirect (5): Base64 assigned to variable, decoded elsewhere
+#   evasion-json-embedded (10): Base64 in JSON value
+#   evasion-line-continuation (10): Base64 split via line continuation
+#   evasion-short-payload (10): PI phrases that encode to <24 b64 chars
+#   evasion-adjacent-alnum (5): Base64 adjacent to alphanumeric chars
+#   evasion-comment (5): Base64 in code comments
+#   evasion-double-encoded (10): Double base64 encoding
+#   evasion-backtick (5): Base64 in backticks
+#   evasion-yaml (5): Base64 as YAML value
+#   evasion-hex-alt (5): Hex in plain quotes (no recognized syntax)
+#   evasion-hex-upper (5): Hex uppercase via bytes.fromhex
+#   evasion-hex-0x (5): Hex with 0x prefix
+#   evasion-hex-escape (5): Hex escape sequences (NOTE: test error - double backslash)
+#   edge-* (14): Boundary values, minimal, large, mixed, non-ASCII, depth
+#   advanced-* (9): ROT13, base32, compressed, reversed, chr(), bytes(), HTML, markdown, URL
+#   fp-* (24): False positive tests (data URIs, legitimate b64, hex, JWT, SSH, fixtures)
+#
+# See adversarial_decoder_test.py for complete test case definitions.
+# See regression-candidates.txt for categorized findings.
+# See results.json for detailed per-input results.

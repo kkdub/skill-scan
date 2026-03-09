@@ -344,6 +344,24 @@ def _verify_path_containment(file_path: Path, save_path: Path) -> None:
 
 > Trap: replacing only `.` with `_` is insufficient — path separators (`/`, `\`) and null bytes also bypass directory containment.
 
+## Multi-Pass Scanning in match_content()
+
+`match_content()` in `engine.py` applies four sequential passes. Each pass extends the findings list without interfering with earlier passes. New passes follow the same helper-function pattern.
+
+```python
+def match_content(content, file_path, rules, *, _depth=0):
+    # Pass 1: line rules (original text)
+    # Pass 2: line rules (normalized text — deduped against pass 1)
+    # Pass 3: file-scope rules (original + normalized)
+    # Pass 4: decoded-content rules (base64/hex payloads, recursive up to MAX_DECODE_DEPTH)
+    ...
+    if _depth < MAX_DECODE_DEPTH:
+        findings.extend(_decoded_content_findings(content, file_path, rules, _depth))
+    return findings
+```
+
+> Trap: decoded findings keep the original file path and line number (where the encoded string was found), not a line number inside the decoded text. Prefix the description with `[decoded]` so users know the match came from a decoded payload.
+
 ## Output Formatter Pattern
 
 Output formatters are pure functions that take a `ScanResult` and return a string. No I/O, no side effects. New formats get their own module, are registered in `cli.py`'s format `Choice`, and exported via `__init__.__all__`.

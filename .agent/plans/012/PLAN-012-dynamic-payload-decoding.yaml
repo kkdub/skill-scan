@@ -1,7 +1,7 @@
 id: "PLAN-012"
 title: "Dynamic Payload Decoding"
 type: implementation
-status: Proposed
+status: Complete
 created: 2026-03-06
 
 linked_spec: null
@@ -83,7 +83,7 @@ environment:
 parts:
   - id: a
     title: "Decoder module — extract and decode encoded payloads"
-    status: Pending
+    status: Done
     requirements_covered: [R-IMP001, R-IMP002, R-IMP003, R-IMP004, R-IMP005, R-IMP006]
     verify_group: decode-and-scan
     approach:
@@ -126,7 +126,7 @@ parts:
 
   - id: b
     title: "Engine integration — scan decoded payloads and produce findings"
-    status: Pending
+    status: Done
     depends_on: [a]
     requirements_covered: [R001, R002, R003, R004, R-EFF001, R-EFF002]
     verify_group: decode-and-scan
@@ -166,19 +166,20 @@ acceptance_scenarios:
     expect: >
       Findings include EXEC-003 (b64decode call) AND a PI-rule finding from the decoded
       text 'ignore previous instructions', with file/line pointing to the original source
-    test_file: null
-    status: pending
+    test_file: tests/unit/test_decoder_integration.py::TestAcceptanceScenarios::test_base64_pi_with_exec_call
+    status: passing
 
   - scenario: "Legitimate base64 content is not flagged"
     invoke: "scan a skill directory with data:image/png;base64,iVBOR... and base64 config tokens"
     expect: "No findings from decoded content (data URIs excluded, short tokens below threshold)"
-    test_file: null
-    status: pending
+    test_file: tests/unit/test_decoder_integration.py::TestAcceptanceScenarios::test_legitimate_base64_no_spurious_findings
+    status: passing
 
 allowed_files:
   - "src/skill_scan/decoder.py"
   - "src/skill_scan/rules/engine.py"
   - "tests/unit/test_decoder.py"
+  - "tests/unit/test_decoder_integration.py"
 
 forbidden:
   - "config/production/**"
@@ -193,26 +194,74 @@ acceptance_criteria:
 stop_condition: |
   When all requirements are verified and all parts are complete.
 
-work_log: []
-evidence: []
+work_log:
+  - part: a
+    action: "build-and-test"
+    result: "COMPLETE — existing implementation validated, no changes needed"
+  - part: a
+    action: "refine-and-confirm"
+    result: "COMPLETE — _make_payload helper extracted in test_decoder.py (249→215 lines)"
+  - part: b
+    action: "build-and-test"
+    result: "COMPLETE — existing integration validated, no changes needed"
+  - part: b
+    action: "red-teamer"
+    result: "41% evasion. Fixed boundary off-by-one (MIN_ENCODED_LENGTH 24→20). Remaining evasions out of scope (string splitting, alt encodings)."
+  - part: b
+    action: "hardening build-and-test"
+    result: "COMPLETE — lowered MIN_ENCODED_LENGTH to 20, updated regex quantifiers, added 5 short PI regression tests"
+  - part: b
+    action: "refine-and-confirm"
+    result: "COMPLETE — DRY: regex quantifiers now derived from constants"
+  - group: decode-and-scan
+    action: "verify-and-fix"
+    result: "VERIFIED — 15/15 criteria met, first iteration"
+  - part: docs
+    action: "document"
+    result: "COMPLETE — CLAUDE.md stdlib list updated, README features bullet added, CODE-PATTERNS.md multi-pass pattern added, plan handoff updated"
+  - gate: "gates 1-10"
+    action: "end-of-plan-gates"
+    result: "ALL PASS — G1 requirements PASS, G2 effectiveness PASS, G3 verification VERIFIED, G4 DRY PASS, G5 pre-commit PASS, G6 acceptance PASS, G7 architecture PASS, G8 security FIXED (MAX_PAYLOADS_PER_FILE), G9 docs COMPLETE, G10 debt FILED (3 items)"
+
+evidence:
+  - "Red-team corpus: corpus/red-team/2026-03-08-v2/"
+  - "R-EFF001: 11/11 PI variants detected (100%) including 5 short phrases added after red-team"
+  - "R-EFF002: 0% false positive rate (24 legitimate inputs tested)"
+  - "decoder.py: 240 lines, engine.py: 217 lines (both under 250)"
+  - "1804 tests passing, make check green"
+  - "Effectiveness eval: R-EFF001 PASS (1.00 >= 0.90), R-EFF002 PASS (0.00 < 0.10)"
 
 handoff:
-  stopped_at: null
-  current_state: null
-  next_steps: []
+  stopped_at: "plan complete — all gates passed"
+  current_state: "All parts Done, all 10 gates passed, ready for PR"
+  next_steps:
+    - "Run /pr to create pull request"
   blockers: []
   scope:
-    files: []
-    functions: []
-    components: []
+    files:
+      - src/skill_scan/decoder.py
+      - src/skill_scan/rules/engine.py
+      - tests/unit/test_decoder.py
+      - tests/unit/test_decoder_integration.py
+    functions:
+      - "extract_encoded_strings()"
+      - "decode_payload()"
+      - "_decoded_content_findings()"
+      - "match_content() _depth parameter"
+    components:
+      - decoder
+      - engine
   decisions:
     - "Decoder integrates as a 4th pass in match_content(), after line/file/normalized passes"
-    - "MIN_ENCODED_LENGTH=24 to avoid false positives on short strings"
+    - "MIN_ENCODED_LENGTH lowered from 24 to 20 after red-team (catches 15+ byte source strings)"
     - "MAX_DECODED_SIZE=100KB and MAX_DECODE_DEPTH=2 for safety"
     - "Findings from decoded content keep original file/line, prefixed with [decoded]"
     - "data:image/ URIs excluded from extraction to reduce false positives"
+    - "Regex quantifiers derived from MIN_ENCODED_LENGTH constant (DRY refactor)"
+    - "String splitting, alternative encodings, adjacent-alnum boundaries documented as known limitations"
   open_questions: []
-  cross_part_knowledge: []
+  cross_part_knowledge:
+    - "Normalized content is decoded too (_decoded_content_findings passes normalize_text(content) to extract)"
   active_signals: []
 
 errors: []

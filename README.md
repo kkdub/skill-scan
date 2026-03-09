@@ -9,6 +9,7 @@ Security scanner for agent skills — detects prompt injection, malicious code, 
 - **Local and remote scanning** — scan a directory on disk or fetch from GitHub
 - **Multiple output formats** — human-readable text, machine-readable JSON, or SARIF v2.1.0 for GitHub Code Scanning
 - **CI-friendly** — `--fail-on` flag exits with code 2 when findings exceed a severity threshold
+- **Encoded payload detection** — base64 and hex-encoded strings are decoded and recursively scanned, catching obfuscated injections that regex-only scanning misses
 - **Zero runtime dependencies** beyond `click` — core engine uses stdlib only
 
 ## Installation

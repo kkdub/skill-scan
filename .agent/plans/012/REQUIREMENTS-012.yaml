@@ -13,7 +13,7 @@ requirements:
       when: "Content is scanned with PI and EXEC rules"
       then: "Findings include both the b64decode call (EXEC-003/009) AND prompt injection in decoded content (PI-001+)"
     verify: test::tests/unit/test_decoder.py
-    status: pending
+    status: done
 
   - id: R002
     requirement: "Engine detects hex-encoded payloads by decoding them and scanning the decoded content"
@@ -23,7 +23,7 @@ requirements:
       when: "Content is scanned"
       then: "Decoded content ('eval') is scanned and triggers appropriate findings"
     verify: test::tests/unit/test_decoder.py
-    status: pending
+    status: done
 
   - id: R003
     requirement: "Decoded content is recursively scanned up to a configurable max depth"
@@ -33,7 +33,7 @@ requirements:
       when: "Content is scanned with max_decode_depth=2"
       then: "Inner payload is detected after two rounds of decoding"
     verify: test::tests/unit/test_decoder.py
-    status: pending
+    status: done
 
   - id: R004
     requirement: "Findings from decoded content reference the original file and line where the encoded string was found"
@@ -43,7 +43,7 @@ requirements:
       when: "Content is scanned and decoded payload matches PI-001"
       then: "Finding has file='skills/my-skill/run.py', line=5 (not a line in the decoded content)"
     verify: test::tests/unit/test_decoder.py
-    status: pending
+    status: done
 
   # --- Implicit requirements ---
 
@@ -51,13 +51,13 @@ requirements:
     requirement: "Decoder module is pure (no I/O) — takes strings, returns decoded strings"
     category: reliability
     verify: grep::def extract_and_decode::src/skill_scan/decoder.py
-    status: pending
+    status: done
 
   - id: R-IMP002
     requirement: "Decoder uses stdlib only (base64, binascii, re modules)"
     category: reliability
     verify: null
-    status: pending
+    status: done
 
   - id: R-IMP003
     requirement: "Minimum encoded string length threshold prevents false positives on short strings"
@@ -67,7 +67,7 @@ requirements:
       when: "Content is scanned"
       then: "Short strings below threshold are not decoded (avoids noise from coincidental base64)"
     verify: test::tests/unit/test_decoder.py
-    status: pending
+    status: done
 
   - id: R-IMP004
     requirement: "Maximum decoded payload size prevents resource exhaustion from large encoded blobs"
@@ -77,7 +77,7 @@ requirements:
       when: "Content is scanned"
       then: "Decoding is skipped or truncated; scanner does not consume excessive memory"
     verify: test::tests/unit/test_decoder.py
-    status: pending
+    status: done
 
   - id: R-IMP005
     requirement: "Invalid base64/hex strings are silently skipped (no crashes or exceptions)"
@@ -87,13 +87,13 @@ requirements:
       when: "Content is scanned"
       then: "Invalid strings are skipped; scanning completes normally"
     verify: test::tests/unit/test_decoder.py
-    status: pending
+    status: done
 
   - id: R-IMP006
     requirement: "decoder.py stays under 250 lines"
     category: reliability
     verify: null
-    status: pending
+    status: done
 
   # --- Effectiveness requirements ---
 
@@ -104,7 +104,7 @@ requirements:
     acceptance:
       - "Parametrized test with 10+ base64-encoded PI variants all detected"
     verify: test::tests/unit/test_decoder.py
-    status: pending
+    status: done
 
   - id: R-EFF002
     requirement: "False positive rate on legitimate base64 (data URIs, image refs) is < 10%"
@@ -113,4 +113,4 @@ requirements:
     acceptance:
       - "Test with legitimate base64 content (data:image/png, config tokens) produces no spurious findings"
     verify: test::tests/unit/test_decoder.py
-    status: pending
+    status: done
