@@ -42,13 +42,16 @@ class EncodedPayload:
 # _HEX_ESCAPE_RE: each \xNN encodes 1 byte (2 hex chars), so MIN//2 sequences needed.
 # _HEX_FROMHEX_RE: first pair is outside the repeat group, so repeat count is MIN//2 - 1.
 _L = MIN_ENCODED_LENGTH  # shorthand for f-string readability
+_L_B64 = max(1, _L - 3)  # allow up to 3 '=' padding chars within MIN_ENCODED_LENGTH
 _HB = _L // 2  # hex bytes needed (escape sequences)
 _HF = _HB - 1  # repeat count for fromhex pattern (first pair is outside the group)
 
 # Base64: standalone blocks or quoted strings of [A-Za-z0-9+/] with optional = padding.
+# Regex threshold uses _L_B64 (lower) to catch padding-inclusive strings; the explicit
+# len(text) >= MIN_ENCODED_LENGTH check in _extract_base64_from_line enforces the real minimum.
 _BASE64_RE = re.compile(
-    rf"""(?:["'])([A-Za-z0-9+/]{{{_L},}}={{0,3}})(?:["'])"""
-    rf"""|(?<![A-Za-z0-9+/])([A-Za-z0-9+/]{{{_L},}}={{0,3}})(?![A-Za-z0-9+/])""",
+    rf"""(?:["'])([A-Za-z0-9+/]{{{_L_B64},}}={{0,3}})(?:["'])"""
+    rf"""|(?<![A-Za-z0-9+/])([A-Za-z0-9+/]{{{_L_B64},}}={{0,3}})(?![A-Za-z0-9+/])""",
 )
 
 # bytes.fromhex('...') calls — allows optional spaces between hex byte pairs.
@@ -100,12 +103,14 @@ def _extract_base64_from_line(line: str, line_num: int) -> list[EncodedPayload]:
             continue
         text = match.group(1) or match.group(2)
         if text and len(text) >= MIN_ENCODED_LENGTH:
+            # Use group start (not match start) to point at the encoded text, not surrounding quotes.
+            group_idx = 1 if match.group(1) is not None else 2
             results.append(
                 EncodedPayload(
                     encoded_text=text,
                     encoding_type="base64",
                     line_num=line_num,
-                    start_offset=match.start(),
+                    start_offset=match.start(group_idx),
                 )
             )
     return results
@@ -174,7 +179,12 @@ def decode_payload(payload: EncodedPayload, *, depth: int = 0) -> str | None:
     Returns:
         Decoded string or None on failure.
     """
-    if depth > MAX_DECODE_DEPTH:
+    if depth >= MAX_DECODE_DEPTH:
+        return None
+
+    # Pre-decode size estimate — reject oversized payloads before allocation.
+    ratio = 0.75 if payload.encoding_type == "base64" else 0.5
+    if int(len(payload.encoded_text) * ratio) > MAX_DECODED_SIZE:
         return None
 
     raw_bytes = _decode_bytes(payload)

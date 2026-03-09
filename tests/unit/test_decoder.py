@@ -6,6 +6,7 @@ import base64
 
 from skill_scan.decoder import (
     MAX_DECODED_SIZE,
+    MAX_DECODE_DEPTH,
     MIN_ENCODED_LENGTH,
     EncodedPayload,
     decode_payload,
@@ -182,13 +183,12 @@ class TestDecodePayload:
         assert result is None
 
     def test_max_depth_exceeded_returns_none(self) -> None:
-        """Exceeding MAX_DECODE_DEPTH returns None."""
+        """Reaching or exceeding MAX_DECODE_DEPTH returns None."""
         encoded = base64.b64encode(b"test depth limiting ok").decode()
         payload = _make_payload(encoded, "base64")
 
-        result = decode_payload(payload, depth=3)
-
-        assert result is None
+        assert decode_payload(payload, depth=MAX_DECODE_DEPTH) is None
+        assert decode_payload(payload, depth=MAX_DECODE_DEPTH + 1) is None
 
     def test_unknown_encoding_type_returns_none(self) -> None:
         """Unknown encoding type returns None."""

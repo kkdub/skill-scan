@@ -170,7 +170,7 @@ def _decoded_content_findings(
     """Decode encoded payloads and recursively scan decoded text."""
     results: list[Finding] = []
     for p in extract_encoded_strings(normalize_text(content))[:MAX_PAYLOADS_PER_FILE]:
-        decoded = decode_payload(p)
+        decoded = decode_payload(p, depth=depth)
         if decoded is None:
             continue
         for f in match_content(decoded, file_path, rules, _depth=depth + 1):
