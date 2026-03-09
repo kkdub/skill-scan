@@ -208,7 +208,7 @@ work_log:
   - part: "docs"
     date: 2026-03-09
     type: docs
-    note: "Verification pass — CLAUDE.md, README.md, CODE-PATTERNS.md confirmed current and accurate against final source. No documentation gaps found."
+    action: "Verification pass — CLAUDE.md, README.md, CODE-PATTERNS.md confirmed current and accurate against final source. No documentation gaps found."
     tests: 1913
   - part: "gates"
     date: 2026-03-09
