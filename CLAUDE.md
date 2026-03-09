@@ -30,17 +30,21 @@ make check    # All quality checks (run early, run often)
 - Rules enforced via `.agent/standards/code-rules.json`
 - Type hints on all public functions
 - Tests in `tests/`
-- Core scanner engine and decoder use stdlib only (`re`, `pathlib`, `json`, `tomllib`, `base64`, `binascii`)
+- Core scanner engine and decoder use stdlib only (`re`, `pathlib`, `json`, `tomllib`, `base64`, `binascii`, `ast`)
 - Don't add deps without `uv` + `pyproject.toml`
 - **Max 250 lines per file** (source code in `src/` and `tests/`)
+- `ast_analyzer.py` is at exactly 250 lines — any addition requires a split first
 
 ## Project Structure
 
 ```
-src/skill_scan/     # Production source code
-tests/              # Test suite (mirrors src/ structure)
-scripts/            # Quality & analysis scripts
-.agent/             # Plans, standards, workflow
+src/skill_scan/           # Production source code
+  ast_analyzer.py         # AST-based analysis for Python files (public: analyze_python)
+  _ast_helpers.py         # Private string-resolution helpers for AST analysis
+  content_scanner.py      # File I/O + rule dispatch + AST deduplication
+tests/                    # Test suite (mirrors src/ structure)
+scripts/                  # Quality & analysis scripts
+.agent/                   # Plans, standards, workflow
 ```
 
 ## Tips

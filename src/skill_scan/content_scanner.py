@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from skill_scan.ast_analyzer import analyze_python
 from skill_scan.models import Finding, Rule, Severity
 from skill_scan.rules import match_content
 
@@ -92,9 +93,36 @@ def _apply_rules(
     relative_path: str,
     rules: list[Rule],
 ) -> list[Finding]:
-    """Filter rules by path exclusions, then match content. Pure — no I/O."""
+    """Filter rules by path exclusions, then match content. Pure — no I/O.
+
+    For Python files, also runs AST analysis and deduplicates findings
+    by (rule_id, line) so each detection appears at most once.
+    """
     applicable = [r for r in rules if not _is_path_excluded(relative_path, r)]
-    return match_content(content, relative_path, applicable)
+    regex_findings = match_content(content, relative_path, applicable)
+    if not relative_path.endswith(".py"):
+        return regex_findings
+    ast_findings = analyze_python(content, relative_path)
+    return _deduplicate(regex_findings, ast_findings)
+
+
+def _deduplicate(
+    regex_findings: list[Finding],
+    ast_findings: list[Finding],
+) -> list[Finding]:
+    """Merge regex and AST findings, deduplicating by (rule_id, line).
+
+    Regex findings take priority — AST findings are only appended when
+    no regex finding exists with the same (rule_id, line) pair.
+    """
+    seen: set[tuple[str, int | None]] = {(f.rule_id, f.line) for f in regex_findings}
+    merged = list(regex_findings)
+    for f in ast_findings:
+        key = (f.rule_id, f.line)
+        if key not in seen:
+            seen.add(key)
+            merged.append(f)
+    return merged
 
 
 def _read_error_finding(

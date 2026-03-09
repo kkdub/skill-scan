@@ -1,0 +1,25 @@
+# chr-getattr-call: chr()-built 'eval' in getattr then called
+# Status: DETECTED
+getattr(__builtins__, chr(101)+chr(118)+chr(97)+chr(108))('1+1')
+
+# join-getattr-import: join-built '__import__' in getattr
+# Status: EVADED
+getattr(__builtins__, ''.join(['__','im','po','rt','__']))('os')
+
+# double-indirection-chr: chr() with arithmetic expressions (not plain int constants)
+# Status: EVADED
+x = chr(51+50) + chr(60+58) + chr(48+49) + chr(54+54)
+
+# lambda-eval: eval() inside lambda (should detect the eval call itself)
+# Status: DETECTED
+f = lambda code: eval(code)
+f('1+1')
+
+# exec-concat-payload: exec() with concatenated payload string
+# Status: DETECTED
+exec('imp' + 'ort os; os.sys' + 'tem("ls")')
+
+# triple-layer: Triple: chr->join->getattr building eval
+# Status: DETECTED
+fn = getattr(__builtins__, ''.join([chr(101),chr(118),chr(97),chr(108)]))
+fn('1+1')

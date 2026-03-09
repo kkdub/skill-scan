@@ -1,0 +1,29 @@
+# deep-dotted-pickle: _pickle (C implementation alias) loads
+# Status: EVADED
+import _pickle
+_pickle.loads(data)
+
+# from-import-loads: from pickle import loads - direct name call
+# Status: EVADED
+from pickle import loads
+loads(data)
+
+# import-as-alias: import pickle as p; p.loads()
+# Status: EVADED
+import pickle as p
+p.loads(data)
+
+# from-builtins-eval: from builtins import eval as e
+# Status: EVADED
+from builtins import eval as e
+e('1+1')
+
+# sys-modules-os: sys.modules['os'].system() bypass
+# Status: EVADED
+import sys
+sys.modules['os'].system('ls')
+
+# importlib-alias: importlib aliased then import_module
+# Status: EVADED
+import importlib as il
+il.import_module('os')

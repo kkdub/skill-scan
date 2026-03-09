@@ -1,0 +1,77 @@
+# format-method-eval: str.format() building 'eval'
+# Status: EVADED
+x = '{}{}'.format('ev', 'al')
+
+# format-method-exec: str.format() with positional args building 'exec'
+# Status: EVADED
+x = '{0}{1}'.format('ex', 'ec')
+
+# fstring-eval: f-string building 'eval' from variables
+# Status: EVADED
+a = 'ev'; b = 'al'; x = f'{a}{b}'
+
+# percent-format-eval: %-formatting building 'eval'
+# Status: EVADED
+x = '%s%s' % ('ev', 'al')
+
+# bytes-decode-eval: bytes.decode() producing 'eval'
+# Status: EVADED
+x = b'eval'.decode('utf-8')
+
+# bytes-decode-exec: bytes.decode() producing 'exec'
+# Status: EVADED
+x = b'exec'.decode()
+
+# bytearray-eval: bytearray.decode() producing 'eval'
+# Status: EVADED
+x = bytearray(b'eval').decode()
+
+# codecs-decode-eval: codecs.decode() producing 'eval'
+# Status: EVADED
+import codecs
+x = codecs.decode(b'eval', 'utf-8')
+
+# str-constructor-eval: str() constructor from bytes producing 'eval'
+# Status: EVADED
+x = str(b'eval', 'utf-8')
+
+# reversed-join-eval: reversed() + join building 'eval'
+# Status: EVADED
+x = ''.join(reversed('lave'))
+
+# listcomp-join-eval: List comprehension with chr() in join building 'eval'
+# Status: EVADED
+x = ''.join([chr(c) for c in [101, 118, 97, 108]])
+
+# map-chr-join-eval: map(chr, ...) + join building 'eval'
+# Status: EVADED
+x = ''.join(map(chr, [101, 118, 97, 108]))
+
+# nested-chr-ord: chr(ord(...)) nesting building 'eval'
+# Status: EVADED
+x = chr(ord('e')) + chr(ord('v')) + chr(ord('a')) + chr(ord('l'))
+
+# slice-evasion: String slicing to extract 'eval'
+# Status: EVADED
+x = 'xxevalxx'[2:6]
+
+# replace-build: String replace building 'eval'
+# Status: EVADED
+x = 'xvxl'.replace('x', 'ea'[:1]).replace('x', 'ea'[1:])
+
+# tuple-join-eval: Tuple in join building 'eval' (should work, tuple is handled)
+# Status: DETECTED
+x = ''.join(('e', 'v', 'a', 'l'))
+
+# genexpr-join-eval: Generator expression with chr() in join building 'eval'
+# Status: EVADED
+x = ''.join(chr(c) for c in [101, 118, 97, 108])
+
+# base64-decode-eval: base64 decode producing 'eval'
+# Status: EVADED
+import base64
+x = base64.b64decode(b'ZXZhbA==').decode()
+
+# hex-decode-eval: bytes.fromhex() producing 'eval'
+# Status: EVADED
+x = bytes.fromhex('6576616c').decode()

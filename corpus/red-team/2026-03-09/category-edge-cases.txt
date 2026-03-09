@@ -1,0 +1,41 @@
+# empty-string: Empty input should not crash or produce findings
+# Status: CLEAN
+
+
+# syntax-error: Syntax error should return empty list
+# Status: CLEAN
+def foo(
+
+# very-deep-nesting: Very deep nesting -- should not crash
+# Status: CLEAN
+x = 'e' + 'v' + 'a' + 'l''e' + 'v' + 'a' + 'l''e' + 'v' + 'a' + 'l''e' + 'v' + 'a' + 'l''e' + 'v' + 'a' + 'l''e' + 'v' +
+
+# unicode-identifiers: Unicode homoglyph for 'eval' (Cyrillic e) -- should NOT flag as eval
+# Status: CLEAN
+еval('1+1')
+
+# null-bytes: String with null byte is not 'eval'
+# Status: CLEAN
+x = 'ev' + '\x00' + 'al'
+
+# very-long-string-concat: Very long repeated concat -- should not crash
+# Status: FALSE_POSITIVE
+x = 'e' + 'v' + 'a' + 'l' + 'e' + 'v' + 'a' + 'l' + 'e' + 'v' + 'a' + 'l' + 'e' + 'v' + 'a' + 'l' + 'e' + 'v' + 'a' + 'l
+
+# multiline-concat: Implicit string concat across lines (Python auto-concat)
+# Status: DETECTED
+x = ('ev'
+     'al')
+
+# walrus-operator: eval inside walrus operator
+# Status: DETECTED
+if (x := eval('1+1')): pass
+
+# decorator-eval: eval used as decorator
+# Status: EVADED
+@eval
+def foo(): pass
+
+# star-import-exec: exec() with import star payload
+# Status: DETECTED
+exec('from os import *')

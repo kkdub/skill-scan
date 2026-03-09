@@ -1,0 +1,59 @@
+{
+  "target": "src/skill_scan/ast_analyzer.py + src/skill_scan/_ast_helpers.py",
+  "date": "2026-03-09",
+  "claims_tested": [
+    "R-EFF001: AST analysis catches >= 80% of string concatenation evasion techniques",
+    "R-EFF002: AST analysis produces zero false positives on safe code patterns"
+  ],
+  "total_inputs": 82,
+  "categories": {
+    "string-construction": {
+      "count": 19,
+      "description": "Novel string construction methods: format(), f-strings, bytes.decode(), base64, hex, slicing, replace, etc."
+    },
+    "indirect-calls": {
+      "count": 10,
+      "description": "Indirect call patterns: aliasing, nested getattr, vars(), globals(), __dict__, functools.reduce"
+    },
+    "module-aliasing": {
+      "count": 6,
+      "description": "Module aliasing: import-as, from-import, _pickle, sys.modules"
+    },
+    "obfuscation-layers": {
+      "count": 6,
+      "description": "Multiple indirection levels: chr+getattr+call, join+getattr, arithmetic in chr(), lambda"
+    },
+    "os-subprocess-evasion": {
+      "count": 8,
+      "description": "OS/subprocess variants: os.popen, os.execv, os.spawnl, shell via variable, **kwargs"
+    },
+    "deserialization-evasion": {
+      "count": 7,
+      "description": "Deserialization variants: shelve, yaml.unsafe_load, cloudpickle, dill, from-import pickle"
+    },
+    "false-positives": {
+      "count": 16,
+      "description": "Safe code patterns that should NOT trigger findings"
+    },
+    "edge-cases": {
+      "count": 10,
+      "description": "Edge cases: empty input, syntax errors, deep nesting, unicode homoglyphs, decorators"
+    }
+  },
+  "techniques_used": [
+    "Format string construction (str.format, %, f-strings)",
+    "Encoding transforms (bytes.decode, base64, hex, codecs)",
+    "String manipulation (slice, replace, reversed+join)",
+    "Iterator-based construction (list comprehension, generator, map+chr)",
+    "Variable aliasing (assign eval to var, import-as)",
+    "Dynamic attribute access (vars, globals, __dict__, sys.modules)",
+    "Functional composition (functools.reduce, operator.add)",
+    "Deep call chains (nested getattr, multi-level attribute)",
+    "Arithmetic obfuscation (chr with expressions, not constants)",
+    "Module aliasing (_pickle, cloudpickle, dill, shelve)",
+    "Syntax abuse (decorator, walrus operator, lambda wrapper)",
+    "Indirect shell flag (variable, **kwargs)",
+    "Unicode homoglyphs (Cyrillic e)",
+    "Resource exhaustion (very long concat chains, deep nesting)"
+  ]
+}

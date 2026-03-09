@@ -8,6 +8,11 @@ from skill_scan.models import Finding, Rule, Severity
 from skill_scan.rules.engine import match_line
 
 
+def filter_by_rule(rule_id: str, findings: list[Finding]) -> list[Finding]:
+    """Filter a findings list to only those matching rule_id."""
+    return [f for f in findings if f.rule_id == rule_id]
+
+
 def make_rule(
     rule_id: str = "TEST-001",
     severity: Severity = Severity.INFO,
