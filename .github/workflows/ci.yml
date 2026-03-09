@@ -15,7 +15,7 @@ jobs:
       - uses: actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98  # v4
 
       - name: Install uv
-        uses: astral-sh/setup-uv@a2a8b00df0aa22a77a33ee5f956c2128661fabeb  # v7
+        uses: astral-sh/setup-uv@eac588ad8def6316056a12d4907a9d4d84ff7a3b  # v7
 
       - name: Set up Python
         run: uv python install 3.13
@@ -73,7 +73,7 @@ jobs:
       - uses: actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98  # v4
 
       - name: Install uv
-        uses: astral-sh/setup-uv@a2a8b00df0aa22a77a33ee5f956c2128661fabeb  # v7
+        uses: astral-sh/setup-uv@eac588ad8def6316056a12d4907a9d4d84ff7a3b  # v7
 
       - name: Set up Python
         run: uv python install 3.13
@@ -135,7 +135,7 @@ jobs:
       - uses: actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98  # v4
 
       - name: Install uv
-        uses: astral-sh/setup-uv@a2a8b00df0aa22a77a33ee5f956c2128661fabeb  # v7
+        uses: astral-sh/setup-uv@eac588ad8def6316056a12d4907a9d4d84ff7a3b  # v7
 
       - name: Set up Python
         run: uv python install 3.13
