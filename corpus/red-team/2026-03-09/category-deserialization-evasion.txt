@@ -1,5 +1,5 @@
 # shelve-open: shelve.open() uses pickle internally
-# Status: EVADED
+# Status: DETECTED
 import shelve
 db = shelve.open('data')
 
@@ -9,17 +9,17 @@ import yaml
 yaml.load(data, Loader=yaml.FullLoader)
 
 # yaml-unsafe-load: yaml.unsafe_load() explicitly unsafe
-# Status: EVADED
+# Status: DETECTED
 import yaml
 yaml.unsafe_load(data)
 
 # cloudpickle-loads: cloudpickle.loads() (pickle-based)
-# Status: EVADED
+# Status: DETECTED
 import cloudpickle
 cloudpickle.loads(data)
 
 # dill-loads: dill.loads() (pickle-based)
-# Status: EVADED
+# Status: DETECTED
 import dill
 dill.loads(data)
 
@@ -27,8 +27,3 @@ dill.loads(data)
 # Status: EVADED
 from pickle import loads
 loads(data)
-
-# yaml-positional-safeloader: yaml.load with positional SafeLoader (not keyword arg) -- should be safe but tool may miss
-# Status: DETECTED
-import yaml
-yaml.load(data, yaml.SafeLoader)

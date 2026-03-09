@@ -58,7 +58,7 @@ class Executor:
 x = 1
 
 # safe-string-system: Building 'system_config' should not flag (dangerous prefix but safe result)
-# Status: FALSE_POSITIVE
+# Status: CLEAN
 x = 'system' + '_config'
 
 # safe-getattr-system-info: getattr with 'system_info' -- contains 'system' but not exact match
@@ -68,3 +68,8 @@ getattr(obj, 'system_info')
 # safe-join-evaluation: Join building 'evaluation' (not 'eval')
 # Status: CLEAN
 x = ''.join(['e', 'v', 'a', 'l', 'u', 'a', 't', 'i', 'o', 'n'])
+
+# yaml-positional-safeloader: yaml.load with positional SafeLoader (safe -- should not flag)
+# Status: CLEAN
+import yaml
+yaml.load(data, yaml.SafeLoader)

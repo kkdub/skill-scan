@@ -15,11 +15,11 @@ a = 'ev'; b = 'al'; x = f'{a}{b}'
 x = '%s%s' % ('ev', 'al')
 
 # bytes-decode-eval: bytes.decode() producing 'eval'
-# Status: EVADED
+# Status: DETECTED
 x = b'eval'.decode('utf-8')
 
 # bytes-decode-exec: bytes.decode() producing 'exec'
-# Status: EVADED
+# Status: DETECTED
 x = b'exec'.decode()
 
 # bytearray-eval: bytearray.decode() producing 'eval'
@@ -40,11 +40,11 @@ x = str(b'eval', 'utf-8')
 x = ''.join(reversed('lave'))
 
 # listcomp-join-eval: List comprehension with chr() in join building 'eval'
-# Status: EVADED
+# Status: DETECTED
 x = ''.join([chr(c) for c in [101, 118, 97, 108]])
 
 # map-chr-join-eval: map(chr, ...) + join building 'eval'
-# Status: EVADED
+# Status: DETECTED
 x = ''.join(map(chr, [101, 118, 97, 108]))
 
 # nested-chr-ord: chr(ord(...)) nesting building 'eval'
