@@ -344,6 +344,21 @@ def _verify_path_containment(file_path: Path, save_path: Path) -> None:
 
 > Trap: replacing only `.` with `_` is insufficient — path separators (`/`, `\`) and null bytes also bypass directory containment.
 
+## AST Analysis for Python Files
+
+For `.py` files, `content_scanner.py` runs AST analysis after regex scanning and deduplicates by `(rule_id, line)`. The public entry point is `analyze_python(content, file_path) -> list[Finding]` in `ast_analyzer.py`. String resolution helpers live in `_ast_helpers.py`.
+
+```python
+# content_scanner.py — integration point
+regex_findings = match_content(content, relative_path, applicable)
+if relative_path.endswith(".py"):
+    ast_findings = analyze_python(content, relative_path)
+    return _deduplicate(regex_findings, ast_findings)
+return regex_findings
+```
+
+> Trap: `ast_analyzer.py` is at the 250-line limit. Any new detector must be split into a sibling module first (follow the Facade Re-export Pattern).
+
 ## Multi-Pass Scanning in match_content()
 
 `match_content()` in `engine.py` applies four sequential passes. Each pass extends the findings list without interfering with earlier passes. New passes follow the same helper-function pattern.

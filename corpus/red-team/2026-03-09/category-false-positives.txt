@@ -1,0 +1,75 @@
+# safe-string-concat-hello: Safe string concatenation
+# Status: CLEAN
+x = 'hello' + ' world'
+
+# safe-join-abc: Safe join of innocuous strings
+# Status: CLEAN
+x = ''.join(['a', 'b', 'c'])
+
+# safe-chr-building: chr() building 'ABC' (not dangerous)
+# Status: CLEAN
+x = chr(65) + chr(66) + chr(67)
+
+# safe-getattr-name: Safe getattr with innocuous attribute
+# Status: CLEAN
+x = getattr(obj, 'name')
+
+# safe-literal-eval: ast.literal_eval is safe, should not flag
+# Status: CLEAN
+import ast
+result = ast.literal_eval('[1,2,3]')
+
+# safe-yaml-safe-load: yaml.safe_load is safe
+# Status: CLEAN
+import yaml
+data = yaml.safe_load(content)
+
+# safe-subprocess-no-shell: subprocess without shell=True
+# Status: CLEAN
+import subprocess
+subprocess.run(['ls', '-la'])
+
+# safe-subprocess-shell-false: subprocess with shell=False
+# Status: CLEAN
+import subprocess
+subprocess.run(['ls'], shell=False)
+
+# safe-json-loads: json.loads is safe
+# Status: CLEAN
+import json
+data = json.loads(text)
+
+# safe-string-eval-word: String containing 'eval' as substring should not flag
+# Status: CLEAN
+x = 'evaluation_metric'
+
+# safe-function-named-evaluate: Function named 'evaluate' should not flag
+# Status: CLEAN
+def evaluate(model): return model.score()
+
+# safe-class-named-executor: Class named 'Executor' should not flag
+# Status: CLEAN
+class Executor:
+    def execute(self): pass
+
+# safe-comment-eval: Comment mentioning eval should not flag
+# Status: CLEAN
+# eval() is dangerous, never use it
+x = 1
+
+# safe-string-system: Building 'system_config' should not flag (dangerous prefix but safe result)
+# Status: CLEAN
+x = 'system' + '_config'
+
+# safe-getattr-system-info: getattr with 'system_info' -- contains 'system' but not exact match
+# Status: CLEAN
+getattr(obj, 'system_info')
+
+# safe-join-evaluation: Join building 'evaluation' (not 'eval')
+# Status: CLEAN
+x = ''.join(['e', 'v', 'a', 'l', 'u', 'a', 't', 'i', 'o', 'n'])
+
+# yaml-positional-safeloader: yaml.load with positional SafeLoader (safe -- should not flag)
+# Status: CLEAN
+import yaml
+yaml.load(data, yaml.SafeLoader)

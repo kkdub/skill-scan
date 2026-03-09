@@ -1,0 +1,368 @@
+# [string-construction] format-method-eval: str.format() building 'eval'
+# Expected: detect | Actual: EVADED
+x = '{}{}'.format('ev', 'al')
+
+# [string-construction] format-method-exec: str.format() with positional args building 'exec'
+# Expected: detect | Actual: EVADED
+x = '{0}{1}'.format('ex', 'ec')
+
+# [string-construction] fstring-eval: f-string building 'eval' from variables
+# Expected: detect | Actual: EVADED
+a = 'ev'; b = 'al'; x = f'{a}{b}'
+
+# [string-construction] percent-format-eval: %-formatting building 'eval'
+# Expected: detect | Actual: EVADED
+x = '%s%s' % ('ev', 'al')
+
+# [string-construction] bytes-decode-eval: bytes.decode() producing 'eval'
+# Expected: detect | Actual: DETECTED
+x = b'eval'.decode('utf-8')
+
+# [string-construction] bytes-decode-exec: bytes.decode() producing 'exec'
+# Expected: detect | Actual: DETECTED
+x = b'exec'.decode()
+
+# [string-construction] bytearray-eval: bytearray.decode() producing 'eval'
+# Expected: detect | Actual: EVADED
+x = bytearray(b'eval').decode()
+
+# [string-construction] codecs-decode-eval: codecs.decode() producing 'eval'
+# Expected: detect | Actual: EVADED
+import codecs
+x = codecs.decode(b'eval', 'utf-8')
+
+# [string-construction] str-constructor-eval: str() constructor from bytes producing 'eval'
+# Expected: detect | Actual: EVADED
+x = str(b'eval', 'utf-8')
+
+# [string-construction] reversed-join-eval: reversed() + join building 'eval'
+# Expected: detect | Actual: EVADED
+x = ''.join(reversed('lave'))
+
+# [string-construction] listcomp-join-eval: List comprehension with chr() in join building 'eval'
+# Expected: detect | Actual: DETECTED
+x = ''.join([chr(c) for c in [101, 118, 97, 108]])
+
+# [string-construction] map-chr-join-eval: map(chr, ...) + join building 'eval'
+# Expected: detect | Actual: DETECTED
+x = ''.join(map(chr, [101, 118, 97, 108]))
+
+# [string-construction] nested-chr-ord: chr(ord(...)) nesting building 'eval'
+# Expected: detect | Actual: EVADED
+x = chr(ord('e')) + chr(ord('v')) + chr(ord('a')) + chr(ord('l'))
+
+# [string-construction] slice-evasion: String slicing to extract 'eval'
+# Expected: detect | Actual: EVADED
+x = 'xxevalxx'[2:6]
+
+# [string-construction] replace-build: String replace building 'eval'
+# Expected: detect | Actual: EVADED
+x = 'xvxl'.replace('x', 'ea'[:1]).replace('x', 'ea'[1:])
+
+# [string-construction] tuple-join-eval: Tuple in join building 'eval' (should work, tuple is handled)
+# Expected: detect | Actual: DETECTED
+x = ''.join(('e', 'v', 'a', 'l'))
+
+# [string-construction] genexpr-join-eval: Generator expression with chr() in join building 'eval'
+# Expected: detect | Actual: EVADED
+x = ''.join(chr(c) for c in [101, 118, 97, 108])
+
+# [string-construction] base64-decode-eval: base64 decode producing 'eval'
+# Expected: detect | Actual: EVADED
+import base64
+x = base64.b64decode(b'ZXZhbA==').decode()
+
+# [string-construction] hex-decode-eval: bytes.fromhex() producing 'eval'
+# Expected: detect | Actual: EVADED
+x = bytes.fromhex('6576616c').decode()
+
+# [indirect-calls] alias-eval: Aliasing eval to variable then calling
+# Expected: detect | Actual: EVADED
+e = eval
+e('1+1')
+
+# [indirect-calls] getattr-builtins-eval: getattr(__builtins__, 'eval') - plain string, no concat
+# Expected: detect | Actual: DETECTED
+e = getattr(__builtins__, 'eval')
+e('1+1')
+
+# [indirect-calls] vars-builtins-eval: vars(__builtins__)['eval'] dynamic access
+# Expected: detect | Actual: EVADED
+x = vars(__builtins__)['eval']('1+1')
+
+# [indirect-calls] globals-eval: globals() chain to eval
+# Expected: detect | Actual: EVADED
+globals()['__builtins__']['eval']('1+1')
+
+# [indirect-calls] dict-access-eval: __dict__ access bypassing attribute detection
+# Expected: detect | Actual: EVADED
+import os
+os.__dict__['system']('ls')
+
+# [indirect-calls] reduce-concat: functools.reduce to concatenate string
+# Expected: detect | Actual: EVADED
+import functools
+x = functools.reduce(lambda a,b: a+b, ['ev','al'])
+
+# [indirect-calls] operator-add-concat: operator.add() to concatenate string
+# Expected: detect | Actual: EVADED
+import operator
+x = operator.add('ev', 'al')
+
+# [indirect-calls] nested-getattr: Nested getattr with concat
+# Expected: detect | Actual: DETECTED
+getattr(getattr(__builtins__, '__im' + 'port__')('os'), 'sys' + 'tem')('ls')
+
+# [indirect-calls] type-call-exec: type() metaclass with exec in lambda
+# Expected: detect | Actual: DETECTED
+type('X', (), {'__init__': lambda s: exec('import os')})()
+
+# [indirect-calls] compile-exec: compile() + exec() combination
+# Expected: detect | Actual: DETECTED
+exec(compile('import os', '<string>', 'exec'))
+
+# [module-aliasing] deep-dotted-pickle: _pickle (C implementation alias) loads
+# Expected: detect | Actual: EVADED
+import _pickle
+_pickle.loads(data)
+
+# [module-aliasing] from-import-loads: from pickle import loads - direct name call
+# Expected: detect | Actual: EVADED
+from pickle import loads
+loads(data)
+
+# [module-aliasing] import-as-alias: import pickle as p; p.loads()
+# Expected: detect | Actual: EVADED
+import pickle as p
+p.loads(data)
+
+# [module-aliasing] from-builtins-eval: from builtins import eval as e
+# Expected: detect | Actual: EVADED
+from builtins import eval as e
+e('1+1')
+
+# [module-aliasing] sys-modules-os: sys.modules['os'].system() bypass
+# Expected: detect | Actual: EVADED
+import sys
+sys.modules['os'].system('ls')
+
+# [module-aliasing] importlib-alias: importlib aliased then import_module
+# Expected: detect | Actual: EVADED
+import importlib as il
+il.import_module('os')
+
+# [obfuscation-layers] chr-getattr-call: chr()-built 'eval' in getattr then called
+# Expected: detect | Actual: DETECTED
+getattr(__builtins__, chr(101)+chr(118)+chr(97)+chr(108))('1+1')
+
+# [obfuscation-layers] join-getattr-import: join-built '__import__' in getattr
+# Expected: detect | Actual: DETECTED
+getattr(__builtins__, ''.join(['__','im','po','rt','__']))('os')
+
+# [obfuscation-layers] double-indirection-chr: chr() with arithmetic expressions (not plain int constants)
+# Expected: detect | Actual: DETECTED
+x = chr(51+50) + chr(60+58) + chr(48+49) + chr(54+54)
+
+# [obfuscation-layers] lambda-eval: eval() inside lambda (should detect the eval call itself)
+# Expected: detect | Actual: DETECTED
+f = lambda code: eval(code)
+f('1+1')
+
+# [obfuscation-layers] exec-concat-payload: exec() with concatenated payload string
+# Expected: detect | Actual: DETECTED
+exec('imp' + 'ort os; os.sys' + 'tem("ls")')
+
+# [obfuscation-layers] triple-layer: Triple: chr->join->getattr building eval
+# Expected: detect | Actual: DETECTED
+fn = getattr(__builtins__, ''.join([chr(101),chr(118),chr(97),chr(108)]))
+fn('1+1')
+
+# [os-subprocess-evasion] os-popen: os.popen() -- not in the direct detection list?
+# Expected: detect | Actual: DETECTED
+import os
+os.popen('ls')
+
+# [os-subprocess-evasion] subprocess-call-shell: subprocess.call with shell=True
+# Expected: detect | Actual: DETECTED
+import subprocess
+subprocess.call('ls', shell=True)
+
+# [os-subprocess-evasion] subprocess-popen-shell: subprocess.Popen with shell=True
+# Expected: detect | Actual: DETECTED
+import subprocess
+subprocess.Popen('ls', shell=True)
+
+# [os-subprocess-evasion] subprocess-check-output-shell: subprocess.check_output with shell=True
+# Expected: detect | Actual: DETECTED
+import subprocess
+subprocess.check_output('ls', shell=True)
+
+# [os-subprocess-evasion] os-execv: os.execv() family
+# Expected: detect | Actual: DETECTED
+import os
+os.execv('/bin/sh', ['/bin/sh', '-c', 'ls'])
+
+# [os-subprocess-evasion] os-spawnl: os.spawnl() family
+# Expected: detect | Actual: DETECTED
+import os
+os.spawnl(os.P_WAIT, '/bin/sh', 'sh', '-c', 'ls')
+
+# [os-subprocess-evasion] subprocess-shell-variable: shell=<variable> instead of shell=True literal
+# Expected: detect | Actual: EVADED
+import subprocess
+shell_flag = True
+subprocess.run('ls', shell=shell_flag)
+
+# [os-subprocess-evasion] subprocess-kwargs: shell=True hidden in **kwargs
+# Expected: detect | Actual: EVADED
+import subprocess
+opts = {'shell': True}
+subprocess.run('ls', **opts)
+
+# [deserialization-evasion] shelve-open: shelve.open() uses pickle internally
+# Expected: detect | Actual: DETECTED
+import shelve
+db = shelve.open('data')
+
+# [deserialization-evasion] yaml-fullloader: yaml.load with FullLoader (not SafeLoader)
+# Expected: detect | Actual: DETECTED
+import yaml
+yaml.load(data, Loader=yaml.FullLoader)
+
+# [deserialization-evasion] yaml-unsafe-load: yaml.unsafe_load() explicitly unsafe
+# Expected: detect | Actual: DETECTED
+import yaml
+yaml.unsafe_load(data)
+
+# [deserialization-evasion] cloudpickle-loads: cloudpickle.loads() (pickle-based)
+# Expected: detect | Actual: DETECTED
+import cloudpickle
+cloudpickle.loads(data)
+
+# [deserialization-evasion] dill-loads: dill.loads() (pickle-based)
+# Expected: detect | Actual: DETECTED
+import dill
+dill.loads(data)
+
+# [deserialization-evasion] from-pickle-loads: from pickle import loads - bare function call
+# Expected: detect | Actual: EVADED
+from pickle import loads
+loads(data)
+
+# [false-positives] yaml-positional-safeloader: yaml.load with positional SafeLoader (safe -- should not flag)
+# Expected: clean | Actual: CLEAN
+import yaml
+yaml.load(data, yaml.SafeLoader)
+
+# [false-positives] safe-string-concat-hello: Safe string concatenation
+# Expected: clean | Actual: CLEAN
+x = 'hello' + ' world'
+
+# [false-positives] safe-join-abc: Safe join of innocuous strings
+# Expected: clean | Actual: CLEAN
+x = ''.join(['a', 'b', 'c'])
+
+# [false-positives] safe-chr-building: chr() building 'ABC' (not dangerous)
+# Expected: clean | Actual: CLEAN
+x = chr(65) + chr(66) + chr(67)
+
+# [false-positives] safe-getattr-name: Safe getattr with innocuous attribute
+# Expected: clean | Actual: CLEAN
+x = getattr(obj, 'name')
+
+# [false-positives] safe-literal-eval: ast.literal_eval is safe, should not flag
+# Expected: clean | Actual: CLEAN
+import ast
+result = ast.literal_eval('[1,2,3]')
+
+# [false-positives] safe-yaml-safe-load: yaml.safe_load is safe
+# Expected: clean | Actual: CLEAN
+import yaml
+data = yaml.safe_load(content)
+
+# [false-positives] safe-subprocess-no-shell: subprocess without shell=True
+# Expected: clean | Actual: CLEAN
+import subprocess
+subprocess.run(['ls', '-la'])
+
+# [false-positives] safe-subprocess-shell-false: subprocess with shell=False
+# Expected: clean | Actual: CLEAN
+import subprocess
+subprocess.run(['ls'], shell=False)
+
+# [false-positives] safe-json-loads: json.loads is safe
+# Expected: clean | Actual: CLEAN
+import json
+data = json.loads(text)
+
+# [false-positives] safe-string-eval-word: String containing 'eval' as substring should not flag
+# Expected: clean | Actual: CLEAN
+x = 'evaluation_metric'
+
+# [false-positives] safe-function-named-evaluate: Function named 'evaluate' should not flag
+# Expected: clean | Actual: CLEAN
+def evaluate(model): return model.score()
+
+# [false-positives] safe-class-named-executor: Class named 'Executor' should not flag
+# Expected: clean | Actual: CLEAN
+class Executor:
+    def execute(self): pass
+
+# [false-positives] safe-comment-eval: Comment mentioning eval should not flag
+# Expected: clean | Actual: CLEAN
+# eval() is dangerous, never use it
+x = 1
+
+# [false-positives] safe-string-system: Building 'system_config' should not flag (dangerous prefix but safe result)
+# Expected: clean | Actual: CLEAN
+x = 'system' + '_config'
+
+# [false-positives] safe-getattr-system-info: getattr with 'system_info' -- contains 'system' but not exact match
+# Expected: clean | Actual: CLEAN
+getattr(obj, 'system_info')
+
+# [false-positives] safe-join-evaluation: Join building 'evaluation' (not 'eval')
+# Expected: clean | Actual: CLEAN
+x = ''.join(['e', 'v', 'a', 'l', 'u', 'a', 't', 'i', 'o', 'n'])
+
+# [edge-cases] empty-string: Empty input should not crash or produce findings
+# Expected: clean | Actual: CLEAN
+
+
+# [edge-cases] syntax-error: Syntax error should return empty list
+# Expected: clean | Actual: CLEAN
+def foo(
+
+# [edge-cases] very-deep-nesting: Very deep nesting -- should not crash
+# Expected: clean | Actual: CLEAN
+x = 'e' + 'v' + 'a' + 'l''e' + 'v' + 'a' + 'l''e' + 'v' + 'a' + 'l''e' + 'v' + 'a' + 'l''e' + 'v' + 'a' + 'l''e' + 'v' +
+
+# [edge-cases] unicode-identifiers: Unicode homoglyph for 'eval' (Cyrillic e) -- should NOT flag as eval
+# Expected: clean | Actual: CLEAN
+еval('1+1')
+
+# [edge-cases] null-bytes: String with null byte is not 'eval'
+# Expected: clean | Actual: CLEAN
+x = 'ev' + '\x00' + 'al'
+
+# [edge-cases] very-long-string-concat: Very long repeated concat -- should not crash
+# Expected: clean | Actual: FALSE_POSITIVE
+x = 'e' + 'v' + 'a' + 'l' + 'e' + 'v' + 'a' + 'l' + 'e' + 'v' + 'a' + 'l' + 'e' + 'v' + 'a' + 'l' + 'e' + 'v' + 'a' + 'l
+
+# [edge-cases] multiline-concat: Implicit string concat across lines (Python auto-concat)
+# Expected: detect | Actual: EVADED
+x = ('ev'
+     'al')
+
+# [edge-cases] walrus-operator: eval inside walrus operator
+# Expected: detect | Actual: DETECTED
+if (x := eval('1+1')): pass
+
+# [edge-cases] decorator-eval: eval used as decorator
+# Expected: detect | Actual: EVADED
+@eval
+def foo(): pass
+
+# [edge-cases] star-import-exec: exec() with import star payload
+# Expected: detect | Actual: DETECTED
+exec('from os import *')

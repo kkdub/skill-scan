@@ -1,0 +1,41 @@
+# os-popen: os.popen()
+# Status: DETECTED
+import os
+os.popen('ls')
+
+# subprocess-call-shell: subprocess.call with shell=True
+# Status: DETECTED
+import subprocess
+subprocess.call('ls', shell=True)
+
+# subprocess-popen-shell: subprocess.Popen with shell=True
+# Status: DETECTED
+import subprocess
+subprocess.Popen('ls', shell=True)
+
+# subprocess-check-output-shell: subprocess.check_output with shell=True
+# Status: DETECTED
+import subprocess
+subprocess.check_output('ls', shell=True)
+
+# os-execv: os.execv() family
+# Status: DETECTED
+import os
+os.execv('/bin/sh', ['/bin/sh', '-c', 'ls'])
+
+# os-spawnl: os.spawnl() family
+# Status: DETECTED
+import os
+os.spawnl(os.P_WAIT, '/bin/sh', 'sh', '-c', 'ls')
+
+# subprocess-shell-variable: shell=<variable> instead of shell=True literal
+# Status: EVADED
+import subprocess
+shell_flag = True
+subprocess.run('ls', shell=shell_flag)
+
+# subprocess-kwargs: shell=True hidden in **kwargs
+# Status: EVADED
+import subprocess
+opts = {'shell': True}
+subprocess.run('ls', **opts)

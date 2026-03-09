@@ -1,0 +1,44 @@
+# alias-eval: Aliasing eval to variable then calling
+# Status: EVADED
+e = eval
+e('1+1')
+
+# getattr-builtins-eval: getattr(__builtins__, 'eval') - plain string, no concat
+# Status: DETECTED
+e = getattr(__builtins__, 'eval')
+e('1+1')
+
+# vars-builtins-eval: vars(__builtins__)['eval'] dynamic access
+# Status: EVADED
+x = vars(__builtins__)['eval']('1+1')
+
+# globals-eval: globals() chain to eval
+# Status: EVADED
+globals()['__builtins__']['eval']('1+1')
+
+# dict-access-eval: __dict__ access bypassing attribute detection
+# Status: EVADED
+import os
+os.__dict__['system']('ls')
+
+# reduce-concat: functools.reduce to concatenate string
+# Status: EVADED
+import functools
+x = functools.reduce(lambda a,b: a+b, ['ev','al'])
+
+# operator-add-concat: operator.add() to concatenate string
+# Status: EVADED
+import operator
+x = operator.add('ev', 'al')
+
+# nested-getattr: Nested getattr with concat
+# Status: DETECTED
+getattr(getattr(__builtins__, '__im' + 'port__')('os'), 'sys' + 'tem')('ls')
+
+# type-call-exec: type() metaclass with exec in lambda
+# Status: DETECTED
+type('X', (), {'__init__': lambda s: exec('import os')})()
+
+# compile-exec: compile() + exec() combination
+# Status: DETECTED
+exec(compile('import os', '<string>', 'exec'))

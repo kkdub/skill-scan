@@ -1,0 +1,29 @@
+# shelve-open: shelve.open() uses pickle internally
+# Status: DETECTED
+import shelve
+db = shelve.open('data')
+
+# yaml-fullloader: yaml.load with FullLoader (not SafeLoader)
+# Status: DETECTED
+import yaml
+yaml.load(data, Loader=yaml.FullLoader)
+
+# yaml-unsafe-load: yaml.unsafe_load() explicitly unsafe
+# Status: DETECTED
+import yaml
+yaml.unsafe_load(data)
+
+# cloudpickle-loads: cloudpickle.loads() (pickle-based)
+# Status: DETECTED
+import cloudpickle
+cloudpickle.loads(data)
+
+# dill-loads: dill.loads() (pickle-based)
+# Status: DETECTED
+import dill
+dill.loads(data)
+
+# from-pickle-loads: from pickle import loads - bare function call
+# Status: EVADED
+from pickle import loads
+loads(data)

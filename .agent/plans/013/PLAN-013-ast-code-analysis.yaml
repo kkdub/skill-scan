@@ -1,7 +1,7 @@
 id: "PLAN-013"
 title: "AST-Based Code Analysis for Python Files"
 type: implementation
-status: Proposed
+status: Done
 created: 2026-03-06
 
 linked_spec: null
@@ -84,7 +84,7 @@ environment:
 parts:
   - id: a
     title: "AST analyzer module — detect unsafe patterns in Python AST"
-    status: Pending
+    status: Done
     requirements_covered: [R001, R002, R003, R004, R007, R-IMP001, R-IMP002, R-IMP003, R-IMP004, R-EFF001, R-EFF002]
     verify_group: ast-scanning
     approach:
@@ -122,7 +122,7 @@ parts:
 
   - id: b
     title: "Engine integration — run AST analysis on Python files"
-    status: Pending
+    status: Done
     depends_on: [a]
     requirements_covered: [R005, R006]
     verify_group: ast-scanning
@@ -154,14 +154,14 @@ acceptance_scenarios:
     expect: >
       Finding produced with rule_id=EXEC-002 or EXEC-006, correct file and line number,
       describing dynamic attribute access constructing eval
-    test_file: null
-    status: pending
+    test_file: tests/unit/test_ast_integration.py
+    status: passing
 
   - scenario: "Regex and AST findings are deduplicated"
     invoke: "scan a skill directory with a .py file containing plain eval(data)"
     expect: "Exactly one EXEC-002 finding (not two), since both regex and AST detect it"
-    test_file: null
-    status: pending
+    test_file: tests/unit/test_ast_integration.py
+    status: passing
 
 allowed_files:
   - "src/skill_scan/ast_analyzer.py"
@@ -181,26 +181,64 @@ acceptance_criteria:
 stop_condition: |
   When all requirements are verified and all parts are complete.
 
-work_log: []
-evidence: []
+work_log:
+  - part: a
+    action: "build-and-test COMPLETE — 51 tests, ast_analyzer.py + _ast_helpers.py created"
+    tests: 1855
+  - part: a
+    action: "red-team found 51.2% evasion — hardened: false positive fix, expanded detectors, string resolution"
+    tests: 1892
+  - part: a
+    action: "refine-and-confirm COMPLETE — extracted _RECOMMENDATIONS, DRY filter_by_rule helper"
+    tests: 1892
+  - part: b
+    action: "build-and-test COMPLETE — integrated into content_scanner.py, 20 integration tests + acceptance scenarios"
+    tests: 1913
+  - part: b
+    action: "refine-and-confirm COMPLETE — promoted inline imports"
+    tests: 1913
+  - part: "a+b"
+    action: "verify_group ast-scanning VERIFIED — 19/19 criteria met, first try"
+    tests: 1913
+  - part: "docs"
+    date: 2026-03-09
+    type: docs
+    action: "Documentation updated: CLAUDE.md (ast module, ast_analyzer.py 250-line note, project structure), README.md (AST feature bullet), CODE-PATTERNS.md (AST Analysis pattern)"
+    tests: 1913
+evidence:
+  - "Red-team corpus: corpus/red-team/2026-03-09/ (82 adversarial inputs, 8 categories). results.json regenerated against final analyzer."
+  - "Post-hardening: false positive bug fixed, expanded detection for os.popen/execv/spawnl, yaml.unsafe_load, shelve, chr arithmetic, bytes.decode, map(chr), listcomp in join. Remaining evasions are in documented out-of-scope categories (module aliasing, variable aliasing, format strings)."
+  - "Documentation: CLAUDE.md, README.md, CODE-PATTERNS.md updated to reflect AST analysis feature (2026-03-09)"
 
 handoff:
   stopped_at: null
-  current_state: null
-  next_steps: []
+  current_state: "All parts Done. Documentation updated. Ready for PR."
+  next_steps: ["Run end-of-plan gates if not yet run", "Commit and open PR"]
   blockers: []
   scope:
-    files: []
-    functions: []
-    components: []
+    files:
+      - src/skill_scan/ast_analyzer.py
+      - src/skill_scan/_ast_helpers.py
+      - src/skill_scan/content_scanner.py
+      - tests/unit/test_ast_analyzer.py
+      - tests/unit/test_ast_evasion.py
+      - tests/unit/test_ast_integration.py
+      - tests/unit/rule_helpers.py
+    functions: [analyze_python, _deduplicate]
+    components: [ast_analyzer, _ast_helpers, content_scanner]
   decisions:
     - "AST supplements regex (does not replace) — regex is still better for text/Markdown"
     - "Reuse existing rule IDs (EXEC-002, EXEC-006, EXEC-007) for AST findings to avoid rule proliferation"
     - "Deduplication by (rule_id, line) — same approach as normalized findings in engine.py"
     - "SyntaxError = graceful fallback to regex-only (no finding for parse failure)"
     - "Integration point is content_scanner.py, not engine.py (keeps engine focused on regex)"
+    - "String resolution extracted to _ast_helpers.py to keep ast_analyzer.py under 250 lines"
+    - "ast_analyzer.py is at the 250-line limit — future additions require a split first"
   open_questions: []
-  cross_part_knowledge: []
-  active_signals: []
+  cross_part_knowledge:
+    - "Module aliasing (import-as, from-import) is out of scope — requires import tracking"
+    - "Variable aliasing (e = eval; e(x)) not detectable without data flow analysis"
+  active_signals:
+    - "[INFO] ast_analyzer.py at the 250-line limit"
 
 errors: []

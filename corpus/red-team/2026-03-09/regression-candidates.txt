@@ -1,0 +1,142 @@
+# format-method-eval: str.format() building 'eval'
+# Category: string-construction
+x = '{}{}'.format('ev', 'al')
+
+# format-method-exec: str.format() with positional args building 'exec'
+# Category: string-construction
+x = '{0}{1}'.format('ex', 'ec')
+
+# fstring-eval: f-string building 'eval' from variables
+# Category: string-construction
+a = 'ev'; b = 'al'; x = f'{a}{b}'
+
+# percent-format-eval: %-formatting building 'eval'
+# Category: string-construction
+x = '%s%s' % ('ev', 'al')
+
+# bytearray-eval: bytearray.decode() producing 'eval'
+# Category: string-construction
+x = bytearray(b'eval').decode()
+
+# codecs-decode-eval: codecs.decode() producing 'eval'
+# Category: string-construction
+import codecs
+x = codecs.decode(b'eval', 'utf-8')
+
+# str-constructor-eval: str() constructor from bytes producing 'eval'
+# Category: string-construction
+x = str(b'eval', 'utf-8')
+
+# reversed-join-eval: reversed() + join building 'eval'
+# Category: string-construction
+x = ''.join(reversed('lave'))
+
+# nested-chr-ord: chr(ord(...)) nesting building 'eval'
+# Category: string-construction
+x = chr(ord('e')) + chr(ord('v')) + chr(ord('a')) + chr(ord('l'))
+
+# slice-evasion: String slicing to extract 'eval'
+# Category: string-construction
+x = 'xxevalxx'[2:6]
+
+# replace-build: String replace building 'eval'
+# Category: string-construction
+x = 'xvxl'.replace('x', 'ea'[:1]).replace('x', 'ea'[1:])
+
+# genexpr-join-eval: Generator expression with chr() in join building 'eval'
+# Category: string-construction
+x = ''.join(chr(c) for c in [101, 118, 97, 108])
+
+# base64-decode-eval: base64 decode producing 'eval'
+# Category: string-construction
+import base64
+x = base64.b64decode(b'ZXZhbA==').decode()
+
+# hex-decode-eval: bytes.fromhex() producing 'eval'
+# Category: string-construction
+x = bytes.fromhex('6576616c').decode()
+
+# alias-eval: Aliasing eval to variable then calling
+# Category: indirect-calls
+e = eval
+e('1+1')
+
+# vars-builtins-eval: vars(__builtins__)['eval'] dynamic access
+# Category: indirect-calls
+x = vars(__builtins__)['eval']('1+1')
+
+# globals-eval: globals() chain to eval
+# Category: indirect-calls
+globals()['__builtins__']['eval']('1+1')
+
+# dict-access-eval: __dict__ access bypassing attribute detection
+# Category: indirect-calls
+import os
+os.__dict__['system']('ls')
+
+# reduce-concat: functools.reduce to concatenate string
+# Category: indirect-calls
+import functools
+x = functools.reduce(lambda a,b: a+b, ['ev','al'])
+
+# operator-add-concat: operator.add() to concatenate string
+# Category: indirect-calls
+import operator
+x = operator.add('ev', 'al')
+
+# deep-dotted-pickle: _pickle (C implementation alias) loads
+# Category: module-aliasing
+import _pickle
+_pickle.loads(data)
+
+# from-import-loads: from pickle import loads - direct name call
+# Category: module-aliasing
+from pickle import loads
+loads(data)
+
+# import-as-alias: import pickle as p; p.loads()
+# Category: module-aliasing
+import pickle as p
+p.loads(data)
+
+# from-builtins-eval: from builtins import eval as e
+# Category: module-aliasing
+from builtins import eval as e
+e('1+1')
+
+# sys-modules-os: sys.modules['os'].system() bypass
+# Category: module-aliasing
+import sys
+sys.modules['os'].system('ls')
+
+# importlib-alias: importlib aliased then import_module
+# Category: module-aliasing
+import importlib as il
+il.import_module('os')
+
+# subprocess-shell-variable: shell=<variable> instead of shell=True literal
+# Category: os-subprocess-evasion
+import subprocess
+shell_flag = True
+subprocess.run('ls', shell=shell_flag)
+
+# subprocess-kwargs: shell=True hidden in **kwargs
+# Category: os-subprocess-evasion
+import subprocess
+opts = {'shell': True}
+subprocess.run('ls', **opts)
+
+# from-pickle-loads: from pickle import loads - bare function call
+# Category: deserialization-evasion
+from pickle import loads
+loads(data)
+
+# multiline-concat: Implicit string concat across lines (Python auto-concat)
+# Category: edge-cases
+x = ('ev'
+     'al')
+
+# decorator-eval: eval used as decorator
+# Category: edge-cases
+@eval
+def foo(): pass
