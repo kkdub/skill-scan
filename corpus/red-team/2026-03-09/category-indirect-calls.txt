@@ -9,15 +9,15 @@ e = getattr(__builtins__, 'eval')
 e('1+1')
 
 # vars-builtins-eval: vars(__builtins__)['eval'] dynamic access
-# Status: DETECTED
+# Status: EVADED
 x = vars(__builtins__)['eval']('1+1')
 
 # globals-eval: globals() chain to eval
-# Status: DETECTED
+# Status: EVADED
 globals()['__builtins__']['eval']('1+1')
 
 # dict-access-eval: __dict__ access bypassing attribute detection
-# Status: DETECTED
+# Status: EVADED
 import os
 os.__dict__['system']('ls')
 

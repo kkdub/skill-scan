@@ -1,5 +1,5 @@
-# os-popen: os.popen() -- not in the direct detection list?
-# Status: EVADED
+# os-popen: os.popen()
+# Status: DETECTED
 import os
 os.popen('ls')
 
@@ -19,12 +19,12 @@ import subprocess
 subprocess.check_output('ls', shell=True)
 
 # os-execv: os.execv() family
-# Status: EVADED
+# Status: DETECTED
 import os
 os.execv('/bin/sh', ['/bin/sh', '-c', 'ls'])
 
 # os-spawnl: os.spawnl() family
-# Status: EVADED
+# Status: DETECTED
 import os
 os.spawnl(os.P_WAIT, '/bin/sh', 'sh', '-c', 'ls')
 

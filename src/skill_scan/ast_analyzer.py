@@ -31,11 +31,10 @@ _RECOMMENDATIONS: dict[str, str] = {
 def analyze_python(content: str, file_path: str) -> list[Finding]:
     """Analyze Python source for unsafe patterns using AST.
 
-    Parses the source with ast.parse() and walks the tree looking for
-    dangerous patterns that regex scanning might miss (especially evasion
-    techniques like string concatenation to build dangerous names).
-
-    Returns an empty list on SyntaxError (graceful fallback to regex-only).
+    Parses with ast.parse() and walks the tree looking for dangerous patterns
+    that regex might miss (e.g., string concatenation building dangerous names).
+    Returns [] on SyntaxError. May produce duplicates by (rule_id, line) —
+    callers should deduplicate if needed (content_scanner._deduplicate handles this).
     """
     try:
         tree = ast.parse(content)
@@ -191,7 +190,7 @@ def _detect_string_concat_evasion(node: ast.AST, file_path: str) -> list[Finding
                 rule_id="EXEC-002",
                 severity=Severity.CRITICAL,
                 file=file_path,
-                line=getattr(node, "lineno", 0),
+                line=getattr(node, "lineno", None),
                 matched_text=f"string evasion building '{resolved}'",
                 description=f"String concatenation evasion — builds '{resolved}' via AST",
             )
@@ -233,7 +232,7 @@ def _make_finding(
     rule_id: str,
     severity: Severity,
     file: str,
-    line: int,
+    line: int | None,
     matched_text: str,
     description: str,
 ) -> Finding:

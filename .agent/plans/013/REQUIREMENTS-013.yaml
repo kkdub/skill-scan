@@ -78,7 +78,7 @@ requirements:
   # --- Implicit requirements ---
 
   - id: R-IMP001
-    requirement: "AST analyzer is a pure module (no I/O) — takes parsed AST and returns findings"
+    requirement: "AST analyzer is a pure module (no I/O) — takes Python source string and returns findings"
     category: reliability
     verify: null
     status: done

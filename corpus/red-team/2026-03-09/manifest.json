@@ -28,11 +28,11 @@
       "description": "OS/subprocess variants: os.popen, os.execv, os.spawnl, shell via variable, **kwargs"
     },
     "deserialization-evasion": {
-      "count": 7,
+      "count": 6,
       "description": "Deserialization variants: shelve, yaml.unsafe_load, cloudpickle, dill, from-import pickle"
     },
     "false-positives": {
-      "count": 16,
+      "count": 17,
       "description": "Safe code patterns that should NOT trigger findings"
     },
     "edge-cases": {
