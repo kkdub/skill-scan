@@ -1,0 +1,249 @@
+id: "PLAN-011"
+title: "SARIF Output & CI/CD Distribution"
+type: implementation
+status: Done
+created: 2026-03-06
+
+linked_spec: null
+
+description: |
+  Add SARIF v2.1.0 output format for CI/CD integration (GitHub Advanced Security,
+  GitLab, etc.), a GitHub Action for zero-config pipeline usage, and a pre-commit
+  hook for developer workflows.
+
+  SARIF formatter follows the existing json_formatter.py pattern — pure function,
+  stdlib only, returns string. Targets the minimal GitHub-compatible SARIF subset
+  plus tool.driver.rules[] for meaningful alert descriptions.
+
+  GitHub Action is a composite action supporting local path, remote repo, format
+  selection, fail-on threshold, and custom config. Pre-commit hook is configurable
+  via args (user specifies skill directory path).
+
+requirements:
+  file: REQUIREMENTS-011.yaml
+  ids:
+    - R001    # SARIF formatter produces valid SARIF v2.1.0 JSON
+    - R002    # CLI accepts --format sarif
+    - R003    # GitHub Action with path/repo/fail-on/format/config inputs
+    - R004    # Pre-commit hook with configurable path
+    - R005    # SARIF compatible with GitHub Code Scanning
+    - R-IMP001  # SARIF formatter is pure (no I/O)
+    - R-IMP002  # stdlib only (no new deps)
+    - R-IMP003  # Severity-to-level mapping
+    - R-IMP004  # format_sarif in __all__
+    - R-IMP005  # Action handles local + remote
+    - R-IMP006  # SARIF includes rule metadata
+    - R-IMP007  # Under 250 lines
+    - R-IMP008  # Findings without line number handled
+  uncovered: []
+
+utilities_audit:
+  status: complete
+  search_performed:
+    - query: "Reviewed src/skill_scan/json_formatter.py pattern"
+      found: "Pure formatter pattern: format_json(ScanResult) -> str, _serialize_finding(), _build_counts()"
+    - query: "Reviewed src/skill_scan/cli.py format handling"
+      found: "cli.py:63 has Choice(['text', 'json']), cli.py:156-160 dispatches on fmt string"
+    - query: "Reviewed src/skill_scan/__init__.py exports"
+      found: "__all__ includes format_json, scan, Finding, Rule, ScanResult, Severity, Verdict, OutputMode"
+  categories:
+    error_handling:
+      needed: false
+    validation:
+      needed: false
+    logging:
+      needed: false
+    types:
+      needed: false
+    configuration:
+      needed: false
+    http_client:
+      needed: false
+  infrastructure_parts: []
+
+environment:
+  status: assessed
+  build:
+    tool: make
+    install_cmd: "make install"
+    check_cmd: "make check"
+    prerequisites: ["Python 3.13", "uv"]
+  runtime_services: []
+  changes:
+    new_dependencies: []
+    env_vars: []
+    schema_changes: []
+    ci_changes: []
+    build_changes:
+      - file: "action.yml"
+        description: "New composite GitHub Action definition at repo root"
+      - file: ".pre-commit-hooks.yaml"
+        description: "New pre-commit hook definition at repo root"
+
+# Skeleton: opt-out
+# Category: brownfield single-layer extension
+# Justification: SARIF formatter mirrors json_formatter.py exactly.
+# Action/hook are config files. No cross-layer wiring.
+
+parts:
+  - id: a
+    title: "SARIF formatter and CLI wiring"
+    status: Done
+    requirements_covered: [R001, R002, R005, R-IMP001, R-IMP002, R-IMP003, R-IMP004, R-IMP006, R-IMP007, R-IMP008]
+    approach:
+      - step: "Create sarif_formatter.py with format_sarif() and helper functions"
+        files: [src/skill_scan/sarif_formatter.py]
+        notes: >
+          Mirror json_formatter.py pattern exactly. Pure function: format_sarif(ScanResult) -> str.
+          Helpers: _build_sarif_result() for each Finding, _severity_to_level() for mapping,
+          _build_driver_rules() to deduplicate rules from findings and produce tool.driver.rules[].
+          Use json.dumps(data, indent=2) for readable output (SARIF files are typically pretty-printed).
+          Findings with line=None should omit the region field but still include artifactLocation.uri.
+      - step: "Wire sarif format into CLI and update public API"
+        files: [src/skill_scan/cli.py, src/skill_scan/__init__.py]
+        notes: >
+          cli.py:63 — add 'sarif' to Choice list: Choice(["text", "json", "sarif"]).
+          cli.py:156-160 — add elif fmt == "sarif" branch importing format_sarif.
+          __init__.py — add format_sarif to imports and __all__.
+      - step: "Write tests for SARIF formatter"
+        files: [tests/unit/test_sarif_formatter.py]
+        notes: >
+          Mirror test_json_formatter.py structure. Test: valid SARIF structure,
+          severity-to-level mapping for all 5 levels, rule metadata generation,
+          findings with and without line numbers, empty findings list,
+          deterministic output. Use json.loads() to validate structure.
+    criteria:
+      - "format_sarif(ScanResult) returns valid JSON with version='2.1.0' and runs array"
+      - "Each Finding maps to a SARIF result with ruleId, message.text, level, and locations"
+      - "Severity mapping: critical/high -> error, medium -> warning, low/info -> note"
+      - "tool.driver.rules[] contains deduplicated rule entries with id, shortDescription, fullDescription"
+      - "Findings with line=None produce results with artifactLocation but no region"
+      - "CLI --format sarif outputs SARIF JSON to stdout"
+      - "format_sarif is in skill_scan.__all__"
+      - "sarif_formatter.py is under 250 lines"
+      - "All new tests pass"
+
+  - id: b
+    title: "GitHub Action and pre-commit hook"
+    status: Done
+    depends_on: [a]
+    requirements_covered: [R003, R004, R-IMP005]
+    approach:
+      - step: "Create action.yml composite action"
+        files: [action.yml]
+        notes: >
+          Composite action. Inputs: path (default '.'), repo (optional), fail-on (optional),
+          format (default 'text'), config (optional). Steps: setup Python, install uv,
+          install skill-scan, run skill-scan scan with appropriate args. If format=sarif,
+          include upload-sarif step. Support both path and --repo modes. Use
+          astral-sh/setup-uv action for uv install (same as ci.yml).
+      - step: "Create .pre-commit-hooks.yaml"
+        files: [.pre-commit-hooks.yaml]
+        notes: >
+          Single hook: id=skill-scan, name='Scan agent skills for security issues',
+          entry='skill-scan scan', language=python, pass_filenames=false,
+          types=[directory]. Users configure args in their .pre-commit-config.yaml
+          to specify skill directory path. Example in description or README.
+    criteria:
+      - "action.yml is a valid composite action with inputs: path, repo, fail-on, format, config"
+      - "Action installs Python, uv, and skill-scan, then runs scan with user-provided inputs"
+      - "Action supports both local path and --repo remote scanning"
+      - "Action conditionally uploads SARIF when format=sarif"
+      - ".pre-commit-hooks.yaml defines skill-scan hook with pass_filenames=false"
+      - "Pre-commit hook entry is 'skill-scan scan' and users pass skill path via args"
+
+acceptance_scenarios:
+  - scenario: "SARIF output from CLI is valid and contains rule metadata"
+    invoke: "skill-scan scan --format sarif ./test-skill-dir"
+    expect: >
+      stdout is valid JSON with version='2.1.0', tool.driver.name='skill-scan',
+      results[] with ruleId/message/level/locations, and tool.driver.rules[]
+      with shortDescription and fullDescription for each triggered rule
+    test_file: tests/integration/test_sarif_acceptance.py
+    status: passing
+
+  - scenario: "GitHub Action runs scan and produces output"
+    invoke: "GitHub Action with inputs path=./test-skill, format=sarif, fail-on=high"
+    expect: "Action completes, SARIF file produced, exit code 2 if high+ findings exist"
+    test_file: tests/integration/test_cli_sarif_format.py
+    status: passing
+
+allowed_files:
+  - "src/skill_scan/sarif_formatter.py"
+  - "src/skill_scan/cli.py"
+  - "src/skill_scan/__init__.py"
+  - "tests/unit/test_sarif_formatter.py"
+  - "action.yml"
+  - ".pre-commit-hooks.yaml"
+
+forbidden:
+  - "config/production/**"
+  - ".env*"
+
+acceptance_criteria:
+  - "All requirements have status: done"
+  - "All parts have status: Done"
+  - "All tests pass"
+  - "All acceptance scenarios have status: passing (if defined)"
+
+stop_condition: |
+  When all requirements are verified and all parts are complete.
+
+work_log:
+  - part: a
+    status: Done
+    summary: "SARIF formatter created, CLI wired, public API exported. 20 tests, 1745 total passing."
+    files: [src/skill_scan/sarif_formatter.py, src/skill_scan/cli.py, src/skill_scan/__init__.py, tests/unit/test_sarif_formatter.py]
+  - part: b
+    status: Done
+    summary: "GitHub Action and pre-commit hook created. 10 acceptance tests, 1755 total passing."
+    files: [action.yml, .pre-commit-hooks.yaml, tests/unit/test_sarif_acceptance.py]
+  - part: docs
+    date: 2026-03-07
+    type: docs
+    status: Done
+    summary: "Documentation updated. README: SARIF format option, GitHub Action usage, pre-commit hook usage, format_sarif in Python API. Plan status set to Done, acceptance scenarios updated to passing."
+    files: [README.md, .agent/plans/011/PLAN-011-sarif-and-distribution.yaml, .agent/plans/011/REQUIREMENTS-011.yaml]
+evidence:
+  - type: test_output
+    command: "make check"
+    result: "1755 tests passing, make check green after both parts"
+  - type: manual_verification
+    command: "grep -c '' src/skill_scan/sarif_formatter.py"
+    result: "91 lines — well under 250-line limit"
+
+handoff:
+  stopped_at: "Plan complete. All parts done, all tests passing, documentation updated."
+  current_state: "SARIF formatter, CLI wiring, public API, GitHub Action, and pre-commit hook all implemented and tested."
+  next_steps:
+    - "Commit and open PR for PLAN-011"
+    - "Consider Dockerfile distribution (deferred to a future plan)"
+  blockers: []
+  scope:
+    files:
+      - src/skill_scan/sarif_formatter.py
+      - src/skill_scan/cli.py
+      - src/skill_scan/__init__.py
+      - tests/unit/test_sarif_formatter.py
+      - tests/integration/test_sarif_acceptance.py
+      - tests/integration/test_cli_sarif_format.py
+      - action.yml
+      - .pre-commit-hooks.yaml
+    functions:
+      - format_sarif
+    components:
+      - SARIF formatter
+      - GitHub Action
+      - pre-commit hook
+  decisions:
+    - "SARIF minimal + rule metadata subset (not full SARIF v2.1.0) — sufficient for GitHub/GitLab"
+    - "Pre-commit hook uses pass_filenames=false — user configures skill path via args"
+    - "Dockerfile split to separate plan"
+    - "python:3.13-slim base for Dockerfile (when that plan is written)"
+    - "action.yml uses uv tool install (not pip) — consistent with project tooling"
+    - "SARIF upload step uses continue-on-error: true — scan failure should not block SARIF upload"
+  open_questions: []
+  cross_part_knowledge: []
+  active_signals: []
+
+errors: []

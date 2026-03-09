@@ -1,0 +1,62 @@
+plan: PLAN-015
+generated_at: "2026-03-06"
+
+requirements:
+
+  - id: R001
+    requirement: "Dockerfile builds a working skill-scan container from python:3.13-slim"
+    category: functional
+    contract:
+      given: "The Dockerfile at repo root"
+      when: "docker build -t skill-scan . && docker run skill-scan scan --help"
+      then: "Container builds successfully and displays skill-scan help text"
+    verify: manual
+    status: pending
+
+  - id: R002
+    requirement: "Container runs as non-root user for security"
+    category: security
+    contract:
+      given: "A running skill-scan container"
+      when: "whoami is executed inside the container"
+      then: "Output is a non-root user (e.g., 'scanner')"
+    verify: grep::USER::Dockerfile
+    status: pending
+
+  - id: R003
+    requirement: "Container accepts skill directory as a volume mount and scans it"
+    category: functional
+    contract:
+      given: "A local skill directory at ./my-skill"
+      when: "docker run -v ./my-skill:/scan skill-scan scan /scan"
+      then: "Scan output is produced for the mounted skill directory"
+    verify: manual
+    status: pending
+
+  - id: R004
+    requirement: "Container supports all CLI flags (--format, --fail-on, --quiet, --verbose, --config)"
+    category: functional
+    contract:
+      given: "A skill-scan container"
+      when: "docker run skill-scan scan --format sarif --fail-on high /scan"
+      then: "SARIF output produced; exit code 2 if high+ findings"
+    verify: manual
+    status: pending
+
+  - id: R-IMP001
+    requirement: "Docker image is minimal — no dev dependencies, no test files, no .git"
+    category: performance
+    verify: grep::.dockerignore::.*
+    status: pending
+
+  - id: R-IMP002
+    requirement: ".dockerignore excludes tests, .git, .agent, .github, .venv, __pycache__"
+    category: performance
+    verify: file::.dockerignore
+    status: pending
+
+  - id: R-IMP003
+    requirement: "Dockerfile uses multi-stage or single-stage build with pip install from source"
+    category: functional
+    verify: file::Dockerfile
+    status: pending

@@ -1,87 +1,604 @@
 # Plan File Template
 # ===================
 # File naming: PLAN-{NNN}-{short-slug}.yaml
-# Example: PLAN-001-add-github-search.yaml
+# Example: PLAN-001-add-auth-endpoint.yaml
+#
+# Required fields: id, title, status
+# Multi-part plans: Use `parts` array (keep related work in ONE file)
+#
+# EXECUTION MODEL:
+# When /run executes this plan, the orchestrator delegates to subagents:
+#   "Use the implementer subagent to write code for Part (a)..."
+#   "Use the test-writer subagent to write tests..."
+# The orchestrator coordinates but NEVER implements directly.
 
 id: "PLAN-XXX"
 title: "Brief descriptive title"
-type: implementation  # implementation | spike
-status: Proposed  # Proposed | Approved | In Progress | Blocked | Done | Dropped
-created: 2026-XX-XX
-priority: medium  # low | medium | high | critical
+type: implementation  # implementation | spike (spike = research, no code output)
+status: Proposed  # Proposed | Approved | In Progress | Feature-Complete | Blocked | Done | Dropped
+# Feature-Complete: all structural gates pass but effectiveness gates not yet run
+# Done: all gates pass including effectiveness verification
+created: 2026-01-XX
+# ─────────────────────────────────────────────────────────────────────────────
+# LINKED SPEC (optional but recommended)
+# ─────────────────────────────────────────────────────────────────────────────
+# Path to source specification document. Used for:
+# - Requirements extraction during /plan
+# - Final verification during /verify (audit)
 
-linked_spec: null  # e.g., "specs/feature-x.md"
+linked_spec: null  # e.g., "specs/feature-x.md" or "requirements/REQ-001.md"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# DESCRIPTION
+# ─────────────────────────────────────────────────────────────────────────────
 
 description: |
   What this plan accomplishes and why it matters.
+  Include enough context for the orchestrator to understand the goal.
+
+# ─────────────────────────────────────────────────────────────────────────────
+# REQUIREMENTS
+# ─────────────────────────────────────────────────────────────────────────────
+# Full requirements with testable contracts live in a standalone YAML file.
+# The orchestrator reads that file when delegating to test-writer or verifier.
+# This section is a thin index for coverage checking and status tracking.
+#
+# /write-plan generates the requirements file during Phase 1. Format is
+# documented in skills/write-plan/references/requirements-format.md.
 
 requirements:
-  extraction_status: pending
-  extracted_at: null
-  spec_hash: null
-  items: []
-  uncovered: []
+  file: null  # e.g., REQUIREMENTS-018.yaml (same directory as this plan)
+  ids:
+    # Populated by /write-plan — one line per requirement for coverage tracking.
+    # - R001    # short description
+    # - R-IMP001  # implicit requirement
+    # - R-EFF001  # effectiveness requirement
+    []
+  uncovered: []  # Populated by /write-plan if any requirements aren't covered by parts
+
+# ─────────────────────────────────────────────────────────────────────────────
+# UTILITIES AUDIT (complete BEFORE defining parts)
+# ─────────────────────────────────────────────────────────────────────────────
+# Infrastructure needs are predictable. Identify them upfront to avoid:
+# - Reinventing utilities that already exist
+# - Creating helpers in ad-hoc locations
+# - Discovering "oh we need error handling" mid-implementation
+#
+# For each category: search first, then decide create vs reuse.
+#
+# LOCATION FRAMEWORK (where new utilities should live):
+#   Cross-cutting (errors, logging, config) → src/common/
+#   Pure functions (no domain knowledge)   → src/utils/
+#   Domain-specific helpers                → src/{domain}/helpers.py
+#   Shared types/protocols                 → src/types/ or src/{domain}/types.py
+#   Constants                              → src/constants.py or src/{domain}/constants.py
 
 utilities_audit:
+  # Status: pending | complete
+  # Set to 'complete' after audit is done (before defining parts)
   status: pending
-  search_performed: []
+
+  # Record what was searched and found
+  search_performed:
+    # - query: "grep -rn 'def.*error' src/"
+    #   found: "src/common/errors.py exists with handle_api_error(), APIError"
+    # - query: "find . -type d -name 'common' -o -name 'utils'"
+    #   found: "src/common/, src/utils/ directories exist"
+
+  # Assess each infrastructure category
   categories:
     error_handling:
-      needed: false
+      needed: false  # true | false - does this feature need error handling?
+      # If needed: true, fill these:
+      # exists: "src/common/errors.py"  # path if already exists, or false
+      # gaps: "Need new RetryableError exception"  # what's missing
+      # action: extend  # use | extend | create
+      # location: "src/common/errors.py"  # where new code goes (if extend/create)
+
     validation:
       needed: false
+      # exists: false
+      # gaps: "Need payload validation for event types"
+      # action: create
+      # location: "src/common/validation.py"
+
+    logging:
+      needed: false
+      # exists: "src/common/logging.py"
+      # action: use
+
     types:
       needed: false
+      # exists: false
+      # gaps: "Need EventPayload TypedDict, EventType enum"
+      # action: create
+      # location: "src/events/types.py"
+
     configuration:
       needed: false
+
     http_client:
       needed: false
+
+    # Add custom categories as needed:
+    # retry_logic:
+    #   needed: true
+    #   exists: false
+    #   action: create
+    #   location: "src/common/retry.py"
+
+  # Parts auto-generated from audit (created BEFORE feature parts)
+  # These ensure infrastructure exists before features depend on it
   infrastructure_parts: []
+    # Auto-populated by /plan when action is 'create' or 'extend':
+    # - id: infra-errors
+    #   title: "Create error handling utilities"
+    #   category: error_handling
+    #   location: "src/common/errors.py"
+    #   creates: ["RetryableError", "handle_api_error()"]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ENVIRONMENT & BUILD (assessed during Phase 2.6)
+# ─────────────────────────────────────────────────────────────────────────────
+# Captures the project's build environment (stable facts) and what this plan
+# changes about it (dependencies, schema, env vars, CI, build tooling).
+#
+# WHY THIS MATTERS:
+# If a plan introduces an environment change but no part is responsible for
+# making it, the build will break. This section ensures every change is
+# tracked and assigned to a part criterion.
+#
+# STABLE FIELDS (set once per project, reused across plans):
+#   build.tool, build.install_cmd, build.check_cmd, build.prerequisites,
+#   runtime_services
+#
+# PER-PLAN FIELDS (assessed fresh each plan):
+#   changes.new_dependencies, changes.env_vars, changes.schema_changes,
+#   changes.ci_changes, changes.build_changes
+
+environment:
+  # Status: pending | assessed
+  # Set to 'assessed' after Phase 2.6 completes
+  status: pending
+
+  build:
+    tool: null          # e.g., "make", "npm", "cargo"
+    install_cmd: null    # e.g., "make install", "uv sync", "npm install"
+    check_cmd: null      # e.g., "make check", "npm test && npm run lint"
+    prerequisites: []    # e.g., ["Python 3.13", "PostgreSQL 15+", "Node 20+"]
+
+  # Services that must be running for tests and local development
+  runtime_services: []
+    # - name: "PostgreSQL"
+    #   required_for: "tests and dev server"
+    #   default_url: "localhost:5432"
+    # - name: "Redis"
+    #   required_for: "cache layer integration tests"
+    #   default_url: "localhost:6379"
+
+  # What this plan changes about the environment
+  # Every non-empty entry must map to a part criterion (Phase 2.6, Step 3)
+  changes:
+    new_dependencies: []
+      # - package: "fastmcp"
+      #   reason: "MCP server framework for tool endpoints"
+      #   add_cmd: "uv add fastmcp"
+      # - package: "redis"
+      #   reason: "Cache backend client"
+      #   add_cmd: "uv add redis"
+
+    env_vars: []
+      # - name: "REDIS_URL"
+      #   required: true
+      #   default: null
+      #   purpose: "Cache backend connection string"
+      # - name: "FEATURE_FLAG_NEW_UI"
+      #   required: false
+      #   default: "false"
+      #   purpose: "Toggle new UI components"
+
+    schema_changes: []
+      # - description: "Add users table with email, password_hash, created_at"
+      #   migration_path: null  # path to migration script, or null if no migration system
+      #   rollback: "DROP TABLE users"
+      # - description: "Add GIN index on chunks.search_vector"
+      #   migration_path: null
+      #   rollback: "DROP INDEX idx_chunks_search_vector"
+
+    ci_changes: []
+      # - file: ".github/workflows/ci.yml"
+      #   description: "Add PostgreSQL service container for integration tests"
+      # - file: ".github/workflows/ci.yml"
+      #   description: "Add new 'lint-types' step after unit tests"
+
+    build_changes: []
+      # - file: "Makefile"
+      #   description: "Add 'migrate' target for database schema updates"
+      # - file: "Dockerfile"
+      #   description: "Add redis client library to container image"
+      # - file: "docker-compose.yml"
+      #   description: "Add Redis service for local development"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PARTS (work breakdown)
+# ─────────────────────────────────────────────────────────────────────────────
+# Each part = one subagent delegation cycle.
+#
+# PART TYPES:
+#   skeleton        - Minimal end-to-end thread (required for greenfield, see below)
+#   infrastructure  - Utilities/shared code (from utilities_audit)
+#   (default)       - Feature work
+#
+# EXECUTION ORDER:
+# 0. Skeleton part (type: skeleton) executes FIRST, if present
+# 1. Infrastructure parts (from utilities_audit) execute next
+# 2. Feature parts execute in dependency order
+#
+# WALKING SKELETON:
+#   Required for greenfield builds and recommended for new features that span
+#   multiple architectural layers. The skeleton proves the end-to-end thread
+#   builds and runs before real feature work begins.
+#
+#   A skeleton part must include at least one BEHAVIORAL test criterion —
+#   a test that exercises the full entry-to-exit flow, not individual components.
+#   Behavioral test = call the entry point with input, verify output at exit point.
+#
+#   OPT-OUT CATEGORIES (skeleton NOT required):
+#   - config-only changes (no application logic)
+#   - documentation-only changes
+#   - single-file changes (no cross-layer wiring)
+#   - brownfield single-layer changes (modifying one layer of an existing system)
+#   If opting out, record the category and brief justification in the plan.
+#
+# APPROACH (implementation roadmap):
+#   Each part has an `approach` field — an ordered list of implementation steps
+#   that tell the implementer WHAT to change and WHERE, in sequence.
+#   Criteria are exit conditions (verified after implementation).
+#   Approach is the roadmap (followed during implementation).
+#
+#   Each step has:
+#     step:  — short description of the change
+#     files: — target files for this step
+#     notes: — design intent, patterns to follow, key decisions (1-2 sentences)
+#
+# VERIFY GROUPS (batched verification):
+#   Small, tightly-coupled parts can share a `verify_group` tag. When present:
+#   - Each part still gets implemented, tested, and refactored individually
+#     (Steps 1-5 run per part — green state maintained throughout)
+#   - Verification (Step 6) is deferred until ALL parts in the group are done
+#   - The verifier checks all group criteria in one pass
+#   - Acceptance tests run once at the group boundary, not per part
+#
+#   Use verify_group when:
+#   - Parts are sub-steps of one logical feature (e.g., schema → protocol → service)
+#   - Parts have a strict internal dependency chain (a1 → a2 → a3)
+#   - Individual parts are small (≤6 criteria each)
+#
+#   Do NOT use verify_group when:
+#   - Other parts outside the group depend on individual parts within it
+#   - Parts are independently meaningful features
+#   - Parts are large enough to warrant individual verification
+#
+# PART SIZING:
+#   Target: 3-8 criteria per part, 2-4 approach steps.
+#   If a part has >10 criteria, split it. Internal dependencies between
+#   sub-parts are handled via depends_on + verify_group (not one mega-part).
+#
+# PART EXECUTION FLOW (for each part):
+#   1. implementer subagent writes code (follows approach steps)
+#   2. test-writer subagent writes tests
+#   3. test-runner subagent runs tests
+#   4. refactorer subagent improves code quality
+#   5. test-runner confirms tests still pass
+#   6. verifier subagent checks part criteria (or deferred if verify_group)
 
 parts:
+  # Skeleton part (required for greenfield — delete only if plan falls in opt-out category)
+  # The skeleton wires the entry point to the exit point with minimal logic.
+  # It must include at least one behavioral test criterion (entry-to-exit flow).
+  #
+  # Example (CLI project):
+  # - id: ws
+  #   title: "Walking skeleton: CLI entry -> core -> stdout exit"
+  #   status: Pending
+  #   type: skeleton
+  #   requirements_covered: []  # Keep minimal — just enough to prove the thread
+  #   approach:
+  #     - step: "Create CLI entry point with argument parsing"
+  #       files: [src/cli.py]
+  #       notes: "Minimal argparse — accept one positional arg, pass to core."
+  #     - step: "Wire core processing stub and stdout exit"
+  #       files: [src/core.py, src/cli.py]
+  #       notes: "Core returns hardcoded result. CLI prints it. Real logic comes in feature parts."
+  #   criteria:
+  #     - "Entry point accepts input and exit point produces expected output"
+  #     - "Behavioral test passes: invoke entry point with sample input, verify exit point returns expected result"
+  #     - "Project builds and runs without errors"
+  #
+  # Example (API project):
+  # - id: ws
+  #   title: "Walking skeleton: HTTP request -> handler -> response"
+  #   status: Pending
+  #   type: skeleton
+  #   requirements_covered: []
+  #   approach:
+  #     - step: "Create route handler that accepts request"
+  #       files: [src/api/routes.py]
+  #       notes: "Minimal FastAPI route — accept JSON body, call service stub."
+  #     - step: "Wire service stub and response serialization"
+  #       files: [src/services/feature.py, src/api/routes.py]
+  #       notes: "Service returns hardcoded response. Route serializes and returns it."
+  #   criteria:
+  #     - "Endpoint accepts request and returns well-formed response"
+  #     - "Behavioral test passes: send request to entry point, verify response at exit point"
+  #     - "Server starts and serves requests without errors"
+
+  # Infrastructure parts (auto-generated from utilities_audit)
+  # Example:
+  # - id: infra-a
+  #   title: "Create error handling utilities"
+  #   status: Pending
+  #   type: infrastructure
+  #   requirements_covered: []  # Infrastructure typically doesn't cover requirements directly
+  #   criteria:
+  #     - "RetryableError exception exists in src/common/errors.py"
+  #     - "handle_api_error() wraps exceptions consistently"
+
+  # Feature parts
+  #
+  # APPROACH + CRITERIA:
+  # - `approach` tells the implementer HOW (ordered steps, target files, design notes)
+  # - `criteria` tells the verifier WHAT must be true when done (exit conditions)
+  # Both are required. Approach guides implementation; criteria gate verification.
+  #
+  # Example (with verify_group for tightly-coupled sub-parts):
+  #
+  # - id: a1
+  #   title: "Add search_hints to schema and protocol layers"
+  #   status: Pending
+  #   verify_group: search-hints  # Defers verification until all "search-hints" parts done
+  #   requirements_covered: [R-HINTS]
+  #   approach:
+  #     - step: "Add search_hints column to references table"
+  #       files: [infra/ref_tables.py]
+  #       notes: "Nullable TEXT, default NULL. Additive — no migration needed."
+  #     - step: "Add tsvector trigger for search_hints"
+  #       files: [infra/ref_triggers.py]
+  #       notes: "Mirror existing search_vector trigger pattern."
+  #     - step: "Thread search_hints through protocol and store"
+  #       files: [extref/ref_protocols.py, infra/reference_store.py]
+  #       notes: "Optional param at each layer. Store writes it; protocol declares it."
+  #   criteria:
+  #     - "search_hints TEXT column exists on references table (nullable)"
+  #     - "tsvector trigger auto-populates search_hints_vector on insert/update"
+  #     - "RefStoreProtocol.save_reference() accepts optional search_hints param"
+  #     - "ReferenceStore.save_reference() persists search_hints to database"
+  #
+  # - id: a2
+  #   title: "Thread search_hints through service and search ranking"
+  #   status: Pending
+  #   depends_on: [a1]
+  #   verify_group: search-hints  # Same group — verified together with a1
+  #   requirements_covered: [R-HINTS]
+  #   approach:
+  #     - step: "Add search_hints param to RefService.save()"
+  #       files: [extref/ref_service.py]
+  #       notes: "Pass through to store. Optional, default None."
+  #     - step: "Include search_hints in search ranking"
+  #       files: [infra/ref_queries.py]
+  #       notes: "Add to tsvector ranking when present. Don't restructure existing queries."
+  #   criteria:
+  #     - "RefService.save() accepts optional search_hints, passes to store"
+  #     - "Search queries boost results that match search_hints content"
+
   - id: a
-    title: "First part"
-    status: Pending
-    requirements_covered: []
+    title: "First part - what it accomplishes"
+    status: Pending  # Pending | In Progress | Done | Blocked
+    requirements_covered: []  # [R001, R002] - which requirements this part implements
+    # verify_group: feature-name  # Optional: defer verification until all parts in group are done
+    # extends_skeleton: "entry -> processing layer"  # Which skeleton path this part deepens
+    #   Required when the plan has a skeleton part. Describes which segment of the
+    #   skeleton's entry-to-exit flow this part extends with real logic.
+    #   Examples:
+    #     extends_skeleton: "CLI parser -> command dispatch"
+    #     extends_skeleton: "HTTP handler -> database layer"
+    #     extends_skeleton: "input validation -> core transform"
+    approach:
+      - step: "What to change"
+        files: [path/to/file.py]
+        notes: "Design intent — pattern to follow, key decision, or reference to existing code"
+      - step: "Next change"
+        files: [path/to/other.py]
+        notes: "Why this order, what to watch for"
     criteria:
-      - "Specific, verifiable condition"
+      - "Specific, verifiable condition 1"
+      - "Specific, verifiable condition 2"
+    # allowed_files: []  # Optional: override plan-level allowed_files for this part
+    # utilities_required: [error_handling, validation]  # Optional: explicit deps on utilities
 
   - id: b
     title: "Second part"
     status: Pending
-    depends_on: [a]
+    depends_on: [a]  # Optional: wait for part (a) to complete
+    # extends_skeleton: "processing layer -> exit point"  # Which skeleton path this part deepens
     requirements_covered: []
+    approach:
+      - step: "What to change"
+        files: [path/to/file.py]
+        notes: "Design intent"
     criteria:
-      - "Condition that verifier can check"
+      - "Condition that verifier subagent can check"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ACCEPTANCE SCENARIOS (plan-level behavioral verification)
+# ─────────────────────────────────────────────────────────────────────────────
+# Concrete "invoke X, expect Y" scenarios that prove the feature works end-to-end.
+# These become real, runnable tests — not LLM-judged criteria.
+#
+# WHEN REQUIRED:
+#   - Any plan with 2+ feature parts (multi-part plans are where integration breaks)
+#   - Skeleton-bearing plans: skeleton behavioral test = scenario #1
+#   - Optional for single-part plans (part criteria are sufficient)
+#
+# HOW THEY DIFFER FROM CRITERIA:
+#   Criteria are per-part exit conditions verified by an LLM reading code.
+#   Acceptance scenarios are plan-level behavioral checks verified by a test runner
+#   executing code. A criterion says "search SQL includes WHERE repo = ?" (structural).
+#   A scenario says "search('asyncio', repo='myproject') returns only myproject refs"
+#   (behavioral).
+#
+# WHEN WRITTEN (during execution):
+#   Defined during /write-plan Phase 3.5 as descriptions. Turned into real tests
+#   when the final feature part runs its build-and-test cycle. Verified mechanically
+#   at end-of-plan Gate 6. See skills/write-plan/references/acceptance-scenarios.md.
+#
+# FIELDS:
+#   scenario:  What behavior is being tested (1 sentence)
+#   invoke:    What to call with what input (concrete, not vague)
+#   expect:    What output to check (concrete, not vague)
+#   test_file: Filled during execution — path to the test file once written
+#   status:    pending | written | passing
+
+acceptance_scenarios:
+  # Example:
+  # - scenario: "Search scoped to repo returns only repo-associated references"
+  #   invoke: "ref_service.search('asyncio', repo='myproject')"
+  #   expect: "Only references linked to 'myproject' returned; global references excluded"
+  #   test_file: null
+  #   status: pending
+  #
+  # - scenario: "Bookmark boosts reference to top of results"
+  #   invoke: "ref_service.search('pydantic', repo='myproject') after bookmarking pydantic-settings"
+  #   expect: "pydantic-settings appears in top 3 results"
+  #   test_file: null
+  #   status: pending
+  #
+  # - scenario: "CLI generates report from raw data end-to-end"
+  #   invoke: "cli generate --input data/sample.csv --format html"
+  #   expect: "HTML file written to output/ with summary table and chart elements"
+  #   test_file: null
+  #   status: pending
+
+  []  # Populated by /write-plan Phase 3.5
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SCOPE & CONSTRAINTS
+# ─────────────────────────────────────────────────────────────────────────────
+# Subagents are restricted to these paths. Verifier checks compliance.
 
 allowed_files:
   - "src/**"
   - "tests/**"
 
 forbidden:
+  - "config/production/**"
   - ".env*"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# COMPLETION CRITERIA
+# ─────────────────────────────────────────────────────────────────────────────
+# Checked by verifier subagent at end of plan.
+# NOTE: These are PLAN-LEVEL criteria, separate from requirement acceptance.
+# Requirements.items[].acceptance are checked by verifier.
 
 acceptance_criteria:
   - "All requirements have status: done"
   - "All parts have status: Done"
   - "All tests pass"
+  - "All acceptance scenarios have status: passing (if defined)"
 
 stop_condition: |
   When all requirements are verified and all parts are complete.
 
-work_log: []
-evidence: []
+# ─────────────────────────────────────────────────────────────────────────────
+# EXECUTION TRACKING (filled during /run)
+# ─────────────────────────────────────────────────────────────────────────────
 
+work_log:
+  # - date: 2026-01-XX
+  #   type: test       # test | implement | refactor | fix | docs | infrastructure
+  #   note: What was done
+  #   part: a          # Links to part id
+  #   requirements_advanced: [R001]  # Which requirements progressed
+
+evidence:
+  # Test-driven parts:
+  # - type: test_output
+  #   command: "pytest tests/test_feature.py -v"
+  #   result: "5 passed in 0.23s"
+  #
+  # Requirement verification:
+  # - type: requirement_check
+  #   requirement_id: R001
+  #   verify_type: test
+  #   command: "pytest tests/test_auth.py::test_login -v"
+  #   result: "passed"
+  #
+  # Spec verification (final):
+  # - type: spec_verification
+  #   date: 2026-01-XX
+  #   coverage: "18/18 requirements (100%)"
+  #   gaps: []
+  #
+  # Manual verification:
+  # - type: manual_verification
+  #   date: 2026-01-XX
+  #   verifier: human
+  #   notes: "Tested feature manually, works as expected"
+  #
+  # CI verification:
+  # - type: ci_run
+  #   url: "https://github.com/org/repo/actions/runs/12345"
+  #   status: passed
+
+# ─────────────────────────────────────────────────────────────────────────────
+# HANDOFF (filled by PreCompact hook or orchestrator on plan completion)
+# ─────────────────────────────────────────────────────────────────────────────
+# Session-end state for humans and future orchestrators. Written by:
+# - The PreCompact hook (fires before context compaction)
+# - The orchestrator when a plan completes
+# - The user manually if needed
+#
 handoff:
-  stopped_at: null
-  current_state: null
-  next_steps: []
-  blockers: []
-  scope:
-    files: []
-    functions: []
-    components: []
-  decisions: []
-  open_questions: []
+  stopped_at: null          # Date when work paused
+  current_state: null       # What's done, what's in progress
+  next_steps: []            # Immediate work queue
+  blockers: []              # What's stopping progress
 
-errors: []
+  scope:                    # What's being worked on
+    files: []               # Files being modified
+    functions: []           # Functions/methods being touched
+    components: []          # Logical components
+
+  decisions: []             # Key choices and rationale (X over Y because Z)
+  open_questions: []        # Unresolved issues for next session
+
+  # Cross-part knowledge (updated by orchestrator after each part)
+  cross_part_knowledge: []  # Discoveries that affect future parts
+    # - "Existing retry logic in src/common/http.py — reuse in Parts (c) and (d)"
+    # - "conftest.py sets REDIS_URL via monkeypatch — no .env.test needed"
+
+  active_signals: []        # Unresolved FIX/SECURITY/QUESTION signals
+    # - tag: FIX
+    #   from_part: b
+    #   description: "Dead import in src/api/routes.py:14"
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ERRORS (notable issues encountered)
+# ─────────────────────────────────────────────────────────────────────────────
+
+errors:
+  # - date: 2026-01-XX
+  #   issue: What went wrong
+  #   resolution: How it was fixed (or "escalated to user")
+
+# ─────────────────────────────────────────────────────────────────────────────
+# OPTIONAL FIELDS
+# ─────────────────────────────────────────────────────────────────────────────
+
+# depends_on: []     # Plan IDs this depends on
+# unlocks: []        # Plan IDs this enables
+# rollback: |        # How to undo if needed
+# notes: |           # Additional context
