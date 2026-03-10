@@ -1,7 +1,7 @@
 id: "PLAN-015"
 title: "Containerized Scanning (Dockerfile)"
 type: implementation
-status: Proposed
+status: Done
 created: 2026-03-06
 
 linked_spec: null
@@ -74,7 +74,7 @@ environment:
 parts:
   - id: a
     title: "Dockerfile and .dockerignore"
-    status: Pending
+    status: Done
     requirements_covered: [R001, R002, R003, R004, R-IMP001, R-IMP002, R-IMP003]
     approach:
       - step: "Create .dockerignore"
@@ -106,6 +106,7 @@ acceptance_scenarios: []
 allowed_files:
   - "Dockerfile"
   - ".dockerignore"
+  - "tests/unit/test_docker.py"
 
 forbidden:
   - "config/production/**"
@@ -119,16 +120,30 @@ acceptance_criteria:
 stop_condition: |
   When Dockerfile builds and runs skill-scan successfully.
 
-work_log: []
-evidence: []
+work_log:
+  - part: a
+    status: Done
+    files: [Dockerfile, .dockerignore, tests/unit/test_docker.py]
+    notes: "All criteria verified 6/6. 30 tests passing. Refactorer cleaned up variable names and redundant .dockerignore entries."
+  - date: 2026-03-10
+    type: docs
+    note: "Updated CLAUDE.md project structure (Dockerfile and .dockerignore entries). Added Docker usage section to README.md. Updated plan evidence and handoff."
+    part: a
+evidence:
+  - type: manual_verification
+    command: "read Dockerfile, .dockerignore, tests/unit/test_docker.py"
+    result: "All 6 acceptance criteria confirmed: python:3.13-slim base, non-root user scanner, ENTRYPOINT skill-scan, .dockerignore excludes .git/.github/.agent/.venv/__pycache__/tests/scripts, 30 tests passing"
+  - type: docs
+    command: "Updated CLAUDE.md project structure, README.md Docker section"
+    result: "CLAUDE.md: Dockerfile and .dockerignore entries added. README.md: Docker section added with build/run examples."
 
 handoff:
-  stopped_at: null
-  current_state: null
+  stopped_at: "Plan complete. All parts done, documentation updated."
+  current_state: "Dockerfile, .dockerignore, and test_docker.py merged. CLAUDE.md and README.md updated. No source code changes."
   next_steps: []
   blockers: []
   scope:
-    files: []
+    files: [Dockerfile, .dockerignore, tests/unit/test_docker.py]
     functions: []
     components: []
   decisions:

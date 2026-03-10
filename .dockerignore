@@ -1,0 +1,45 @@
+# Version control
+.git
+.github
+
+# Agent and plan files
+.agent
+
+# Virtual environments
+.venv
+
+# Python caches
+__pycache__
+*.pyc
+*.pyo
+*.egg-info
+
+# Test and development files
+tests/
+scripts/
+corpus/
+Makefile
+
+# Environment and secrets
+.env
+.env*
+
+# Tool caches
+.mypy_cache
+.pytest_cache
+.ruff_cache
+
+# Documentation (keep README.md via negation)
+*.md
+!README.md
+
+# Logs and temp files
+*.log
+
+# IDE and editor files
+.vscode
+.idea
+
+# Config files not needed at runtime
+pyrightconfig.json
+.pre-commit-config.yaml
