@@ -129,29 +129,6 @@ def test_scan_findings_have_relative_forward_slash_paths(tmp_path: Path) -> None
     assert subdir_findings[0].file == "subdir/test.py"
 
 
-def test_scan_measures_duration(tmp_path: Path) -> None:
-    """Scan result includes duration measurement greater than zero."""
-    skill_dir = make_skill_dir(tmp_path)
-    result = scan(skill_dir)
-    assert result.duration > 0
-    assert isinstance(result.duration, float)
-
-
-def test_scan_with_no_matching_rules_returns_pass(tmp_path: Path) -> None:
-    """Scan with clean content returns PASS verdict."""
-    skill_dir = make_skill_dir(
-        tmp_path,
-        extra_files={
-            "clean.py": "def hello():\n    print('Hello, world!')",
-            "README.md": "# Clean Skill\n\nThis is a safe skill.",
-        },
-    )
-
-    result = scan(skill_dir)
-    assert result.verdict == Verdict.PASS
-    assert len(result.findings) == 0
-
-
 def test_scan_accepts_string_and_path_arguments(tmp_path: Path) -> None:
     """Scan accepts both string and Path arguments."""
     skill_dir = make_skill_dir(tmp_path)

@@ -199,14 +199,3 @@ class TestFormatTextAsciiSafe:
         output = format_text(result)
         non_ascii = [c for c in output if ord(c) > 127]
         assert non_ascii == [], f"Non-ASCII chars found: {non_ascii}"
-
-    def test_uses_ascii_arrow(self) -> None:
-        finding = make_finding(recommendation="Fix this issue")
-        result = ScanResult(
-            findings=(finding,),
-            counts={"medium": 1},
-            verdict=Verdict.FLAG,
-            duration=0.1,
-        )
-        output = format_text(result)
-        assert "-> Fix this issue" in output

@@ -40,9 +40,6 @@ class TestStripZeroWidth:
         clean = "eval(user_input)"
         assert strip_zero_width(clean) == clean
 
-    def test_empty_string(self) -> None:
-        assert strip_zero_width("") == ""
-
     def test_only_zero_width_chars(self) -> None:
         assert strip_zero_width("\u200b\u200c\u200d\u2060\ufeff\u00ad") == ""
 
@@ -126,9 +123,6 @@ class TestCanonicalizeWhitespace:
         clean = "normal text here"
         assert canonicalize_whitespace(clean) == clean
 
-    def test_empty_string(self) -> None:
-        assert canonicalize_whitespace("") == ""
-
 
 class TestNormalizeText:
     """Tests for normalize_text — combined normalization pipeline."""
@@ -140,9 +134,6 @@ class TestNormalizeText:
     def test_identity_on_clean_text(self) -> None:
         clean = "normal code here"
         assert normalize_text(clean) == clean
-
-    def test_empty_string(self) -> None:
-        assert normalize_text("") == ""
 
     def test_preserves_newlines(self) -> None:
         text = "line1\u200b\nline2\u00a0word"

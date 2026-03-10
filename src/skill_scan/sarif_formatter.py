@@ -12,7 +12,7 @@ from importlib.metadata import version as _pkg_version
 
 from skill_scan.models import Finding, ScanResult, Severity
 
-type JsonObject = dict[str, object]
+JsonObject = dict[str, object]
 
 _SARIF_SCHEMA = (
     "https://raw.githubusercontent.com/oasis-tcs/sarif-spec/master/Schemata/sarif-schema-2.1.0.json"

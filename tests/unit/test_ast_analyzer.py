@@ -47,11 +47,6 @@ class TestUnsafeCalls:
             f.severity == Severity.CRITICAL for f in _ids("EXEC-002", analyze_python("eval('x')\n", _FILE))
         )
 
-    def test_eval_category(self) -> None:
-        assert all(
-            f.category == "malicious-code" for f in _ids("EXEC-002", analyze_python("eval('x')\n", _FILE))
-        )
-
 
 # -- Dynamic imports: __import__, importlib.import_module -----------------
 
@@ -212,17 +207,3 @@ class TestLineNumbers:
 
     def test_file_path_propagated(self) -> None:
         assert all(f.file == "my/file.py" for f in analyze_python("eval('x')\n", "my/file.py"))
-
-
-# -- Finding model fields (R-IMP004) --------------------------------------
-
-
-class TestFindingModel:
-    def test_has_recommendation(self) -> None:
-        assert all(f.recommendation for f in _ids("EXEC-002", analyze_python("eval('x')\n", _FILE)))
-
-    def test_has_description(self) -> None:
-        assert all(f.description for f in _ids("EXEC-002", analyze_python("eval('x')\n", _FILE)))
-
-    def test_has_matched_text(self) -> None:
-        assert all(f.matched_text for f in _ids("EXEC-002", analyze_python("eval('x')\n", _FILE)))

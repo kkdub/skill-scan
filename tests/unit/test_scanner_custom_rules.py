@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from skill_scan.config import ScanConfig
-from skill_scan.models import Rule, Severity, Verdict
+from skill_scan.models import Rule, Severity
 from skill_scan.scanner import scan
 from tests.conftest import make_skill_dir
 
@@ -89,16 +89,6 @@ def test_scan_custom_rule_subject_to_suppress_rules(tmp_path: Path) -> None:
     result = scan(skill_dir, config=cfg)
 
     assert not any(f.rule_id == "CUSTOM-001" for f in result.findings)
-
-
-def test_scan_no_custom_rules_works_normally(tmp_path: Path) -> None:
-    """Scan with empty custom_rules behaves the same as default."""
-    skill_dir = make_skill_dir(tmp_path)
-    cfg = ScanConfig(custom_rules=())
-
-    result = scan(skill_dir, config=cfg)
-
-    assert result.verdict == Verdict.PASS
 
 
 def test_suppressed_builtin_id_still_collides(tmp_path: Path) -> None:

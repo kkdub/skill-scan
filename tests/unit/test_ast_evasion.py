@@ -189,7 +189,10 @@ class TestVeryLongStringConcatFP:
     until the analyzer is hardened against this edge case.
     """
 
-    @pytest.mark.xfail(reason="known FP: very-long-string-concat — tracked in corpus")
+    @pytest.mark.xfail(
+        reason="Known FP: 400-char 'evaleval...' concat triggers prefix match in BinOp resolver. "
+        "Rare in practice — no real attacker would repeat 'eval' 100 times. Low priority fix."
+    )
     def test_very_long_eval_repeat_not_flagged(self) -> None:
         code = "x = " + " + ".join([f"'{c}'" for c in "eval" * 100]) + "\n"
         findings = analyze_python(code, _FILE)

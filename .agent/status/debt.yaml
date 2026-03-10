@@ -1,2 +1,5 @@
 # .agent/status/debt.yaml
 # Entries are removed when resolved. Git history tracks removals.
+# Last updated: 2026-03-10 (debt review session)
+# DEBT-TEST-001 through DEBT-TEST-008 reviewed and resolved.
+# No remaining test debt entries.

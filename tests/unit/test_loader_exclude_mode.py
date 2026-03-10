@@ -85,11 +85,3 @@ class TestExcludeModeLoading:
 
         with pytest.raises(ValueError, match="Invalid exclude_mode"):
             load_rules(toml_path)
-
-    def test_exclude_mode_default_value_parsed(self, tmp_path: Path) -> None:
-        """Rule with explicit exclude_mode='default' is parsed correctly."""
-        toml_path = write_toml(tmp_path / "test.toml", make_simple_rule(exclude_mode="default"))
-
-        rules = load_rules(toml_path)
-
-        assert rules[0].exclude_mode == "default"

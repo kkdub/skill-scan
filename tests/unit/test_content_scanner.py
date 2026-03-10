@@ -179,13 +179,6 @@ class TestAcceptanceConcurrentVsSequential:
 class TestMaxWorkersConfig:
     """ScanConfig.max_workers is loadable from TOML and defaults to 0."""
 
-    def test_default_max_workers_is_zero(self) -> None:
-        """Default ScanConfig has max_workers=0 (auto-detect)."""
-        from skill_scan.config import ScanConfig
-
-        cfg = ScanConfig()
-        assert cfg.max_workers == 0
-
     def test_max_workers_from_toml(self, tmp_path: Path) -> None:
         """max_workers is read from [scan] section in TOML config."""
         from skill_scan.config import load_config

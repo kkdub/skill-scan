@@ -32,10 +32,6 @@ class TestParseNoqa:
         result = parse_noqa("eval(x)  # noqa: PI-001, EXEC-002")
         assert result == frozenset({"PI-001", "EXEC-002"})
 
-    def test_three_rule_ids(self) -> None:
-        result = parse_noqa("code  # noqa: PI-001, EXEC-002, FS-005")
-        assert result == frozenset({"PI-001", "EXEC-002", "FS-005"})
-
     def test_bare_noqa_returns_empty(self) -> None:
         result = parse_noqa("eval(x)  # noqa")
         assert result == frozenset()

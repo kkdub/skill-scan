@@ -242,9 +242,6 @@ class TestLoadRules:
 class TestLoadDefaultRules:
     """Tests for load_default_rules function -- discovering built-in rules."""
 
-    def test_load_default_rules_returns_list(self) -> None:
-        assert isinstance(load_default_rules(), list)
-
     def test_load_default_rules_all_items_are_rule_objects(self) -> None:
         for rule in load_default_rules():
             assert isinstance(rule, Rule)

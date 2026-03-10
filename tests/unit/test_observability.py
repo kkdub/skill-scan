@@ -124,12 +124,11 @@ def test_scan_verdict_pass_when_clean(tmp_path: Path) -> None:
     assert result.degraded_reasons == ()
 
 
-def test_scan_verdict_upgrades_to_flag_with_binary_only(tmp_path: Path) -> None:
-    """Binary-only skill (no malicious content) gets at least FLAG due to degradation."""
+def test_scan_verdict_block_for_binary_file(tmp_path: Path) -> None:
+    """Binary file triggers FS-002 (HIGH severity) which produces BLOCK verdict."""
     skill_dir = make_skill_dir(tmp_path)
     (skill_dir / "data.bin").write_bytes(b"\x00\x01\x02")
     result = scan(skill_dir)
-    # FS-002 is HIGH so verdict should be BLOCK
     assert result.verdict == Verdict.BLOCK
     assert result.files_skipped >= 1
 

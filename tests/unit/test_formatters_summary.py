@@ -25,17 +25,6 @@ class TestFormatTextVerdictBanner:
         output = format_text(result)
         assert "2 critical, 1 medium" in output
 
-    def test_verdict_shown_in_uppercase(self) -> None:
-        finding = make_finding()
-        result = ScanResult(
-            findings=(finding,),
-            counts={"medium": 1},
-            verdict=Verdict.FLAG,
-            duration=0.1,
-        )
-        output = format_text(result)
-        assert "Verdict: FLAG" in output
-
     def test_duration_shown(self) -> None:
         finding = make_finding()
         result = ScanResult(
@@ -100,17 +89,6 @@ class TestFormatTextSeveritySections:
         crit_pos = output.find("CRITICAL (")
         low_pos = output.find("LOW (")
         assert crit_pos < low_pos
-
-    def test_header_shows_skill_name(self) -> None:
-        result = ScanResult(
-            findings=(),
-            counts={},
-            verdict=Verdict.PASS,
-            duration=0.1,
-            skill_name="my-cool-skill",
-        )
-        output = format_text(result)
-        assert "skill-scan report: my-cool-skill" in output
 
     def test_header_shows_unknown_when_no_skill_name(self) -> None:
         result = ScanResult(

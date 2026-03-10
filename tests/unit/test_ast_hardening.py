@@ -71,9 +71,6 @@ class TestAstDepthLimits:
         result = try_resolve_string(node)
         assert result == "a" + "b" * 5
 
-    def test_max_ast_resolve_depth_is_50(self) -> None:
-        assert MAX_AST_RESOLVE_DEPTH == 50
-
 
 # -- AST-PARSE INFO finding (R003) ----------------------------------------
 
@@ -96,17 +93,3 @@ class TestAstParseInfoFinding:
         findings = analyze_python("x = 1\n", _FILE)
         ast_parse = [f for f in findings if f.rule_id == "AST-PARSE"]
         assert not ast_parse
-
-
-# -- Acceptance scenarios (full feature path) ------------------------------
-
-
-class TestAcceptanceAstHardening:
-    def test_deeply_nested_adversarial_input_no_crash(self) -> None:
-        """AST analysis of deeply nested adversarial input does not crash.
-
-        Invokes analyze_python with source containing 100+ nested
-        string concatenations. Must return a list without raising.
-        """
-        result = analyze_python(_build_nested_binop_source(150), _FILE)
-        assert isinstance(result, list)

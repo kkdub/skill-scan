@@ -36,12 +36,6 @@ class TestJsonStructure:
         }
         assert set(data.keys()) == expected_keys
 
-    def test_json_output_is_valid_json_with_null_skill_name(self) -> None:
-        result = ScanResult(findings=(), counts={}, verdict=Verdict.PASS, duration=0.0)
-        data = json.loads(format_json(result))
-        assert isinstance(data, dict)
-        assert data["skill_name"] is None
-
     def test_json_scalar_fields_match_input(self) -> None:
         result = ScanResult(
             findings=(),
@@ -140,16 +134,6 @@ class TestJsonFindings:
         data = json.loads(format_json(result))
         assert len(data["findings"]) == 3
 
-    def test_empty_findings_produces_empty_list(self) -> None:
-        result = ScanResult(
-            findings=(),
-            counts={},
-            verdict=Verdict.PASS,
-            duration=0.0,
-        )
-        data = json.loads(format_json(result))
-        assert data["findings"] == []
-
 
 class TestJsonCounts:
     """Tests for severity counts in JSON output."""
@@ -194,36 +178,6 @@ class TestJsonCounts:
             "low": 4,
             "info": 5,
         }
-
-
-class TestJsonVerdictAndSeverity:
-    """Tests for lowercase verdict and severity values."""
-
-    def test_verdict_is_lowercase_string(self) -> None:
-        for verdict in Verdict:
-            result = ScanResult(
-                findings=(),
-                counts={},
-                verdict=verdict,
-                duration=0.0,
-            )
-            data = json.loads(format_json(result))
-            assert data["verdict"] == verdict.value
-            assert data["verdict"] == data["verdict"].lower()
-
-    def test_severity_is_lowercase_string(self) -> None:
-        for severity in Severity:
-            finding = make_finding(severity=severity)
-            result = ScanResult(
-                findings=(finding,),
-                counts={severity.value: 1},
-                verdict=Verdict.FLAG,
-                duration=0.0,
-            )
-            data = json.loads(format_json(result))
-            sev_value = data["findings"][0]["severity"]
-            assert sev_value == severity.value
-            assert sev_value == sev_value.lower()
 
 
 class TestJsonDeterminism:

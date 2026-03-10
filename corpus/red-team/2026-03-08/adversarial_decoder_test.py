@@ -879,6 +879,6 @@ if __name__ == "__main__":
     # Save artifacts
     save_corpus_file(cases, output_dir)
     save_regression_candidates(categories, output_dir)
-    save_manifest(categories, output_dir)
+    save_manifest(categories, cases, output_dir)
     print()
     print("Done.")

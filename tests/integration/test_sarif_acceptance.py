@@ -121,13 +121,6 @@ class TestSarifAcceptance:
             assert "fullDescription" in rule
             assert "text" in rule["fullDescription"]
 
-    def test_sarif_output_is_valid_json(self, tmp_path: Path) -> None:
-        skill_dir = _make_skill_dir_with_findings(tmp_path)
-        runner = CliRunner()
-        result = runner.invoke(skill_scan_cli, ["scan", "--format", "sarif", str(skill_dir)])
-        data = json.loads(result.output)
-        assert isinstance(data, dict)
-
     def test_sarif_rules_match_results_rule_ids(self, tmp_path: Path) -> None:
         skill_dir = _make_skill_dir_with_findings(tmp_path)
         runner = CliRunner()

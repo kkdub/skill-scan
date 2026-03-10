@@ -362,10 +362,12 @@ class CodeAnalyzer:
 
         last_line = node.lineno
         for stmt in ast.walk(node):
-            if hasattr(stmt, "lineno") and stmt.lineno:
-                last_line = max(last_line, stmt.lineno)
-            if hasattr(stmt, "end_lineno") and stmt.end_lineno:
-                last_line = max(last_line, stmt.end_lineno)
+            lineno = getattr(stmt, "lineno", None)
+            if lineno:
+                last_line = max(last_line, lineno)
+            end_lineno = getattr(stmt, "end_lineno", None)
+            if end_lineno:
+                last_line = max(last_line, end_lineno)
         return last_line - node.lineno + 1
 
     def _check_cyclomatic_complexity(

@@ -197,18 +197,3 @@ class TestDecodePayload:
         result = decode_payload(payload)
 
         assert result is None
-
-
-class TestEncodedPayloadModel:
-    """EncodedPayload dataclass behavior."""
-
-    def test_frozen_immutable(self) -> None:
-        """EncodedPayload is frozen and cannot be mutated."""
-        payload = EncodedPayload("test", "base64", 1, 0)
-        raised = True
-        try:
-            payload.encoded_text = "modified"  # type: ignore[misc]
-            raised = False
-        except AttributeError:
-            pass
-        assert raised

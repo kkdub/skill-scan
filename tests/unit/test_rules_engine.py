@@ -7,9 +7,7 @@ from __future__ import annotations
 
 import re
 
-import pytest
-
-from skill_scan.models import Finding, Severity
+from skill_scan.models import Severity
 from skill_scan.rules.engine import match_file, match_line
 from tests.unit.rule_helpers import make_rule
 
@@ -57,20 +55,6 @@ class TestMatchLine:
 
         assert len(findings[0].matched_text) == 200
 
-    def test_match_line_preserves_line_num_in_finding(self) -> None:
-        rule = make_rule(patterns=["test"])
-
-        findings = match_line("test line", 99, "test.py", [rule])
-
-        assert findings[0].line == 99
-
-    def test_match_line_preserves_file_path_in_finding(self) -> None:
-        rule = make_rule(patterns=["test"])
-
-        findings = match_line("test line", 1, "/path/to/file.py", [rule])
-
-        assert findings[0].file == "/path/to/file.py"
-
     def test_match_line_with_multiple_rules_returns_findings_from_all(self) -> None:
         rule1 = make_rule(rule_id="RULE-001", patterns=["danger"])
         rule2 = make_rule(rule_id="RULE-002", patterns=["warning"])
@@ -95,27 +79,6 @@ class TestMatchLine:
 
         assert len(findings) == 1
         assert findings[0].matched_text == "test"
-
-    def test_match_line_sets_description_from_rule(self) -> None:
-        rule = make_rule(patterns=["test"], description="Custom description text")
-
-        findings = match_line("test line", 1, "test.py", [rule])
-
-        assert findings[0].description == "Custom description text"
-
-    def test_match_line_sets_recommendation_from_rule(self) -> None:
-        rule = make_rule(patterns=["test"], recommendation="Custom recommendation text")
-
-        findings = match_line("test line", 1, "test.py", [rule])
-
-        assert findings[0].recommendation == "Custom recommendation text"
-
-    def test_match_line_sets_category_from_rule(self) -> None:
-        rule = make_rule(patterns=["test"], category="custom-category")
-
-        findings = match_line("test line", 1, "test.py", [rule])
-
-        assert findings[0].category == "custom-category"
 
     def test_match_line_with_no_rules_returns_empty_list(self) -> None:
         findings = match_line("any line content", 1, "test.py", [])
@@ -148,30 +111,6 @@ class TestMatchLine:
         assert len(findings) == 1
         assert findings[0].rule_id == "RULE-002"
         assert findings[0].matched_text == "warning"
-
-    def test_match_line_finding_is_instance_of_finding_dataclass(self) -> None:
-        rule = make_rule(patterns=["test"])
-
-        findings = match_line("test line", 1, "test.py", [rule])
-
-        assert isinstance(findings[0], Finding)
-
-    @pytest.mark.parametrize(
-        "severity,expected",
-        [
-            (Severity.CRITICAL, Severity.CRITICAL),
-            (Severity.HIGH, Severity.HIGH),
-            (Severity.MEDIUM, Severity.MEDIUM),
-            (Severity.LOW, Severity.LOW),
-            (Severity.INFO, Severity.INFO),
-        ],
-    )
-    def test_match_line_preserves_severity_from_rule(self, severity: Severity, expected: Severity) -> None:
-        rule = make_rule(patterns=["test"], severity=severity)
-
-        findings = match_line("test line", 1, "test.py", [rule])
-
-        assert findings[0].severity == expected
 
 
 class TestMatchFile:

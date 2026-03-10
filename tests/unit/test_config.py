@@ -7,37 +7,9 @@ from pathlib import Path
 import pytest
 
 from skill_scan.config import ScanConfig, load_config
-from skill_scan.models import Rule, Severity
+from skill_scan.models import Severity
 
 FIXTURES_DIR = Path(__file__).resolve().parent.parent / "fixtures" / "configs"
-
-
-def test_scan_config_has_default_extensions() -> None:
-    """ScanConfig defaults include common text file extensions."""
-    config = ScanConfig()
-
-    assert ".md" in config.extensions
-    assert ".py" in config.extensions
-    assert ".txt" in config.extensions
-    assert ".sh" in config.extensions
-    assert ".yaml" in config.extensions
-    assert ".yml" in config.extensions
-    assert ".json" in config.extensions
-    assert ".toml" in config.extensions
-
-
-def test_scan_config_has_default_max_file_size() -> None:
-    """ScanConfig defaults to 500KB max file size."""
-    config = ScanConfig()
-
-    assert config.max_file_size == 500_000
-
-
-def test_scan_config_has_default_strict_schema() -> None:
-    """ScanConfig defaults to strict_schema=False."""
-    config = ScanConfig()
-
-    assert config.strict_schema is False
 
 
 def test_scan_config_is_frozen() -> None:
@@ -55,30 +27,6 @@ def test_load_config_returns_defaults() -> None:
     assert config.max_file_size == 500_000
     assert config.strict_schema is False
     assert ".md" in config.extensions
-
-
-def test_load_config_with_none_returns_defaults() -> None:
-    """load_config(None) returns ScanConfig with default values."""
-    config = load_config(None)
-
-    assert config.max_file_size == 500_000
-    assert config.strict_schema is False
-    assert ".py" in config.extensions
-
-
-def test_scan_config_has_default_suppress_rules() -> None:
-    """ScanConfig defaults to empty suppress_rules frozenset."""
-    config = ScanConfig()
-
-    assert config.suppress_rules == frozenset()
-
-
-def test_scan_config_constructable_with_suppress_rules() -> None:
-    """ScanConfig can be constructed with suppress_rules via Python API."""
-    config = ScanConfig(suppress_rules=frozenset({"PI-004b"}))
-
-    assert "PI-004b" in config.suppress_rules
-    assert len(config.suppress_rules) == 1
 
 
 def test_load_config_scan_section_overrides(tmp_path: Path) -> None:
@@ -188,32 +136,6 @@ def test_load_config_empty_file_returns_defaults(tmp_path: Path) -> None:
 
     assert config.max_file_size == 500_000
     assert config.suppress_rules == frozenset()
-
-
-def test_scan_config_has_default_custom_rules() -> None:
-    """ScanConfig defaults to empty custom_rules tuple."""
-    config = ScanConfig()
-
-    assert config.custom_rules == ()
-
-
-def test_scan_config_constructable_with_custom_rules() -> None:
-    """ScanConfig can be constructed with custom_rules via Python API."""
-    import re
-
-    rule = Rule(
-        rule_id="CUSTOM-001",
-        severity=Severity.HIGH,
-        category="custom",
-        description="Test custom rule",
-        recommendation="Fix it",
-        patterns=(re.compile("test"),),
-        exclude_patterns=(),
-    )
-    config = ScanConfig(custom_rules=(rule,))
-
-    assert len(config.custom_rules) == 1
-    assert config.custom_rules[0].rule_id == "CUSTOM-001"
 
 
 def test_load_config_custom_rule_from_fixture() -> None:

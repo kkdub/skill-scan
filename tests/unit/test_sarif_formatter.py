@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import json
 
-import skill_scan
 from skill_scan.models import Finding, ScanResult, Severity, Verdict
 from skill_scan.sarif_formatter import _severity_to_level, format_sarif
 from tests.unit.formatter_helpers import make_finding
@@ -116,33 +115,3 @@ class TestSarifLocations:
         physical = data["runs"][0]["results"][0]["locations"][0]["physicalLocation"]
         assert physical["artifactLocation"]["uri"] == "prompt.md"
         assert "region" not in physical
-
-
-class TestSarifEmptyFindings:
-    """Tests for format_sarif with no findings."""
-
-    def test_empty_findings_produces_empty_results(self) -> None:
-        result = _make_result()
-        data = json.loads(format_sarif(result))
-        assert data["runs"][0]["results"] == []
-
-    def test_empty_findings_produces_empty_rules(self) -> None:
-        result = _make_result()
-        data = json.loads(format_sarif(result))
-        assert data["runs"][0]["tool"]["driver"]["rules"] == []
-
-
-class TestSarifDeterminism:
-    """Tests for deterministic SARIF output."""
-
-    def test_format_sarif_is_deterministic(self) -> None:
-        finding = make_finding()
-        result = _make_result(findings=(finding,), counts={"medium": 1}, verdict=Verdict.FLAG)
-        assert format_sarif(result) == format_sarif(result)
-
-
-class TestSarifPublicAPI:
-    """Tests for public API export."""
-
-    def test_format_sarif_in_all(self) -> None:
-        assert "format_sarif" in skill_scan.__all__

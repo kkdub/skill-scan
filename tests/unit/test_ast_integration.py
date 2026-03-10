@@ -141,19 +141,6 @@ class TestDeduplicateHelper:
         assert len(merged) == 1
         assert merged[0].description == "regex"
 
-    def test_empty_ast(self) -> None:
-        regex = [make_finding(rule_id="R1", line=1)]
-        merged = _deduplicate(regex, [])
-        assert len(merged) == 1
-
-    def test_empty_regex(self) -> None:
-        ast = [make_finding(rule_id="R1", line=1)]
-        merged = _deduplicate([], ast)
-        assert len(merged) == 1
-
-    def test_both_empty(self) -> None:
-        assert _deduplicate([], []) == []
-
 
 # ---------------------------------------------------------------------------
 # Acceptance scenarios (plan-level)

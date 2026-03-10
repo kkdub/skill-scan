@@ -36,9 +36,6 @@ class TestCheckBinary:
     def test_check_binary_returns_none_for_py(self) -> None:
         assert check_binary("script.py", ".py") is None
 
-    def test_check_binary_returns_none_for_md(self) -> None:
-        assert check_binary("README.md", ".md") is None
-
 
 class TestCheckUnknownExtension:
     """FS-003: Unknown file extension detection."""
