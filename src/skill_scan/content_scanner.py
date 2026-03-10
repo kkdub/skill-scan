@@ -8,7 +8,7 @@ Supports concurrent scanning via ProcessPoolExecutor for large file sets.
 from __future__ import annotations
 
 import os
-from concurrent.futures import ProcessPoolExecutor, as_completed
+from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
 from skill_scan.ast_analyzer import analyze_python
@@ -69,8 +69,8 @@ def _scan_concurrent(
     """Scan files concurrently using ProcessPoolExecutor."""
     workers = _resolve_workers(max_workers)
     with ProcessPoolExecutor(max_workers=workers) as executor:
-        futures = {executor.submit(_scan_file, fp, skill_dir, rules, max_file_size): fp for fp in files}
-        results = [future.result() for future in as_completed(futures)]
+        futures = [executor.submit(_scan_file, fp, skill_dir, rules, max_file_size) for fp in files]
+        results = [f.result() for f in futures]
     return _aggregate_results(results)
 
 
@@ -111,13 +111,12 @@ def _scan_file(
     the size limit.
     """
     relative_path = file_path.relative_to(skill_dir).as_posix()
-    content, error_finding = _read_file(file_path, relative_path, max_file_size)
+    content, error_finding, nbytes = _read_file(file_path, relative_path, max_file_size)
     if error_finding is not None:
         return [error_finding], 0, 0
 
     if content is None:  # unreachable when error_finding is None
         return [], 0, 0
-    nbytes = len(content.encode("utf-8"))
     findings = _apply_rules(content, relative_path, rules)
     lines = content.splitlines()
     filtered, suppressed = filter_suppressed(findings, lines)
@@ -128,40 +127,52 @@ def _read_file(
     file_path: Path,
     relative_path: str,
     max_file_size: int,
-) -> tuple[str | None, Finding | None]:
-    """Read a file and validate size. Returns (content, error_finding).
+) -> tuple[str | None, Finding | None, int]:
+    """Read a file and validate size. Returns (content, error_finding, nbytes).
 
-    On success, content is the file text and error_finding is None.
-    On failure, content is None and error_finding describes the problem.
+    On success: content=text, error_finding=None, nbytes=byte count.
+    On failure: content=None, error_finding=problem, nbytes=0.
     """
     try:
         content = file_path.read_text(encoding="utf-8")
     except UnicodeDecodeError:
-        return None, _read_error_finding(
-            _RULE_ENCODING_ERROR,
-            relative_path,
-            "File is not valid UTF-8 and was skipped.",
-            "Verify file encoding or exclude from scan.",
+        return (
+            None,
+            _read_error_finding(
+                _RULE_ENCODING_ERROR,
+                relative_path,
+                "File is not valid UTF-8 and was skipped.",
+                "Verify file encoding or exclude from scan.",
+            ),
+            0,
         )
     except OSError as exc:
-        return None, _read_error_finding(
-            _RULE_READ_ERROR,
-            relative_path,
-            f"File could not be read: {type(exc).__name__}",
-            "Check file permissions and accessibility.",
+        return (
+            None,
+            _read_error_finding(
+                _RULE_READ_ERROR,
+                relative_path,
+                f"File could not be read: {type(exc).__name__}",
+                "Check file permissions and accessibility.",
+            ),
+            0,
         )
 
     nbytes = len(content.encode("utf-8"))
     # Defense-in-depth: if stat() failed earlier the classifier could not
     # enforce FS-005.  Re-check the actual size after reading.
     if max_file_size and nbytes > max_file_size:
-        return None, _read_error_finding(
-            _RULE_FILE_SIZE,
-            relative_path,
-            f"File exceeds size limit ({nbytes:,} > {max_file_size:,} bytes).",
-            "Reduce file size or adjust max_file_size in config.",
+        return (
+            None,
+            _read_error_finding(
+                _RULE_FILE_SIZE,
+                relative_path,
+                f"File exceeds size limit ({nbytes:,} > {max_file_size:,} bytes).",
+                "Reduce file size or adjust max_file_size in config.",
+            ),
+            0,
         )
-    return content, None
+    return content, None, nbytes
 
 
 def _apply_rules(

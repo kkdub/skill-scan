@@ -229,7 +229,7 @@ class TestAcceptanceInlineNoqa:
         py_file.write_text(code, encoding="utf-8")
 
         rules = load_default_rules()
-        findings, _, _, suppressed = scan_all_files([py_file], tmp_path, rules)
+        findings, _, _, _suppressed = scan_all_files([py_file], tmp_path, rules)
 
         # EXEC-002 should NOT be suppressed (only PI-001 was noqa'd)
         exec002 = [f for f in findings if f.rule_id == "EXEC-002"]

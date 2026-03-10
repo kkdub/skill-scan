@@ -12,6 +12,7 @@ import re
 from skill_scan.models import Finding
 
 _NOQA_PATTERN = re.compile(r"#\s*noqa:\s*([\w-]+(?:\s*,\s*[\w-]+)*)", re.IGNORECASE)
+_STRING_LITERAL = re.compile(r"""(?:"(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')""")
 
 
 def parse_noqa(line: str) -> frozenset[str]:
@@ -20,8 +21,13 @@ def parse_noqa(line: str) -> frozenset[str]:
     Returns a frozenset of uppercase rule IDs found after ``# noqa:``.
     Returns an empty frozenset when the line has no noqa directive or
     contains a bare ``# noqa`` without rule IDs.
+
+    Only matches ``# noqa:`` in comment position — occurrences inside
+    string literals are ignored so that ``eval(x + "# noqa: EXEC-002")``
+    cannot suppress findings.
     """
-    match = _NOQA_PATTERN.search(line)
+    stripped = _STRING_LITERAL.sub("", line)
+    match = _NOQA_PATTERN.search(stripped)
     if match is None:
         return frozenset()
     raw_ids = match.group(1)

@@ -85,7 +85,7 @@ class TestConcurrentScanning:
             "skill_scan.content_scanner.ProcessPoolExecutor",
             wraps=_RealProcessPoolExecutor,
         ) as mock_pool:
-            findings, scanned, skipped, _ = scan_all_files(files, tmp_path, [])
+            _findings, scanned, skipped, _ = scan_all_files(files, tmp_path, [])
 
         mock_pool.assert_called_once()
         assert scanned > 0
@@ -116,7 +116,7 @@ class TestConcurrentScanning:
             "skill_scan.content_scanner.ProcessPoolExecutor",
             side_effect=RuntimeError("multiprocessing not supported"),
         ):
-            findings, scanned, skipped, _ = scan_all_files(files, tmp_path, [])
+            _findings, scanned, skipped, _ = scan_all_files(files, tmp_path, [])
 
         assert scanned > 0
         assert skipped == 0
@@ -129,7 +129,7 @@ class TestConcurrentScanning:
             "skill_scan.content_scanner.ProcessPoolExecutor",
             side_effect=OSError("cannot fork"),
         ):
-            findings, scanned, skipped, _ = scan_all_files(files, tmp_path, [])
+            _findings, scanned, skipped, _ = scan_all_files(files, tmp_path, [])
 
         assert scanned > 0
         assert skipped == 0
