@@ -21,7 +21,9 @@ def analyze_python(content: str, file_path: str) -> list[Finding]:
 
     Parses with ast.parse() and walks the tree looking for dangerous patterns
     that regex might miss (e.g., string concatenation building dangerous names).
-    Returns an INFO finding on SyntaxError/ValueError. May produce duplicates
+    Returns an AST-PARSE INFO finding on SyntaxError/ValueError/RecursionError
+    during parsing. Returns an AST-DEPTH INFO finding on RecursionError during
+    tree walking (plus any findings accumulated before the error). May produce duplicates
     by (rule_id, line) — callers should deduplicate if needed
     (content_scanner._deduplicate handles this).
     """
