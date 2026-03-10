@@ -33,14 +33,17 @@ make check    # All quality checks (run early, run often)
 - Core scanner engine and decoder use stdlib only (`re`, `pathlib`, `json`, `tomllib`, `base64`, `binascii`, `ast`, `concurrent.futures`)
 - Don't add deps without `uv` + `pyproject.toml`
 - **Max 250 lines per file** (source code in `src/` and `tests/`)
-- `ast_analyzer.py` is at 250 lines (limit) — any addition requires a split first
+- `_ast_helpers.py` is at 246 lines (near limit) — any addition requires a split first
 
 ## Project Structure
 
 ```
 src/skill_scan/           # Production source code
-  ast_analyzer.py         # AST-based analysis for Python files (public: analyze_python)
+  ast_analyzer.py         # Facade: analyze_python() entry point + re-exports from _ast_detectors
+  _ast_detectors.py       # Private detector functions (_detect_* and _make_finding)
   _ast_helpers.py         # Private string-resolution helpers for AST analysis
+  decoder.py              # Facade: EncodedPayload, public constants, extract/decode + re-exports
+  _decoder_helpers.py     # Private regex constants and extraction/decode helpers
   content_scanner.py      # File I/O + rule dispatch + AST deduplication + concurrent scanning
   suppression.py          # Inline noqa suppression (public: parse_noqa, filter_suppressed)
 tests/                    # Test suite (mirrors src/ structure)
@@ -55,6 +58,10 @@ scripts/                  # Quality & analysis scripts
 - `ScanConfig.max_workers`: `0` = auto-detect (capped at 8), positive = explicit worker count (also capped at 8)
 - `ScanResult.suppressed_count`: count of findings removed by inline `# noqa: RULE-ID` comments; default `0`
 - Bare `# noqa` (no rule ID) does NOT suppress — security scanner requires explicit IDs
+- `analyze_python()` returns an `AST-PARSE` INFO finding on `SyntaxError`/`ValueError`; returns an `AST-DEPTH` INFO finding (plus any accumulated findings) on `RecursionError`
+- `MAX_AST_RESOLVE_DEPTH = 50` in `_ast_helpers.py` — recursive string-resolution helpers return `None` instead of crashing at depth > 50
+- `match_content()` in `engine.py` is a public wrapper with no `_depth` parameter; `_match_content_recursive()` is the private implementation that carries `_depth`
+- `ast_analyzer.py` and `decoder.py` are facade modules — they re-export all names from their sibling `_ast_detectors.py` and `_decoder_helpers.py` respectively (Facade Re-export Pattern)
 
 ## Tips
 

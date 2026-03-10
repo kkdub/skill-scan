@@ -187,11 +187,11 @@ class TestSafePatterns:
 
 
 class TestSyntaxErrorFallback:
-    def test_syntax_error_empty(self) -> None:
-        assert analyze_python("def foo(\n", _FILE) == []
-
-    def test_invalid_code_empty(self) -> None:
-        assert analyze_python("}{}{not python!@#$\n", _FILE) == []
+    def test_invalid_code_returns_info_finding(self) -> None:
+        findings = analyze_python("}{}{not python!@#$\n", _FILE)
+        assert len(findings) == 1
+        assert findings[0].rule_id == "AST-PARSE"
+        assert findings[0].severity == Severity.INFO
 
     def test_empty_string_empty(self) -> None:
         assert analyze_python("", _FILE) == []

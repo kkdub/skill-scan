@@ -1,0 +1,102 @@
+plan: PLAN-016
+generated_at: "2026-03-09"
+
+requirements:
+
+  # --- Security debt (from PLAN-013-SECURITY.yaml) ---
+
+  - id: R001
+    requirement: "analyze_python() catches RecursionError so pathological AST trees do not crash the scanner"
+    category: security
+    contract:
+      given: "Python source with deeply nested BinOp trees (100+ levels)"
+      when: "analyze_python() is called"
+      then: "Returns a list (possibly empty) without raising RecursionError"
+    verify: test::tests/unit/test_ast_analyzer.py
+    status: done
+
+  - id: R002
+    requirement: "Recursive AST helpers have depth limits to prevent unbounded recursion"
+    category: security
+    contract:
+      given: "_resolve_binop_add or _resolve_int_expr called with depth > MAX_AST_RESOLVE_DEPTH"
+      when: "Recursion depth exceeds limit"
+      then: "Returns None instead of recursing further; no RecursionError raised"
+    verify: test::tests/unit/test_ast_analyzer.py
+    status: done
+
+  - id: R003
+    requirement: "analyze_python() returns an INFO-level finding when ast.parse() fails"
+    category: ux
+    contract:
+      given: "Syntactically invalid Python source (e.g., 'def broken(')"
+      when: "analyze_python() is called"
+      then: "Returns a list with one Finding: rule_id='AST-PARSE', severity=INFO, description mentions AST was skipped"
+    verify: test::tests/unit/test_ast_analyzer.py
+    status: done
+
+  # --- API hygiene (from DEBT-012.md) ---
+
+  - id: R004
+    requirement: "match_content() public API does not expose _depth parameter"
+    category: api
+    contract:
+      given: "The public match_content function in skill_scan.rules"
+      when: "Its signature is inspected"
+      then: "No _depth parameter exists; recursive decoding still works internally"
+    verify: test::tests/unit/test_rules_production_features.py
+    status: done
+
+  # --- File splits (line limit debt) ---
+
+  - id: R005
+    requirement: "ast_analyzer.py is split into a facade and _ast_detectors.py following Facade Re-export Pattern"
+    category: structure
+    contract:
+      given: "ast_analyzer.py at 249 lines (at limit)"
+      when: "Split is performed"
+      then: "ast_analyzer.py keeps analyze_python and re-exports; _ast_detectors.py holds detectors; both under 250 lines"
+    verify: inspection
+    status: done
+
+  - id: R006
+    requirement: "decoder.py is split into a facade and _decoder_helpers.py following Facade Re-export Pattern"
+    category: structure
+    contract:
+      given: "decoder.py at 250 lines (at limit)"
+      when: "Split is performed"
+      then: "decoder.py keeps public API and re-exports; _decoder_helpers.py holds internals; both under 250 lines"
+    verify: inspection
+    status: done
+
+  # --- Implicit requirements ---
+
+  - id: R-IMP001
+    requirement: "No new third-party dependencies — stdlib only"
+    category: reliability
+    verify: inspection
+    status: done
+
+  - id: R-IMP002
+    requirement: "All source files remain at or below 250 lines after changes"
+    category: structure
+    verify: inspection
+    status: done
+
+  - id: R-IMP003
+    requirement: "All existing tests pass after each part (make check green)"
+    category: reliability
+    verify: test::make check
+    status: done
+
+  - id: R-IMP004
+    requirement: "Module splits follow Facade Re-export Pattern from CODE-PATTERNS.md"
+    category: structure
+    verify: review
+    status: done
+
+  - id: R-IMP005
+    requirement: "Public API surface unchanged — __init__.py exports and import paths preserved"
+    category: api
+    verify: inspection
+    status: done

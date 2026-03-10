@@ -357,14 +357,17 @@ if relative_path.endswith(".py"):
 return regex_findings
 ```
 
-> Trap: `ast_analyzer.py` is at the 250-line limit. Any new detector must be split into a sibling module first (follow the Facade Re-export Pattern).
+> Trap: `_ast_helpers.py` is at 246 lines (near limit). Any new string-resolution helper must be split into a sibling module first (follow the Facade Re-export Pattern). `ast_analyzer.py` is a facade — new detector functions go in `_ast_detectors.py`.
 
 ## Multi-Pass Scanning in match_content()
 
 `match_content()` in `engine.py` applies four sequential passes. Each pass extends the findings list without interfering with earlier passes. New passes follow the same helper-function pattern.
 
 ```python
-def match_content(content, file_path, rules, *, _depth=0):
+def match_content(content, file_path, rules):  # public wrapper — no _depth
+    return _match_content_recursive(content, file_path, rules)
+
+def _match_content_recursive(content, file_path, rules, *, _depth=0):
     # Pass 1: line rules (original text)
     # Pass 2: line rules (normalized text — deduped against pass 1)
     # Pass 3: file-scope rules (original + normalized)

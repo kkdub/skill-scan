@@ -15,6 +15,8 @@ from __future__ import annotations
 
 import ast
 
+MAX_AST_RESOLVE_DEPTH = 50
+
 
 def get_call_name(node: ast.Call) -> str:
     """Extract the dotted name of a call (e.g. 'os.system', 'eval')."""
@@ -67,7 +69,7 @@ def _is_safe_loader_node(node: ast.expr) -> bool:
     return False
 
 
-def try_resolve_string(node: ast.AST) -> str | None:
+def try_resolve_string(node: ast.AST, *, _depth: int = 0) -> str | None:
     """Try to statically resolve a node to a string value.
 
     Supports: string constants, BinOp Add on strings, ''.join([...]),
@@ -80,33 +82,41 @@ def try_resolve_string(node: ast.AST) -> str | None:
     if isinstance(node, ast.JoinedStr):
         return None  # f-string — cannot resolve statically
     if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
-        return _resolve_binop_add(node)
+        return _resolve_binop_add(node, _depth=_depth)
     if isinstance(node, ast.Call):
-        return _resolve_chr_call(node) or _resolve_join_call(node) or _resolve_bytes_decode(node)
+        return (
+            _resolve_chr_call(node, _depth=_depth)
+            or _resolve_join_call(node, _depth=_depth)
+            or _resolve_bytes_decode(node)
+        )
     return None
 
 
-def _resolve_binop_add(node: ast.BinOp) -> str | None:
+def _resolve_binop_add(node: ast.BinOp, *, _depth: int = 0) -> str | None:
     """Resolve string concatenation: left + right."""
-    left = try_resolve_string(node.left)
-    right = try_resolve_string(node.right)
+    if _depth > MAX_AST_RESOLVE_DEPTH:
+        return None
+    left = try_resolve_string(node.left, _depth=_depth + 1)
+    right = try_resolve_string(node.right, _depth=_depth + 1)
     if left is not None and right is not None:
         return left + right
     return None
 
 
-def _resolve_int_expr(node: ast.expr) -> int | None:
+def _resolve_int_expr(node: ast.expr, *, _depth: int = 0) -> int | None:
     """Resolve an integer constant or simple arithmetic (add/sub/mul) on int constants.
 
     Recursively evaluates BinOp trees containing only integer constants
     and the operators +, -, *. Returns None for anything else.
     """
+    if _depth > MAX_AST_RESOLVE_DEPTH:
+        return None
     if isinstance(node, ast.Constant) and isinstance(node.value, int):
         return node.value
     if not isinstance(node, ast.BinOp):
         return None
-    left = _resolve_int_expr(node.left)
-    right = _resolve_int_expr(node.right)
+    left = _resolve_int_expr(node.left, _depth=_depth + 1)
+    right = _resolve_int_expr(node.right, _depth=_depth + 1)
     if left is None or right is None:
         return None
     if isinstance(node.op, ast.Add):
@@ -118,19 +128,19 @@ def _resolve_int_expr(node: ast.expr) -> int | None:
     return None
 
 
-def _resolve_chr_call(node: ast.Call) -> str | None:
+def _resolve_chr_call(node: ast.Call, *, _depth: int = 0) -> str | None:
     """Resolve chr(N) or chr(arithmetic) to a single character."""
     if _get_call_name_from_any(node) != "chr":
         return None
     if len(node.args) != 1:
         return None
-    val = _resolve_int_expr(node.args[0])
+    val = _resolve_int_expr(node.args[0], _depth=_depth)
     if val is not None and 0 <= val <= 0x10FFFF:
         return chr(val)
     return None
 
 
-def _resolve_join_call(node: ast.Call) -> str | None:
+def _resolve_join_call(node: ast.Call, *, _depth: int = 0) -> str | None:
     """Resolve ''.join([...]), ''.join(map(chr, [...])), and list comp variants."""
     if not isinstance(node.func, ast.Attribute) or node.func.attr != "join":
         return None
@@ -144,7 +154,7 @@ def _resolve_join_call(node: ast.Call) -> str | None:
 
     # Direct list/tuple: ''.join(['a', 'b', 'c'])
     if isinstance(arg, ast.List | ast.Tuple):
-        return _resolve_iterable_elements(arg.elts, sep)
+        return _resolve_iterable_elements(arg.elts, sep, _depth=_depth)
 
     # List comprehension: ''.join([chr(c) for c in [101, 118, ...]])
     if isinstance(arg, ast.ListComp):
@@ -157,11 +167,11 @@ def _resolve_join_call(node: ast.Call) -> str | None:
     return None
 
 
-def _resolve_iterable_elements(elts: list[ast.expr], sep: str) -> str | None:
+def _resolve_iterable_elements(elts: list[ast.expr], sep: str, *, _depth: int = 0) -> str | None:
     """Resolve a list of AST elements to a joined string."""
     parts: list[str] = []
     for elt in elts:
-        resolved = try_resolve_string(elt)
+        resolved = try_resolve_string(elt, _depth=_depth)
         if resolved is None:
             return None
         parts.append(resolved)
