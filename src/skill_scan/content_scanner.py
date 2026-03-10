@@ -2,20 +2,26 @@
 
 Handles file I/O (read_text), encoding errors, per-file rule filtering
 via path exclusions, and delegates pattern matching to the rules engine.
+Supports concurrent scanning via ProcessPoolExecutor for large file sets.
 """
 
 from __future__ import annotations
 
+import os
+from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
 from skill_scan.ast_analyzer import analyze_python
 from skill_scan.models import Finding, Rule, Severity
 from skill_scan.rules import match_content
+from skill_scan.suppression import filter_suppressed
 
 _RULE_ENCODING_ERROR = "FS-001"
 _RULE_FILE_SIZE = "FS-005"
 _RULE_READ_ERROR = "FS-008"
 _CATEGORY_FILE_SAFETY = "file-safety"
+
+MIN_FILES_FOR_CONCURRENCY = 8
 
 
 def scan_all_files(
@@ -24,18 +30,72 @@ def scan_all_files(
     rules: list[Rule],
     *,
     max_file_size: int = 0,
-) -> tuple[list[Finding], int, int]:
-    """Scan all collected files. Returns (findings, bytes_scanned, files_skipped)."""
+    max_workers: int = 0,
+) -> tuple[list[Finding], int, int, int]:
+    """Scan all collected files.
+
+    Returns (findings, bytes_scanned, files_skipped, suppressed_count).
+
+    When len(files) >= MIN_FILES_FOR_CONCURRENCY, scanning is distributed
+    across worker processes via ProcessPoolExecutor. Falls back to
+    sequential scanning if multiprocessing fails.
+    """
+    if len(files) >= MIN_FILES_FOR_CONCURRENCY:
+        try:
+            return _scan_concurrent(files, skill_dir, rules, max_file_size, max_workers)
+        except (OSError, RuntimeError):
+            pass  # Fall back to sequential
+    return _scan_sequential(files, skill_dir, rules, max_file_size)
+
+
+def _scan_sequential(
+    files: list[Path],
+    skill_dir: Path,
+    rules: list[Rule],
+    max_file_size: int,
+) -> tuple[list[Finding], int, int, int]:
+    """Scan files sequentially. Original single-threaded path."""
+    results = [_scan_file(fp, skill_dir, rules, max_file_size) for fp in files]
+    return _aggregate_results(results)
+
+
+def _scan_concurrent(
+    files: list[Path],
+    skill_dir: Path,
+    rules: list[Rule],
+    max_file_size: int,
+    max_workers: int,
+) -> tuple[list[Finding], int, int, int]:
+    """Scan files concurrently using ProcessPoolExecutor."""
+    workers = _resolve_workers(max_workers)
+    with ProcessPoolExecutor(max_workers=workers) as executor:
+        futures = [executor.submit(_scan_file, fp, skill_dir, rules, max_file_size) for fp in files]
+        results = [f.result() for f in futures]
+    return _aggregate_results(results)
+
+
+def _aggregate_results(
+    results: list[tuple[list[Finding], int, int]],
+) -> tuple[list[Finding], int, int, int]:
+    """Combine per-file scan results into totals."""
     all_findings: list[Finding] = []
     bytes_scanned = 0
     files_skipped = 0
-    for file_path in files:
-        findings, nbytes = _scan_file(file_path, skill_dir, rules, max_file_size)
+    suppressed_count = 0
+    for findings, nbytes, suppressed in results:
         all_findings.extend(findings)
         bytes_scanned += nbytes
+        suppressed_count += suppressed
         if nbytes == 0 and findings:
             files_skipped += 1
-    return all_findings, bytes_scanned, files_skipped
+    return all_findings, bytes_scanned, files_skipped, suppressed_count
+
+
+def _resolve_workers(max_workers: int) -> int:
+    """Return the effective worker count. 0 means auto-detect."""
+    if max_workers > 0:
+        return min(max_workers, 8)
+    return min(os.cpu_count() or 4, 8)
 
 
 def _scan_file(
@@ -43,49 +103,76 @@ def _scan_file(
     skill_dir: Path,
     rules: list[Rule],
     max_file_size: int,
-) -> tuple[list[Finding], int]:
+) -> tuple[list[Finding], int, int]:
     """Read a file and delegate to pure decision functions.
 
-    Returns (findings, bytes_scanned). bytes_scanned is 0 when the file
-    could not be read (UnicodeDecodeError, OSError) or exceeds the size limit.
+    Returns (findings, bytes_scanned, suppressed_count). bytes_scanned is 0
+    when the file could not be read (UnicodeDecodeError, OSError) or exceeds
+    the size limit.
     """
     relative_path = file_path.relative_to(skill_dir).as_posix()
+    content, error_finding, nbytes = _read_file(file_path, relative_path, max_file_size)
+    if error_finding is not None:
+        return [error_finding], 0, 0
 
+    if content is None:  # unreachable when error_finding is None
+        return [], 0, 0
+    findings = _apply_rules(content, relative_path, rules)
+    lines = content.splitlines()
+    filtered, suppressed = filter_suppressed(findings, lines)
+    return filtered, nbytes, suppressed
+
+
+def _read_file(
+    file_path: Path,
+    relative_path: str,
+    max_file_size: int,
+) -> tuple[str | None, Finding | None, int]:
+    """Read a file and validate size. Returns (content, error_finding, nbytes).
+
+    On success: content=text, error_finding=None, nbytes=byte count.
+    On failure: content=None, error_finding=problem, nbytes=0.
+    """
     try:
         content = file_path.read_text(encoding="utf-8")
     except UnicodeDecodeError:
-        return [
+        return (
+            None,
             _read_error_finding(
                 _RULE_ENCODING_ERROR,
                 relative_path,
                 "File is not valid UTF-8 and was skipped.",
                 "Verify file encoding or exclude from scan.",
-            )
-        ], 0
+            ),
+            0,
+        )
     except OSError as exc:
-        return [
+        return (
+            None,
             _read_error_finding(
                 _RULE_READ_ERROR,
                 relative_path,
                 f"File could not be read: {type(exc).__name__}",
                 "Check file permissions and accessibility.",
-            )
-        ], 0
+            ),
+            0,
+        )
 
     nbytes = len(content.encode("utf-8"))
     # Defense-in-depth: if stat() failed earlier the classifier could not
     # enforce FS-005.  Re-check the actual size after reading.
     if max_file_size and nbytes > max_file_size:
-        return [
+        return (
+            None,
             _read_error_finding(
                 _RULE_FILE_SIZE,
                 relative_path,
                 f"File exceeds size limit ({nbytes:,} > {max_file_size:,} bytes).",
                 "Reduce file size or adjust max_file_size in config.",
-            )
-        ], 0
-
-    return _apply_rules(content, relative_path, rules), nbytes
+            ),
+            0,
+        )
+    return content, None, nbytes
 
 
 def _apply_rules(

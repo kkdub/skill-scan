@@ -391,6 +391,39 @@ def format_sarif(result: ScanResult) -> str:
 
 > Trap: adding I/O or side effects inside a formatter breaks testability and violates ARCH-001.
 
+## Inline noqa Suppression
+
+`suppression.py` provides two pure functions for inline finding suppression. `parse_noqa()` extracts rule IDs from a `# noqa: RULE-ID` comment on a single line; `filter_suppressed()` filters a findings list against the noqa directives of their source lines. Both are called inside `_scan_file()` after `_apply_rules()`, which means suppression works identically in sequential and concurrent paths.
+
+```python
+from skill_scan.suppression import filter_suppressed, parse_noqa
+
+# parse a single line
+ids = parse_noqa("x = eval(s)  # noqa: EXEC-002")  # frozenset({'EXEC-002'})
+ids = parse_noqa("x = eval(s)  # noqa")             # frozenset() — bare noqa rejected
+
+# filter a findings list
+remaining, suppressed_count = filter_suppressed(findings, content.splitlines())
+```
+
+> Trap: bare `# noqa` (no rule IDs) returns an empty frozenset and suppresses nothing — explicit rule IDs are required.
+
+## Concurrent File Scanning
+
+`scan_all_files()` in `content_scanner.py` dispatches to `_scan_concurrent()` when `len(files) >= MIN_FILES_FOR_CONCURRENCY` (8) and falls back to `_scan_sequential()` on `OSError` or `RuntimeError`. The worker count is resolved by `_resolve_workers()`, which caps at 8 regardless of the `max_workers` config value.
+
+```python
+# content_scanner.py — dispatch logic
+if len(files) >= MIN_FILES_FOR_CONCURRENCY:
+    try:
+        return _scan_concurrent(files, skill_dir, rules, max_file_size, max_workers)
+    except (OSError, RuntimeError):
+        pass  # fall back to sequential
+return _scan_sequential(files, skill_dir, rules, max_file_size)
+```
+
+> Trap: `ProcessPoolExecutor` requires all arguments to `_scan_file()` to be picklable. `Finding`, `Rule`, and `ScanResult` are frozen dataclasses with `slots=True`, which satisfies this constraint. Do not add unpicklable types (locks, file handles) to the per-file scan arguments.
+
 ## Facade Re-export Pattern
 
 When splitting a large module into sibling files, keep the original file as a facade: it retains the orchestrator/entry-point functions and types, then re-exports all names from sibling files at the BOTTOM. This preserves every existing import path and mock.patch target.

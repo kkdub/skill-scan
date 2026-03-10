@@ -71,6 +71,7 @@ class ScanResult:
     files_scanned: int = 0
     files_skipped: int = 0
     bytes_scanned: int = 0
+    suppressed_count: int = 0
     degraded_reasons: tuple[str, ...] = ()
     skill_name: str | None = None
     error_message: str | None = None

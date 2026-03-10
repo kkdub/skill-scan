@@ -229,3 +229,17 @@ class TestScanResultDataclass:
 
         with pytest.raises(AttributeError, match="cannot assign to field"):
             result.verdict = Verdict.BLOCK  # type: ignore[misc]
+
+    def test_suppressed_count_defaults_to_zero(self) -> None:
+        result = ScanResult(findings=(), counts={}, verdict=Verdict.PASS, duration=0.0)
+        assert result.suppressed_count == 0
+
+    def test_suppressed_count_can_be_set(self) -> None:
+        result = ScanResult(
+            findings=(),
+            counts={},
+            verdict=Verdict.PASS,
+            duration=0.0,
+            suppressed_count=5,
+        )
+        assert result.suppressed_count == 5
