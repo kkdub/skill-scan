@@ -11,7 +11,7 @@ DOCKERIGNORE = PROJECT_ROOT / ".dockerignore"
 
 @pytest.fixture()
 def dockerfile_lines() -> list[str]:
-    """Read Dockerfile lines, stripping whitespace."""
+    """Read Dockerfile lines as-is."""
     return DOCKERFILE.read_text().splitlines()
 
 
@@ -123,7 +123,7 @@ class TestDockerfileInstructionOrder:
     """Tests for correct instruction ordering in Dockerfile."""
 
     def test_dockerfile_instruction_order(self, dockerfile_instructions: list[str]) -> None:
-        """Instructions follow correct order: FROM, RUN, COPY, RUN, WORKDIR, USER, ENTRYPOINT."""
+        """Instructions start with FROM and end with USER, ENTRYPOINT."""
         first_words = [line.split()[0] for line in dockerfile_instructions]
         assert first_words[0] == "FROM"
         assert first_words[-1] == "ENTRYPOINT"

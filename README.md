@@ -137,13 +137,15 @@ Run skill-scan in an isolated container — useful when scanning potentially unt
 docker build -t skill-scan .
 
 # Scan a local directory
-docker run --rm -v ./my-skill:/scan skill-scan scan /scan
+docker run --rm -v ./my-skill:/scan:ro skill-scan scan /scan
 
-# All CLI flags work via ENTRYPOINT passthrough
-docker run --rm -v ./my-skill:/scan skill-scan scan /scan --format json --fail-on high
+# Scan flags work via ENTRYPOINT passthrough
+docker run --rm -v ./my-skill:/scan:ro skill-scan scan /scan --format json --fail-on high
 ```
 
-The container runs as non-root user `scanner`. The scan target is mounted at `/scan` (the container's working directory). No host filesystem access beyond the mounted volume.
+The container runs as non-root user `scanner`. The scan target is mounted read-only at `/scan` (the container's working directory). By default, the container can only access host files under this mounted directory unless you add additional volume mounts.
+
+> **Note:** The default image includes only the core scanner (local scanning). For remote scanning (`--repo`), build with extras: `pip install "/app[remote]"` in a custom Dockerfile.
 
 ## Detection categories
 
