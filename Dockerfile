@@ -8,7 +8,7 @@ COPY pyproject.toml README.md /app/
 COPY src/ /app/src/
 
 # Install skill-scan from source
-RUN pip install --no-cache-dir /app
+RUN pip install --no-cache-dir "/app[remote]"
 
 # Set working directory for scan targets (volume mount point)
 WORKDIR /scan

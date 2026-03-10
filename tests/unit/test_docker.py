@@ -101,6 +101,12 @@ class TestDockerfileBuild:
         assert len(pip_lines) == 1
         assert "--no-cache-dir" in pip_lines[0]
 
+    def test_dockerfile_pip_install_includes_remote_extra(self, dockerfile_instructions: list[str]) -> None:
+        """pip install includes [remote] extra for full CLI support."""
+        pip_lines = [line for line in dockerfile_instructions if "pip install" in line]
+        assert len(pip_lines) == 1
+        assert "[remote]" in pip_lines[0]
+
     def test_dockerfile_workdir_is_scan(self, dockerfile_instructions: list[str]) -> None:
         """WORKDIR is /scan for volume mount point."""
         wd_lines = [line for line in dockerfile_instructions if line.startswith("WORKDIR ")]
