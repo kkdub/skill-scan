@@ -77,6 +77,8 @@ def try_resolve_string(node: ast.AST, *, _depth: int = 0) -> str | None:
     map(chr, [...]), and b'literal'.decode(). Returns None for anything
     that cannot be resolved statically (f-strings, variables, etc.).
     """
+    if _depth > MAX_AST_RESOLVE_DEPTH:
+        return None
     if isinstance(node, ast.Constant) and isinstance(node.value, str):
         return node.value
     if isinstance(node, ast.JoinedStr):
@@ -94,8 +96,6 @@ def try_resolve_string(node: ast.AST, *, _depth: int = 0) -> str | None:
 
 def _resolve_binop_add(node: ast.BinOp, *, _depth: int = 0) -> str | None:
     """Resolve string concatenation: left + right."""
-    if _depth > MAX_AST_RESOLVE_DEPTH:
-        return None
     left = try_resolve_string(node.left, _depth=_depth + 1)
     right = try_resolve_string(node.right, _depth=_depth + 1)
     if left is not None and right is not None:
@@ -171,7 +171,7 @@ def _resolve_iterable_elements(elts: list[ast.expr], sep: str, *, _depth: int = 
     """Resolve a list of AST elements to a joined string."""
     parts: list[str] = []
     for elt in elts:
-        resolved = try_resolve_string(elt, _depth=_depth)
+        resolved = try_resolve_string(elt, _depth=_depth + 1)
         if resolved is None:
             return None
         parts.append(resolved)

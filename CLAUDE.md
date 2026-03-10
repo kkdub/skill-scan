@@ -58,7 +58,8 @@ scripts/                  # Quality & analysis scripts
 - `ScanConfig.max_workers`: `0` = auto-detect (capped at 8), positive = explicit worker count (also capped at 8)
 - `ScanResult.suppressed_count`: count of findings removed by inline `# noqa: RULE-ID` comments; default `0`
 - Bare `# noqa` (no rule ID) does NOT suppress — security scanner requires explicit IDs
-- `analyze_python()` returns an `AST-PARSE` INFO finding on `SyntaxError`/`ValueError`; returns an `AST-DEPTH` INFO finding (plus any accumulated findings) on `RecursionError`
+- `analyze_python()` returns an `AST-PARSE` INFO finding on `SyntaxError`/`ValueError`/`RecursionError` during parsing; returns an `AST-DEPTH` INFO finding (plus any accumulated findings) on `RecursionError` during tree walking
+- `AST-PARSE` and `AST-DEPTH` findings are exempt from `active_ids` filtering in `content_scanner._apply_rules()` — they always propagate to output
 - `MAX_AST_RESOLVE_DEPTH = 50` in `_ast_helpers.py` — recursive string-resolution helpers return `None` instead of crashing at depth > 50
 - `match_content()` in `engine.py` is a public wrapper with no `_depth` parameter; `_match_content_recursive()` is the private implementation that carries `_depth`
 - `ast_analyzer.py` and `decoder.py` are facade modules — they re-export all names from their sibling `_ast_detectors.py` and `_decoder_helpers.py` respectively (Facade Re-export Pattern)

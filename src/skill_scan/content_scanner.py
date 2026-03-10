@@ -191,7 +191,8 @@ def _apply_rules(
         return regex_findings
     ast_findings = analyze_python(content, relative_path)
     active_ids = {r.rule_id for r in applicable}
-    ast_findings = [f for f in ast_findings if f.rule_id in active_ids]
+    _DIAG_IDS = frozenset({"AST-PARSE", "AST-DEPTH"})
+    ast_findings = [f for f in ast_findings if f.rule_id in active_ids or f.rule_id in _DIAG_IDS]
     return _deduplicate(regex_findings, ast_findings)
 
 

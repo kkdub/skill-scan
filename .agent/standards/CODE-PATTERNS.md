@@ -357,7 +357,7 @@ if relative_path.endswith(".py"):
 return regex_findings
 ```
 
-> Trap: `_ast_helpers.py` is at 246 lines (near limit). Any new string-resolution helper must be split into a sibling module first (follow the Facade Re-export Pattern). `ast_analyzer.py` is a facade — new detector functions go in `_ast_detectors.py`.
+> Trap: `_ast_helpers.py` is near the 250-line limit. Any new string-resolution helper must be split into a sibling module first (follow the Facade Re-export Pattern). `ast_analyzer.py` is a facade — new detector functions go in `_ast_detectors.py`.
 
 ## Multi-Pass Scanning in match_content()
 

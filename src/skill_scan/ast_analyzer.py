@@ -27,7 +27,7 @@ def analyze_python(content: str, file_path: str) -> list[Finding]:
     """
     try:
         tree = ast.parse(content)
-    except (SyntaxError, ValueError):
+    except (SyntaxError, ValueError, RecursionError):
         return [
             Finding(
                 rule_id="AST-PARSE",
