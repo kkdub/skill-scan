@@ -1,0 +1,10 @@
+id: "PLAN-017"
+title: "Alternative Encoding Decoding (rot13, URL-encoding, unicode escapes)"
+status: Placeholder
+
+# From DEBT-012.md:
+# PLAN-012 scope covers base64 and hex only. Adding rot13, URL-encoding, or unicode
+# escape decoding requires additional extraction regexes and decode functions.
+# Add decode_rot13(), decode_url(), and decode_unicode_escape() with corresponding
+# extraction patterns. Each encoding type gets its own regex and decoder.
+# Target: future plan if red-team data shows these encodings used in real evasion attempts.
