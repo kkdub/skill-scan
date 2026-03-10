@@ -1,0 +1,11 @@
+# .agent/status/debt.yaml
+# Entries are removed when resolved. Git history tracks removals.
+
+- description: "try_resolve_string exposes _depth parameter on semi-public function"
+  type: security
+  plan: PLAN-016
+  files:
+    - "src/skill_scan/_ast_helpers.py:72"
+  blocker: "_ast_helpers.py is at 246 lines (4 from limit); adding a wrapper pattern requires a split first. Plan R004 scoped to match_content only."
+  resolution: "Apply same wrapper pattern as engine.py match_content: create public try_resolve_string(node) delegating to _try_resolve_string_recursive(node, _depth=0). Requires splitting _ast_helpers.py first to stay under 250 lines."
+  severity: low

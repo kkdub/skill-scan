@@ -110,7 +110,18 @@ def match_file(
     return findings
 
 
-def match_content(content: str, file_path: str, rules: list[Rule], *, _depth: int = 0) -> list[Finding]:
+def match_content(content: str, file_path: str, rules: list[Rule]) -> list[Finding]:
+    """Apply line-scope, file-scope, and decoded-content rules to file content.
+
+    Public wrapper that hides the internal recursion depth parameter.
+    Delegates to _match_content_recursive for the actual implementation.
+    """
+    return _match_content_recursive(content, file_path, rules)
+
+
+def _match_content_recursive(
+    content: str, file_path: str, rules: list[Rule], *, _depth: int = 0
+) -> list[Finding]:
     """Apply line-scope, file-scope, and decoded-content rules to file content.
 
     Line endings normalized to LF. Each line matched in original and (if
@@ -173,7 +184,7 @@ def _decoded_content_findings(
         decoded = decode_payload(p, depth=depth)
         if decoded is None:
             continue
-        for f in match_content(decoded, file_path, rules, _depth=depth + 1):
+        for f in _match_content_recursive(decoded, file_path, rules, _depth=depth + 1):
             desc = f.description if f.description.startswith("[decoded]") else f"[decoded] {f.description}"
             results.append(replace(f, file=file_path, line=p.line_num, description=desc))
     return results

@@ -20,6 +20,7 @@ _RULE_ENCODING_ERROR = "FS-001"
 _RULE_FILE_SIZE = "FS-005"
 _RULE_READ_ERROR = "FS-008"
 _CATEGORY_FILE_SAFETY = "file-safety"
+_DIAG_IDS = frozenset({"AST-PARSE", "AST-DEPTH"})
 
 MIN_FILES_FOR_CONCURRENCY = 8
 
@@ -191,7 +192,7 @@ def _apply_rules(
         return regex_findings
     ast_findings = analyze_python(content, relative_path)
     active_ids = {r.rule_id for r in applicable}
-    ast_findings = [f for f in ast_findings if f.rule_id in active_ids]
+    ast_findings = [f for f in ast_findings if f.rule_id in active_ids or f.rule_id in _DIAG_IDS]
     return _deduplicate(regex_findings, ast_findings)
 
 

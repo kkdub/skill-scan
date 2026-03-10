@@ -1,0 +1,363 @@
+id: "PLAN-016"
+title: "Technical & Security Debt Cleanup"
+type: implementation
+status: Done
+created: 2026-03-09
+
+linked_spec: null
+
+description: |
+  Address technical and security debt identified across three modules:
+  ast_analyzer.py (at 249 lines, needs split before any additions),
+  decoder.py (at 250 lines, needs split for headroom), and
+  rules/engine.py (match_content exposes _depth to callers).
+
+  The plan also hardens AST analysis against RecursionError from
+  adversarial input and adds an INFO finding when AST parsing fails
+  (instead of silently returning empty results).
+
+  All changes are internal refactors — no public API changes, no new
+  dependencies, no changes to __init__.py exports.
+
+requirements:
+  file: REQUIREMENTS-016.yaml
+  ids:
+    - R001  # Catch RecursionError in analyze_python
+    - R002  # Depth limits on recursive AST helpers
+    - R003  # INFO finding on AST parse failure
+    - R004  # Hide _depth parameter from match_content public API
+    - R005  # Split ast_analyzer.py below 250-line limit
+    - R006  # Split decoder.py below 250-line limit
+    - R-IMP001  # No new dependencies
+    - R-IMP002  # All files under 250 lines
+    - R-IMP003  # All existing tests pass
+    - R-IMP004  # Follow Facade Re-export Pattern
+    - R-IMP005  # Public API surface unchanged
+  uncovered: []
+
+utilities_audit:
+  status: complete
+  search_performed: []
+  categories:
+    error_handling: { needed: false }
+    validation: { needed: false }
+    logging: { needed: false }
+    types: { needed: false }
+    configuration: { needed: false }
+    http_client: { needed: false }
+  infrastructure_parts: []
+
+environment:
+  status: assessed
+  build:
+    tool: make
+    install_cmd: "make install"
+    check_cmd: "make check"
+    prerequisites: ["Python 3.13", "uv"]
+  runtime_services: []
+  changes:
+    new_dependencies: []
+    env_vars: []
+    schema_changes: []
+    ci_changes: []
+    build_changes: []
+
+# Skeleton decision: Skip
+# Category: brownfield single-layer debt fixes (modifying existing modules, no new cross-layer wiring)
+
+parts:
+  - id: a
+    title: "Split ast_analyzer.py — extract detectors to _ast_detectors.py"
+    status: Done
+    verify_group: module-splits
+    requirements_covered: [R005, R-IMP001, R-IMP002, R-IMP004, R-IMP005]
+    approach:
+      - step: "Create _ast_detectors.py with detector functions, constants, and helper"
+        files: [src/skill_scan/_ast_detectors.py]
+        notes: |
+          Move these from ast_analyzer.py into _ast_detectors.py:
+          - _CATEGORY constant
+          - _DANGEROUS_NAMES frozenset
+          - _RECOMMENDATIONS dict
+          - _UNSAFE_EXEC_CALLS frozenset
+          - _UNSAFE_DESER_CALLS frozenset
+          - _detect_unsafe_calls()
+          - _detect_dynamic_imports()
+          - _detect_unsafe_deserialization()
+          - _detect_string_concat_evasion()
+          - _detect_dynamic_access()
+          - _make_finding()
+          The new module needs to import: ast, Finding, Severity from models,
+          and get_call_name, has_safe_loader, try_resolve_string from _ast_helpers.
+      - step: "Reduce ast_analyzer.py to facade that imports and re-exports"
+        files: [src/skill_scan/ast_analyzer.py]
+        notes: |
+          ast_analyzer.py keeps only: module docstring, analyze_python() function,
+          and re-exports at the BOTTOM of the file. analyze_python() imports
+          detector functions from _ast_detectors. The function body stays identical.
+          Re-export all names from _ast_detectors at bottom of file so any
+          direct imports from ast_analyzer continue to work (Facade Re-export Pattern).
+      - step: "Verify no import breakage"
+        files: [src/skill_scan/content_scanner.py]
+        notes: |
+          content_scanner.py imports analyze_python from ast_analyzer — confirm
+          this still resolves. No changes needed in content_scanner.py itself.
+    criteria:
+      - "ast_analyzer.py contains analyze_python() and re-exports from _ast_detectors at bottom"
+      - "ast_analyzer.py is under 250 lines"
+      - "_ast_detectors.py contains all _detect_* functions, _make_finding, and frozenset constants"
+      - "_ast_detectors.py is under 250 lines"
+      - "from skill_scan.ast_analyzer import analyze_python still works"
+      - "All existing tests pass (make check green)"
+
+  - id: b
+    title: "Split decoder.py — extract helpers to _decoder_helpers.py"
+    status: Done
+    verify_group: module-splits
+    requirements_covered: [R006, R-IMP001, R-IMP002, R-IMP004, R-IMP005]
+    approach:
+      - step: "Create _decoder_helpers.py with extraction and decoding internals"
+        files: [src/skill_scan/_decoder_helpers.py]
+        notes: |
+          Move these from decoder.py into _decoder_helpers.py:
+          - All regex constants (_BASE64_RE, _HEX_FROMHEX_RE, _HEX_ESCAPE_RE, _HEX_BLOCK_RE)
+          - Derived constants (_L, _L_B64, _HB, _HF)
+          - _extract_base64_from_line()
+          - _extract_hex_from_line()
+          - _decode_bytes()
+          - _decode_base64()
+          - _decode_hex()
+          The new module imports: re, base64, binascii, and EncodedPayload
+          and MIN_ENCODED_LENGTH from decoder.py. To avoid circular imports,
+          keep EncodedPayload and the public constants (MIN_ENCODED_LENGTH,
+          MAX_DECODED_SIZE, MAX_DECODE_DEPTH) in decoder.py.
+      - step: "Reduce decoder.py to facade with public API and re-exports"
+        files: [src/skill_scan/decoder.py]
+        notes: |
+          decoder.py keeps: module docstring, dataclass EncodedPayload,
+          public constants (MIN_ENCODED_LENGTH, MAX_DECODED_SIZE, MAX_DECODE_DEPTH),
+          extract_encoded_strings() (calls helpers), decode_payload() (calls helpers).
+          Re-export all names from _decoder_helpers at BOTTOM of file.
+      - step: "Verify no import breakage"
+        files: [src/skill_scan/rules/engine.py]
+        notes: |
+          engine.py imports MAX_DECODE_DEPTH, decode_payload, extract_encoded_strings
+          from decoder — confirm these still resolve. No changes needed.
+    criteria:
+      - "decoder.py contains EncodedPayload, public constants, extract_encoded_strings(), decode_payload(), and re-exports from _decoder_helpers at bottom"
+      - "decoder.py is under 250 lines"
+      - "_decoder_helpers.py contains regex constants, extraction helpers, and decode helpers"
+      - "_decoder_helpers.py is under 250 lines"
+      - "from skill_scan.decoder import extract_encoded_strings, decode_payload, EncodedPayload still works"
+      - "All existing tests pass (make check green)"
+
+  - id: c
+    title: "AST hardening — RecursionError, depth limits, INFO finding"
+    status: Done
+    depends_on: [a]
+    requirements_covered: [R001, R002, R003, R-IMP003]
+    approach:
+      - step: "Add RecursionError catch in analyze_python"
+        files: [src/skill_scan/ast_analyzer.py]
+        notes: |
+          Wrap the ast.walk loop in analyze_python() with try/except RecursionError.
+          On RecursionError, return findings accumulated so far (do not discard).
+          This handles adversarial inputs with deeply nested AST trees.
+      - step: "Add depth limits to recursive AST helpers"
+        files: [src/skill_scan/_ast_helpers.py]
+        notes: |
+          Add a _depth parameter (default 0) and MAX_AST_RESOLVE_DEPTH constant
+          (value: 50) to _resolve_binop_add and _resolve_int_expr. Return None
+          when depth exceeds limit. Thread depth through try_resolve_string
+          (add _depth param) and _resolve_iterable_elements (which calls
+          try_resolve_string). The _depth param uses underscore prefix since
+          it is internal to the resolution pipeline.
+          Key chain: try_resolve_string -> _resolve_binop_add (recurses)
+                     try_resolve_string -> _resolve_chr_call -> _resolve_int_expr (recurses)
+                     _resolve_iterable_elements -> try_resolve_string (recurses)
+      - step: "Add INFO finding on AST parse failure"
+        files: [src/skill_scan/ast_analyzer.py]
+        notes: |
+          In analyze_python(), when ast.parse() raises SyntaxError or ValueError,
+          instead of returning [], create a Finding with rule_id="AST-PARSE",
+          severity=Severity.INFO, line=None, description noting AST analysis was
+          skipped due to parse error. Return [info_finding]. This flows through
+          content_scanner._apply_rules normally. The dedup by (rule_id, line)
+          won't collide since no regex rule uses "AST-PARSE" as its rule_id.
+      - step: "Add tests for new behaviors"
+        files: [tests/unit/test_ast_analyzer.py]
+        notes: |
+          Test RecursionError: construct deeply nested BinOp tree via ast module,
+          pass as Python source, verify no crash and findings list returned.
+          Test INFO finding: pass syntactically invalid Python to analyze_python,
+          verify a Finding with rule_id="AST-PARSE" and severity=INFO is returned.
+          Test depth limit: create source with deeply nested string concat
+          (50+ levels), verify try_resolve_string returns None (no crash).
+    criteria:
+      - "analyze_python() catches RecursionError without crashing and returns accumulated findings"
+      - "_resolve_binop_add and _resolve_int_expr accept _depth param and return None at depth > MAX_AST_RESOLVE_DEPTH"
+      - "try_resolve_string threads _depth to _resolve_binop_add; _resolve_iterable_elements threads _depth to try_resolve_string"
+      - "analyze_python() returns a Finding with rule_id='AST-PARSE', severity=INFO when ast.parse() fails"
+      - "Test exists: deeply nested BinOp tree does not crash analyze_python"
+      - "Test exists: invalid Python source returns AST-PARSE INFO finding"
+      - "All existing tests pass (make check green)"
+
+  - id: d
+    title: "match_content API cleanup — hide _depth from public signature"
+    status: Done
+    requirements_covered: [R004, R-IMP003, R-IMP005]
+    approach:
+      - step: "Rename match_content to _match_content_recursive"
+        files: [src/skill_scan/rules/engine.py]
+        notes: |
+          Rename the current match_content function to _match_content_recursive.
+          This private function keeps the _depth parameter. Update the self-recursion
+          call on line 176 to call _match_content_recursive instead of match_content.
+      - step: "Create public match_content wrapper"
+        files: [src/skill_scan/rules/engine.py]
+        notes: |
+          Add a new match_content() function above _match_content_recursive with
+          signature: match_content(content: str, file_path: str, rules: list[Rule]) -> list[Finding]
+          It simply delegates: return _match_content_recursive(content, file_path, rules)
+          No _depth in the public signature. The public name is preserved.
+      - step: "Verify external callers unaffected"
+        files: [src/skill_scan/rules/__init__.py, src/skill_scan/content_scanner.py]
+        notes: |
+          rules/__init__.py re-exports match_content from engine — no change needed.
+          content_scanner.py calls match_content(content, relative_path, applicable)
+          with no _depth arg — no change needed. Verify all 8 test files that
+          import match_content still pass.
+      - step: "Add test for public API boundary"
+        files: [tests/unit/test_rules_production_features.py]
+        notes: |
+          Add test verifying match_content does NOT accept _depth as keyword arg
+          (inspect.signature should show no _depth parameter). Verify recursive
+          decoding still works (existing decoded-content tests suffice).
+    criteria:
+      - "match_content() public signature has no _depth parameter"
+      - "_match_content_recursive() is private and accepts _depth"
+      - "Self-recursion in _decoded_content_findings calls _match_content_recursive, not match_content"
+      - "rules/__init__.py still exports match_content (no changes to __all__)"
+      - "Test exists: inspect.signature(match_content) does not contain '_depth'"
+      - "All existing tests pass (make check green)"
+
+acceptance_scenarios:
+  - scenario: "AST analysis of deeply nested adversarial input does not crash"
+    invoke: "analyze_python(deeply_nested_binop_source, 'test.py') where source has 100+ nested 'a' + 'b' + ... concatenations"
+    expect: "Returns a list (possibly empty) without raising RecursionError; no crash"
+    test_file: tests/unit/test_ast_hardening.py
+    status: passing
+
+  - scenario: "Invalid Python triggers INFO finding instead of silent skip"
+    invoke: "analyze_python('def broken(', 'test.py')"
+    expect: "Returns list containing one Finding with rule_id='AST-PARSE', severity=Severity.INFO"
+    test_file: tests/unit/test_ast_hardening.py
+    status: passing
+
+allowed_files:
+  - "src/skill_scan/ast_analyzer.py"
+  - "src/skill_scan/_ast_detectors.py"
+  - "src/skill_scan/_ast_helpers.py"
+  - "src/skill_scan/decoder.py"
+  - "src/skill_scan/_decoder_helpers.py"
+  - "src/skill_scan/rules/engine.py"
+  - "tests/**"
+
+forbidden:
+  - "src/skill_scan/__init__.py"
+  - "src/skill_scan/rules/__init__.py"
+
+acceptance_criteria:
+  - "All requirements have status: done"
+  - "All parts have status: Done"
+  - "All tests pass"
+  - "All acceptance scenarios have status: passing"
+
+stop_condition: |
+  When all requirements are verified and all parts are complete.
+
+# ─────────────────────────────────────────────────────────────────────────────
+# COVERAGE REPORT
+# ─────────────────────────────────────────────────────────────────────────────
+# R001 (RecursionError in analyze_python)     -> Part c
+# R002 (Depth limits on recursive helpers)    -> Part c
+# R003 (INFO finding on AST parse failure)    -> Part c
+# R004 (Hide _depth from match_content API)   -> Part d
+# R005 (Split ast_analyzer.py)                -> Part a
+# R006 (Split decoder.py)                     -> Part b
+# R-IMP001 (No new dependencies)              -> Parts a, b (structural)
+# R-IMP002 (All files under 250 lines)        -> Parts a, b (verified per-part)
+# R-IMP003 (All existing tests pass)          -> Parts a, b, c, d (make check per-part)
+# R-IMP004 (Facade Re-export Pattern)         -> Parts a, b (structural)
+# R-IMP005 (Public API unchanged)             -> Parts a, b, d (verified per-part)
+# ─────────────────────────────────────────────────────────────────────────────
+
+work_log:
+  - part: a
+    action: "build-and-test → refine-and-confirm → grouped verify (module-splits)"
+    result: "VERIFIED 6/6 criteria. ast_analyzer.py 52 lines, _ast_detectors.py 224 lines."
+    tests: "2003 passed, 1 xfailed"
+  - part: b
+    action: "build-and-test → refine-and-confirm → grouped verify (module-splits)"
+    result: "VERIFIED 6/6 criteria. decoder.py 120 lines, _decoder_helpers.py 189 lines."
+    tests: "2003 passed, 1 xfailed"
+  - part: c
+    action: "build-and-test → refine-and-confirm → verify-and-fix"
+    result: "VERIFIED 7/7 criteria. RecursionError catch, depth limits, AST-PARSE INFO finding."
+    tests: "2015 passed, 1 xfailed"
+  - part: d
+    action: "build-and-test → refine-and-confirm → verify-and-fix"
+    result: "VERIFIED 6/6 criteria. match_content wrapper, _match_content_recursive private."
+    tests: "2015 passed, 1 xfailed"
+  - part: docs
+    date: 2026-03-09
+    type: docs
+    action: "document"
+    note: "Updated CLAUDE.md (structure, near-limit note, architecture notes), CODE-PATTERNS.md (AST Analysis trap, match_content pattern). README unchanged — no user-facing changes. Plan status set to Done."
+
+evidence:
+  - gate: "grouped-verify-module-splits"
+    result: "VERIFIED 12/12 criteria, 0 fix iterations"
+  - gate: "verify-part-c"
+    result: "VERIFIED 7/7 criteria, 0 fix iterations"
+  - gate: "verify-part-d"
+    result: "VERIFIED 6/6 criteria, 0 fix iterations"
+  - type: docs_update
+    command: "document skill"
+    result: "CLAUDE.md updated (new modules, near-limit note, 4 architecture notes added). CODE-PATTERNS.md updated (AST Analysis trap text, match_content snippet). Plan status set to Done."
+
+errors: []
+
+handoff:
+  stopped_at: "Documentation complete. Plan is Done."
+  current_state: "All parts Done. All documentation updated. Ready for PR."
+  next_steps:
+    - "Create PR for feat/plan-016-tech-security-debt"
+  blockers: []
+  scope:
+    files:
+      - src/skill_scan/ast_analyzer.py
+      - src/skill_scan/_ast_detectors.py
+      - src/skill_scan/_ast_helpers.py
+      - src/skill_scan/decoder.py
+      - src/skill_scan/_decoder_helpers.py
+      - src/skill_scan/rules/engine.py
+      - tests/unit/test_ast_detectors.py
+      - tests/unit/test_decoder_split.py
+      - tests/unit/test_ast_hardening.py
+      - tests/unit/test_ast_analyzer.py
+      - tests/unit/test_rules_production_features.py
+    functions: []
+    components: []
+  decisions:
+    - "Facade Re-export Pattern: x as x imports for explicit re-exports"
+    - "decoder.py re-exports must stay after EncodedPayload/MIN_ENCODED_LENGTH to avoid circular import"
+    - "AST-DEPTH finding used for RecursionError (distinct from AST-PARSE for SyntaxError)"
+    - "match_content() is a public wrapper hiding _depth; _match_content_recursive() is private"
+  open_questions: []
+  cross_part_knowledge:
+    - "ast_analyzer.py is now a facade at 81 lines — new detectors go in _ast_detectors.py"
+    - "_ast_helpers.py is at 246 lines (near limit) — any addition requires a split first"
+    - "_decoder_helpers.py uses lazy imports from decoder.py inside function bodies"
+    - "engine.py is at 229 lines — has some headroom but approaching limit"
+  active_signals: []
