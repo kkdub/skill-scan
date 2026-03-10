@@ -1,0 +1,10 @@
+id: "PLAN-018"
+title: "String-Splitting Evasion Detection (AST-level payload reconstruction)"
+status: Placeholder
+
+# From DEBT-012.md:
+# Regex-based extraction cannot detect payloads split across multiple variables or
+# string concatenations (e.g., a = "aWdub3Jl"; b = "IHByZXZpb3Vz").
+# Requires AST-level analysis that traces string concatenation and variable assignment
+# to reconstruct split payloads before decoding.
+# Target: future plan when evasion rate data justifies the complexity.
