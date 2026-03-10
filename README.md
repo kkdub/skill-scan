@@ -128,6 +128,23 @@ repos:
         args: ['./skills']   # path to your skill directory
 ```
 
+## Docker
+
+Run skill-scan in an isolated container — useful when scanning potentially untrusted skill content.
+
+```bash
+# Build the image
+docker build -t skill-scan .
+
+# Scan a local directory
+docker run --rm -v ./my-skill:/scan skill-scan scan /scan
+
+# All CLI flags work via ENTRYPOINT passthrough
+docker run --rm -v ./my-skill:/scan skill-scan scan /scan --format json --fail-on high
+```
+
+The container runs as non-root user `scanner`. The scan target is mounted at `/scan` (the container's working directory). No host filesystem access beyond the mounted volume.
+
 ## Detection categories
 
 | Category | Rules | Example threats |

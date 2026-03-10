@@ -49,6 +49,8 @@ src/skill_scan/           # Production source code
 tests/                    # Test suite (mirrors src/ structure)
 scripts/                  # Quality & analysis scripts
 .agent/                   # Plans, standards, workflow
+Dockerfile                # Containerized scanner (python:3.13-slim, non-root user 'scanner')
+.dockerignore             # Excludes dev/build artifacts from Docker context
 ```
 
 ## Architecture Notes
