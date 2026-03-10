@@ -4,7 +4,7 @@ Pure functions for extracting call names and resolving string values
 from AST nodes. Used by ast_analyzer.py for evasion detection.
 
 Resolution pipeline:
-  try_resolve_string  (top-level dispatcher)
+  try_resolve_string -> _try_resolve_string  (recursive dispatcher)
     -> _resolve_binop_add  (string concatenation)
     -> _resolve_chr_call   (chr(N) or chr(arithmetic))
     -> _resolve_join_call  (join with list/listcomp/map)
@@ -57,19 +57,17 @@ def has_safe_loader(node: ast.Call) -> bool:
 
 def _is_safe_loader_node(node: ast.expr) -> bool:
     """Check if a node refers to SafeLoader or CSafeLoader."""
-    if isinstance(node, ast.Name) and node.id in _SAFE_LOADER_NAMES:
-        return True
-    if (
+    if isinstance(node, ast.Name):
+        return node.id in _SAFE_LOADER_NAMES
+    return (
         isinstance(node, ast.Attribute)
         and isinstance(node.value, ast.Name)
         and node.value.id == "yaml"
         and node.attr in _SAFE_LOADER_NAMES
-    ):
-        return True
-    return False
+    )
 
 
-def try_resolve_string(node: ast.AST, *, _depth: int = 0) -> str | None:
+def try_resolve_string(node: ast.AST) -> str | None:
     """Try to statically resolve a node to a string value.
 
     Supports: string constants, BinOp Add on strings, ''.join([...]),
@@ -77,6 +75,10 @@ def try_resolve_string(node: ast.AST, *, _depth: int = 0) -> str | None:
     map(chr, [...]), and b'literal'.decode(). Returns None for anything
     that cannot be resolved statically (f-strings, variables, etc.).
     """
+    return _try_resolve_string(node)
+
+
+def _try_resolve_string(node: ast.AST, *, _depth: int = 0) -> str | None:
     if _depth > MAX_AST_RESOLVE_DEPTH:
         return None
     if isinstance(node, ast.Constant) and isinstance(node.value, str):
@@ -96,8 +98,8 @@ def try_resolve_string(node: ast.AST, *, _depth: int = 0) -> str | None:
 
 def _resolve_binop_add(node: ast.BinOp, *, _depth: int = 0) -> str | None:
     """Resolve string concatenation: left + right."""
-    left = try_resolve_string(node.left, _depth=_depth + 1)
-    right = try_resolve_string(node.right, _depth=_depth + 1)
+    left = _try_resolve_string(node.left, _depth=_depth + 1)
+    right = _try_resolve_string(node.right, _depth=_depth + 1)
     if left is not None and right is not None:
         return left + right
     return None
@@ -171,7 +173,7 @@ def _resolve_iterable_elements(elts: list[ast.expr], sep: str, *, _depth: int = 
     """Resolve a list of AST elements to a joined string."""
     parts: list[str] = []
     for elt in elts:
-        resolved = try_resolve_string(elt, _depth=_depth + 1)
+        resolved = _try_resolve_string(elt, _depth=_depth + 1)
         if resolved is None:
             return None
         parts.append(resolved)
