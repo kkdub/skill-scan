@@ -30,3 +30,110 @@
     - src/skill_scan/_ast_rot13.py
   blocker: "generate_rules_catalog.py only reads TOML rule files; OBFS-001 is defined in Python code (_ast_rot13.py), not in obfuscation.toml. Adding AST-only rules to the catalog requires extending the script to read procedural rules from Python modules."
   resolution: "Add a _PROCEDURAL_RULES dict to generate_rules_catalog.py that includes AST-only rule IDs (OBFS-001, and existing AST rules like EXEC-006 etc.) so they appear in RULES.md"
+
+# --- PLAN-018 Red-Team Debt (Tier 2-4) ---
+
+- id: DEBT-018-T2-FORMAT
+  description: "Split detector does not resolve str.format() or %-formatting string assembly"
+  type: effectiveness
+  severity: medium
+  plan: PLAN-018
+  files:
+    - src/skill_scan/_ast_split_detector.py
+  blocker: "_ast_split_detector.py at 243/250 lines — no headroom. Needs new module or extraction."
+  resolution: "Add str.format() and BinOp(Mod) resolution to split detector. May require extracting helpers to a new _ast_split_helpers.py module."
+  evasions: 3
+
+- id: DEBT-018-T2-FSTRING-CONV
+  description: "F-strings with conversion (!s, !r) or format specs (:>2) are not resolved"
+  type: effectiveness
+  severity: medium
+  plan: PLAN-018
+  files:
+    - src/skill_scan/_ast_split_detector.py
+  resolution: "Remove conversion/format_spec bail-outs in f-string resolution — the base variable value is still trackable."
+  evasions: 2
+
+- id: DEBT-018-T2-CONTAINERS
+  description: "Variables stored in dicts (d['key']='ev') or lists (parts[0]='ev') evade symbol table"
+  type: effectiveness
+  severity: medium
+  plan: PLAN-018
+  files:
+    - src/skill_scan/_ast_symbol_table.py
+  resolution: "Track subscript assignments (ast.Subscript targets) with composite keys in the symbol table."
+  evasions: 6
+
+- id: DEBT-018-T2-GENERATOR-JOIN
+  description: "Generator expressions and map() calls in join() arguments not resolved"
+  type: effectiveness
+  severity: low
+  plan: PLAN-018
+  files:
+    - src/skill_scan/_ast_split_detector.py
+  resolution: "Resolve generator expressions and map() iterables when elements are trackable."
+  evasions: 3
+
+- id: DEBT-018-T2-STRING-MULT
+  description: "String multiplication (ast.BinOp with Mult) not tracked in symbol table"
+  type: effectiveness
+  severity: low
+  plan: PLAN-018
+  files:
+    - src/skill_scan/_ast_symbol_table.py
+  resolution: "Resolve BinOp(Mult) where one operand is a string constant and the other is an int constant."
+  evasions: 2
+
+- id: DEBT-018-T3-CLASS-SCOPE
+  description: "Class-level attribute assignments (self.x = 'ev') not tracked"
+  type: effectiveness
+  severity: medium
+  plan: PLAN-018
+  files:
+    - src/skill_scan/_ast_symbol_table.py
+  blocker: "Requires class-aware scope tracking — significant architectural extension."
+  resolution: "Add class body walking with attribute-qualified keys (ClassName.attr) in symbol table."
+  evasions: 3
+
+- id: DEBT-018-T3-CROSS-FUNCTION
+  description: "Cross-function dataflow (function returns used in caller) not tracked"
+  type: effectiveness
+  severity: medium
+  plan: PLAN-018
+  files:
+    - src/skill_scan/_ast_symbol_table.py
+  blocker: "Requires inter-procedural analysis — significant complexity increase."
+  resolution: "Track function return values and resolve call expressions that assign return values to variables."
+  evasions: 4
+
+- id: DEBT-018-T3-GLOBAL-NONLOCAL
+  description: "global/nonlocal keyword scope modifiers not respected"
+  type: effectiveness
+  severity: low
+  plan: PLAN-018
+  files:
+    - src/skill_scan/_ast_symbol_table.py
+  resolution: "When a function body contains 'global x', writes to x should update module scope."
+  evasions: 2
+
+- id: DEBT-018-T4-ADVANCED
+  description: "Advanced evasion techniques: string slicing, reversal, lambda building, comprehension assembly, star-args, bytes concat/decode, attribute chains"
+  type: effectiveness
+  severity: low
+  plan: PLAN-018
+  files:
+    - src/skill_scan/_ast_split_detector.py
+    - src/skill_scan/_ast_symbol_table.py
+  blocker: "Each technique requires distinct resolution logic. Needs a dedicated plan."
+  resolution: "Plan a comprehensive string-building resolution module that handles slice, reverse, chr(), comprehension, and bytes patterns."
+  evasions: 13
+
+- id: DEBT-018-SEC-RECURSION
+  description: "_resolve_binop_chain/_resolve_operand mutual recursion has no explicit depth limit"
+  type: security
+  severity: low
+  plan: PLAN-018
+  files:
+    - src/skill_scan/_ast_split_detector.py:67-92
+  blocker: "_ast_split_detector.py at 243/250 lines — no headroom for depth parameter plumbing"
+  resolution: "Add _depth parameter to _resolve_binop_chain and _resolve_operand, check against MAX_AST_RESOLVE_DEPTH. Currently mitigated by outer RecursionError catch in analyze_python()."

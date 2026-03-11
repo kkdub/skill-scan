@@ -1,0 +1,245 @@
+plan: PLAN-018
+generated_at: "2026-03-10"
+
+requirements:
+
+  # -- Explicit (functional) --------------------------------------------------
+
+  - id: R001
+    requirement: "Build a symbol table from simple assignments that maps variable names to resolved string values within module-level and function-level scopes."
+    category: functional
+    source: "user-provided"
+    contract:
+      given: "A Python source file containing `x = 'abc'` at module level"
+      when: "analyze_python() runs dataflow analysis on the file"
+      then: "The internal symbol table contains an entry mapping 'x' to 'abc'"
+    acceptance:
+      - "Module-level string assignment produces a symbol table entry"
+      - "Function-level string assignment produces a symbol table entry scoped to that function"
+      - "Non-string assignments (int, list, etc.) do not produce symbol table entries"
+    verify: "test::tests/unit/test_ast_symbol_table.py"
+    status: done
+
+  - id: R002
+    requirement: "Resolve binary string concatenation expressions (a + b) where both operands are tracked variables, producing the full concatenated string."
+    category: functional
+    source: "user-provided"
+    contract:
+      given: "Symbol table contains a='hel' and b='lo'"
+      when: "Dataflow resolver encounters a + b"
+      then: "Resolver returns 'hello'"
+    acceptance:
+      - "Concatenation of two tracked variables resolves to combined string"
+      - "Concatenation of a tracked variable and a string literal resolves correctly"
+      - "Concatenation where one operand is unresolvable returns None (not a partial result)"
+    verify: "test::tests/unit/test_ast_split_detector.py"
+    status: done
+
+  - id: R003
+    requirement: "Resolve f-string expressions where all interpolated names are tracked variables, producing the full reconstructed string."
+    category: functional
+    source: "user-provided"
+    contract:
+      given: "Symbol table contains a='foo' and b='bar'"
+      when: "Dataflow resolver encounters f'{a}{b}'"
+      then: "Resolver returns 'foobar'"
+    acceptance:
+      - "F-string with all-tracked-variable interpolations resolves to combined string"
+      - "F-string with unresolvable interpolation returns None"
+      - "F-string with static text and tracked variables resolves correctly"
+    verify: "test::tests/unit/test_ast_split_detector.py"
+    status: done
+
+  - id: R004
+    requirement: "Resolve ''.join([a, b]) and ''.join(vars_list) expressions where all elements are tracked variables, producing the full joined string."
+    category: functional
+    source: "user-provided"
+    contract:
+      given: "Symbol table contains a='im' and b='port'"
+      when: "Dataflow resolver encounters ''.join([a, b])"
+      then: "Resolver returns 'import'"
+    acceptance:
+      - "join() on a literal list of tracked variables resolves correctly"
+      - "join() with a non-empty separator uses that separator in the result"
+      - "join() with any unresolvable element returns None"
+    verify: "test::tests/unit/test_ast_split_detector.py"
+    status: done
+
+  - id: R005
+    requirement: "Resolve variable-to-variable assignment chains (e.g., y = x; z = y + 'suffix') through bounded multi-level indirection."
+    category: functional
+    source: "user-provided"
+    contract:
+      given: "Symbol table contains x='base'; source contains y=x then z=y+'_end'"
+      when: "Dataflow resolver encounters reference to z"
+      then: "Resolver returns 'base_end'"
+    acceptance:
+      - "Two-level indirection resolves correctly"
+      - "Three-level indirection resolves correctly"
+      - "Resolution stops and returns None at the configured depth limit"
+    verify: "test::tests/unit/test_ast_symbol_table.py"
+    status: done
+
+  - id: R006
+    requirement: "Feed reconstructed strings from dataflow analysis into extract_encoded_strings() and decode_payload() to detect payloads split across variables."
+    category: functional
+    source: "user-provided"
+    contract:
+      given: "Source contains a='aW1wb3J0'; b='IG9z'; c=a+b where c decodes to 'import os'"
+      when: "analyze_python() runs dataflow analysis then passes resolved strings to decoder"
+      then: "A finding is produced for the decoded dangerous payload"
+    acceptance:
+      - "Reconstructed string is passed to extract_encoded_strings()"
+      - "Decoded payload is evaluated by existing rule matching"
+      - "Finding is produced when decoded payload matches a dangerous pattern"
+    verify: "test::tests/unit/test_ast_dataflow_integration.py"
+    status: done
+
+  - id: R007
+    requirement: "Produce findings using existing rule IDs (e.g., EXEC-002, EXEC-006) when reconstructed or decoded strings match dangerous patterns."
+    category: functional
+    source: "user-provided"
+    contract:
+      given: "Dataflow analysis reconstructs a string that matches the EXEC-002 pattern"
+      when: "The finding is generated"
+      then: "Finding uses rule ID EXEC-002 (or the appropriate existing rule ID), not a new rule ID"
+    acceptance:
+      - "Findings produced by dataflow analysis reference only pre-existing rule IDs"
+      - "Finding includes source location (line number) of the variable that completes the payload"
+      - "Findings are compatible with existing formatter output"
+    verify: "test::tests/unit/test_ast_split_detector.py"
+    status: done
+
+  # -- Implicit (reliability / performance / structural) -----------------------
+
+  - id: R-IMP001
+    requirement: "Variable resolution depth is bounded to prevent infinite loops on circular or mutually-recursive variable references."
+    category: reliability
+    source: "user-provided"
+    contract:
+      given: "Source contains a=b and b=a (circular reference)"
+      when: "Dataflow resolver attempts to resolve a"
+      then: "Resolution returns None within a bounded number of steps without hanging"
+    acceptance:
+      - "Circular reference does not cause infinite recursion"
+      - "Resolution terminates and returns None at the depth limit"
+      - "Depth limit is a named constant (not a magic number)"
+    verify: "test::tests/unit/test_ast_symbol_table.py"
+    status: done
+
+  - id: R-IMP002
+    requirement: "Dataflow analysis adds no more than 2x overhead to scan time on typical files."
+    category: performance
+    source: "user-provided"
+    acceptance:
+      - "Benchmark shows scan time with dataflow <= 2x scan time without dataflow on a representative 200-line Python file"
+    verify: "benchmark::manual"
+    status: done
+
+  - id: R-IMP003
+    requirement: "All new and modified source files remain under 250 lines."
+    category: structural
+    source: "user-provided"
+    acceptance:
+      - "No file under src/ introduced or modified by this plan exceeds 250 lines"
+    verify: "inspect::line_count"
+    status: done
+
+  - id: R-IMP004
+    requirement: "Dataflow analysis does not produce findings for safe patterns such as simple config assignments, log message strings, or plain string variables."
+    category: reliability
+    source: "user-provided"
+    contract:
+      given: "Source contains msg='Starting server'; host='localhost'; log.info(msg)"
+      when: "analyze_python() runs dataflow analysis"
+      then: "No findings are produced"
+    acceptance:
+      - "Config-value assignments produce no findings"
+      - "Log message strings produce no findings"
+      - "String variable used only in benign calls produces no findings"
+    verify: "test::tests/unit/test_ast_split_detector.py"
+    status: done
+
+  - id: R-IMP005
+    requirement: "analyze_python() integration without breaking return type or existing findings."
+    category: reliability
+    source: "implicit"
+    rationale: "The existing pipeline (content_scanner -> analyze_python) must not be disrupted."
+    acceptance:
+      - "analyze_python() return type is unchanged (list[Finding])"
+      - "Existing tests for analyze_python() continue to pass"
+      - "Dataflow findings are appended to, not replacing, findings from existing detectors"
+    verify: "test::tests/unit/test_ast_analyzer.py"
+    status: done
+
+  - id: R-IMP006
+    requirement: "Partial resolution failures (where a variable in an expression cannot be resolved) produce no finding rather than a spurious partial match."
+    category: reliability
+    source: "implicit"
+    rationale: "If any operand is unresolvable, the full string is unknown and must not be treated as a match."
+    contract:
+      given: "Source contains c = known_var + unknown_var where unknown_var is not in the symbol table"
+      when: "Dataflow resolver processes c"
+      then: "No finding is produced for c"
+    acceptance:
+      - "Expressions with at least one unresolvable operand return None from the resolver"
+      - "None-resolved expressions are not passed to the decoder"
+    verify: "test::tests/unit/test_ast_split_detector.py"
+    status: done
+
+  - id: R-IMP007
+    requirement: "New dataflow modules follow the existing facade re-export pattern: public API is accessible from ast_analyzer.py."
+    category: structural
+    source: "implicit"
+    rationale: "The codebase uses facade modules (ast_analyzer.py, decoder.py) as public entry points."
+    acceptance:
+      - "build_symbol_table and detect_split_evasion are re-exported from ast_analyzer.py"
+    verify: "inspect::imports"
+    status: done
+
+  # -- Effectiveness -----------------------------------------------------------
+
+  - id: R-EFF001
+    requirement: "A test corpus of split-payload evasion samples exists covering concatenation, f-string, join, and multi-level indirection patterns."
+    category: effectiveness
+    source: "user-provided"
+    acceptance:
+      - "Corpus exists at tests/fixtures/split_evasion/"
+      - "Corpus contains at least one sample for each of: concat, f-string, join, multi-level"
+    verify: "file::tests/fixtures/split_evasion/"
+    status: done
+
+  - id: R-EFF002
+    requirement: "The dataflow-enhanced scanner detects >= 90% of evasion corpus samples."
+    category: effectiveness
+    source: "user-provided"
+    threshold: ">=0.90"
+    corpus: "tests/fixtures/split_evasion/"
+    acceptance:
+      - "Parametrized test runs scanner against each corpus sample and asserts a finding is produced"
+      - "Pass rate across all corpus samples is >= 90%"
+    verify: "benchmark::tests/unit/test_ast_dataflow_integration.py::>=0.90"
+    status: done
+
+  # -- Adversarial (inferred) --------------------------------------------------
+
+  - id: R-ADV001
+    requirement: "Split payloads where no individual fragment is dangerous but their combination triggers detection."
+    category: effectiveness
+    source: "implicit"
+    rationale: "The core threat model: each variable fragment looks safe in isolation; the scanner must reason about combination."
+    acceptance:
+      - "Test sample where no individual variable contains a dangerous substring, but their concatenation does, produces a finding"
+    verify: "test::tests/unit/test_ast_dataflow_integration.py"
+    status: done
+
+  - id: R-ADV002
+    requirement: "Three-variable split (a + b + c) evasion is detected, not only two-variable splits."
+    category: effectiveness
+    source: "implicit"
+    rationale: "Adversaries can split payloads across more than two variables to increase evasion depth."
+    acceptance:
+      - "Corpus includes a three-way split sample"
+      - "Scanner detects the three-way split sample"
+    verify: "test::tests/unit/test_ast_dataflow_integration.py"
+    status: done

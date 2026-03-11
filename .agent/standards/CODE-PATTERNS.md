@@ -471,6 +471,41 @@ return _scan_sequential(files, skill_dir, rules, max_file_size)
 
 > Trap: `ProcessPoolExecutor` requires all arguments to `_scan_file()` to be picklable. `Finding`, `Rule`, and `ScanResult` are frozen dataclasses with `slots=True`, which satisfies this constraint. Do not add unpicklable types (locks, file handles) to the per-file scan arguments.
 
+## Symbol Table Pre-Pass for AST Dataflow
+
+Build a full-tree variable-to-string mapping before running per-node detectors. This allows tree-level detectors to reconstruct payloads assembled across multiple statements (e.g., `a = "ev"; b = "al"; x = a + b`).
+
+```python
+# ast_analyzer.py — ordering matters: symbol table before split detector
+alias_map = build_alias_map(tree)
+symbol_table = build_symbol_table(tree)       # pre-pass: flat dict[str, str]
+for node in ast.walk(tree):
+    for detector in _DETECTORS:               # per-node detectors
+        findings.extend(detector(node, file_path, alias_map=alias_map))
+findings.extend(                              # tree-level detector (needs full symbol table)
+    detect_split_evasion(tree, file_path, alias_map, symbol_table)
+)
+```
+
+> Trap: tree-level detectors that need `symbol_table` cannot go in `_DETECTORS` (which is per-node). Add them after the `_DETECTORS` loop, calling them with `(tree, file_path, alias_map, symbol_table)`.
+
+## _NAME_RULE Lookup Table for Multi-Rule Detectors
+
+When one detector must emit different rule IDs depending on which dangerous name was matched, use a `_NAME_RULE` dict mapping each name to `(rule_id, severity, description_prefix)`. Avoids a chain of `if`/`elif` blocks that grows with every new name.
+
+```python
+_NAME_RULE: dict[str, tuple[str, Severity, str]] = {
+    **{n: ("EXEC-002", Severity.CRITICAL, "String splitting evasion") for n in _EXEC_NAMES},
+    **{n: ("EXEC-006", Severity.HIGH, "Dynamic import evasion") for n in _DYNAMIC_IMPORT_NAMES},
+}
+
+entry = _NAME_RULE.get(resolved)
+if entry is not None:
+    rule_id, severity, desc_prefix = entry
+```
+
+> Trap: adding a new dangerous name to `_DANGEROUS_NAMES` does not automatically add it to `_NAME_RULE` — both sets must be updated together.
+
 ## Facade Re-export Pattern
 
 When splitting a large module into sibling files, keep the original file as a facade: it retains the orchestrator/entry-point functions and types, then re-exports all names from sibling files at the BOTTOM. This preserves every existing import path and mock.patch target.

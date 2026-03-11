@@ -10,7 +10,7 @@ Security scanner for agent skills — detects prompt injection, malicious code, 
 - **Multiple output formats** — human-readable text, machine-readable JSON, or SARIF v2.1.0 for GitHub Code Scanning
 - **CI-friendly** — `--fail-on` flag exits with code 2 when findings exceed a severity threshold
 - **Encoded payload detection** — base64, hex, URL-encoded, and unicode-escape strings are decoded and recursively scanned, catching obfuscated injections that regex-only scanning misses
-- **AST-based Python analysis** — `.py` files are parsed with Python's `ast` module to catch evasion techniques that regex cannot detect (string concatenation building `eval`, `chr()`-based construction, `getattr` with dynamic names, unsafe deserialization, ROT13 codec usage)
+- **AST-based Python analysis** — `.py` files are parsed with Python's `ast` module to catch evasion techniques that regex cannot detect (string concatenation building `eval`, `chr()`-based construction, `getattr` with dynamic names, unsafe deserialization, ROT13 codec usage, and string-splitting evasion where dangerous names or encoded payloads are assembled across multiple variables via concatenation, f-strings, or `join`)
 - **Concurrent scanning** — large skill directories (8+ files) are scanned in parallel using `ProcessPoolExecutor`, with automatic fallback to sequential scanning
 - **Inline suppression** — add `# noqa: RULE-ID` to any line to suppress a specific finding; bare `# noqa` is rejected (security scanner requires explicit rule IDs); suppressed counts are reported for auditability
 - **Zero runtime dependencies** beyond `click` — core engine uses stdlib only
