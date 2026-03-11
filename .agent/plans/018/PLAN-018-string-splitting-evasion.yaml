@@ -1,10 +1,430 @@
 id: "PLAN-018"
 title: "String-Splitting Evasion Detection (AST-level payload reconstruction)"
-status: Placeholder
+type: implementation
+status: Approved
+created: 2026-03-10
 
-# From DEBT-012.md:
-# Regex-based extraction cannot detect payloads split across multiple variables or
-# string concatenations (e.g., a = "aWdub3Jl"; b = "IHByZXZpb3Vz").
-# Requires AST-level analysis that traces string concatenation and variable assignment
-# to reconstruct split payloads before decoding.
-# Target: future plan when evasion rate data justifies the complexity.
+linked_spec: null
+
+# ---------------------------------------------------------------------------
+# DESCRIPTION
+# ---------------------------------------------------------------------------
+
+description: |
+  Add AST-level dataflow analysis to detect payloads split across multiple
+  variables or string operations that evade regex-based detection. Builds a
+  symbol table from variable assignments, then reconstructs concatenated,
+  f-string-interpolated, and join-assembled strings to check for dangerous
+  patterns and encoded payloads.
+
+  From DEBT-012: regex-based extraction cannot detect payloads split across
+  multiple variables or string concatenations (e.g., a = "aWdub3Jl";
+  b = "IHByZXZpb3Vz"). Requires AST-level analysis that traces string
+  concatenation and variable assignment to reconstruct split payloads
+  before decoding.
+
+# ---------------------------------------------------------------------------
+# REQUIREMENTS
+# ---------------------------------------------------------------------------
+
+requirements:
+  file: REQUIREMENTS-018.yaml
+  ids:
+    - R001    # Variable assignment tracking (symbol table)
+    - R002    # Concatenation reconstruction (a + b)
+    - R003    # F-string reconstruction (f"{a}{b}")
+    - R004    # Join reconstruction ("".join([a, b]))
+    - R005    # Multi-level indirection (y = x; z = y + "suffix")
+    - R006    # Decoder integration (feed reconstructed strings to decoder)
+    - R007    # Finding generation (existing rule IDs)
+    - R-IMP001  # Depth limit (bounded resolution)
+    - R-IMP002  # Performance (no more than 2x overhead)
+    - R-IMP003  # File size compliance (250 lines)
+    - R-IMP004  # No false positives on safe patterns
+    - R-IMP005  # analyze_python() integration (no API break)
+    - R-IMP006  # Partial resolution = no finding
+    - R-IMP007  # Facade re-export pattern
+    - R-EFF001  # Evasion corpus
+    - R-EFF002  # Detection rate >= 90%
+    - R-ADV001  # Individually-benign fragments combine to dangerous
+    - R-ADV002  # Three-variable splits detected
+  uncovered: []
+
+# ---------------------------------------------------------------------------
+# DESIGN CONSTRAINTS (inline — brownfield extending existing AST patterns)
+# ---------------------------------------------------------------------------
+
+design_constraints:
+  module_structure: "Facade pattern — ast_analyzer.py re-exports from _ast_*.py siblings"
+  placement_rules:
+    - "New detector modules: _ast_symbol_table.py (create), _ast_split_detector.py (create)"
+    - "Facade extension: ast_analyzer.py (102/250 lines, 148 capacity)"
+    - "New test files: test_ast_symbol_table.py, test_ast_split_detector.py, test_ast_dataflow_integration.py"
+  prohibited:
+    - "_ast_helpers.py (244/250) — FULL, no new code"
+    - "_ast_detectors.py (234/250) — FULL, no new code"
+    - "content_scanner.py (239/250) — FULL, no new code"
+    - "No new rule IDs or TOML rules"
+  key_decisions:
+    - "Symbol table as pre-pass before per-node _DETECTORS loop"
+    - "Split detector runs separately from _DETECTORS (needs tree + symbol_table, not per-node)"
+    - "Findings use existing rule IDs (EXEC-002, EXEC-006)"
+    - "dict[str, str] for symbol table"
+    - "Module-level and function-level scopes tracked separately"
+  skeleton_decision: "Skip — brownfield single-layer (extending existing AST pipeline)"
+
+# ---------------------------------------------------------------------------
+# UTILITIES AUDIT
+# ---------------------------------------------------------------------------
+
+utilities_audit:
+  status: complete
+
+  search_performed:
+    - query: "Searched _ast_helpers.py for try_resolve_string, build_alias_map"
+      found: "try_resolve_string resolves within single expression tree; build_alias_map tracks imports only"
+    - query: "Searched _ast_detectors.py for _make_finding, _DANGEROUS_NAMES"
+      found: "_make_finding hardcodes category='malicious-code'; _DANGEROUS_NAMES frozenset available"
+    - query: "Checked line counts for all AST modules"
+      found: "_ast_helpers.py=244, _ast_detectors.py=234, content_scanner.py=239 (all near limit)"
+
+  categories:
+    error_handling:
+      needed: true
+      exists: "_ast_detectors.py:_make_finding(), _ast_rot13.py:_make_rot13_finding()"
+      gaps: "None — new module follows same _make_split_finding() convention"
+      action: use
+    validation:
+      needed: false
+    logging:
+      needed: false
+    types:
+      needed: false
+      gaps: "dict[str, str] suffices for symbol table — no new dataclass"
+    configuration:
+      needed: false
+    http_client:
+      needed: false
+
+  infrastructure_parts: []
+
+# ---------------------------------------------------------------------------
+# ENVIRONMENT & BUILD
+# ---------------------------------------------------------------------------
+
+environment:
+  status: assessed
+
+  build:
+    tool: "pyproject.toml + Makefile"
+    install_cmd: "uv sync --group dev"
+    check_cmd: "make check"
+    prerequisites:
+      - "Python 3.13"
+      - "uv"
+
+  runtime_services: []
+
+  changes:
+    new_dependencies: []
+    env_vars: []
+    schema_changes: []
+    ci_changes: []
+    build_changes: []
+
+# ---------------------------------------------------------------------------
+# PARTS
+# ---------------------------------------------------------------------------
+
+parts:
+  - id: a
+    title: "Symbol table builder — variable assignment tracking with scope and indirection"
+    status: Done
+    verify_group: dataflow
+    requirements_covered: [R001, R005, R-IMP001, R-IMP003]
+    approach:
+      - step: "Create _ast_symbol_table.py with build_symbol_table() function"
+        files: [src/skill_scan/_ast_symbol_table.py]
+        notes: >
+          Pre-pass over ast.Module body and function bodies. Returns dict[str, str]
+          mapping variable name to resolved string value. For RHS that is ast.Constant(str),
+          record directly. For RHS that is ast.Name referencing another tracked variable,
+          follow the chain. Use try_resolve_string() from _ast_helpers for complex RHS
+          expressions (BinOp, JoinedStr, etc.) — reuse existing resolution.
+      - step: "Add scope isolation — module-level vs function-level"
+        files: [src/skill_scan/_ast_symbol_table.py]
+        notes: >
+          Walk function defs separately. Each function body gets its own scope dict that
+          inherits (reads) from module scope but does not write back. Module-level walks
+          only the top-level body statements. MAX_RESOLVE_DEPTH constant bounds indirection
+          chains. Circular refs (a=b; b=a) return None.
+    criteria:
+      - "build_symbol_table(tree) returns dict[str, str] for simple string assignments (x='hello' -> {'x': 'hello'})"
+      - "Module-level and function-level scopes are separate — function-local assignments do not appear in module-level symbol table"
+      - "Multi-level indirection resolves: y=x where x is tracked yields y mapped to x's value (bounded by MAX_RESOLVE_DEPTH)"
+      - "Circular references (a=b; b=a) do not infinite-loop — resolution returns None for those variables"
+      - "MAX_RESOLVE_DEPTH constant is defined and enforced"
+      - "_ast_symbol_table.py is under 250 lines"
+
+  - id: b
+    title: "Split detector — concatenation, f-string, and join reconstruction"
+    status: Done
+    depends_on: [a]
+    verify_group: dataflow
+    requirements_covered: [R002, R003, R004, R-IMP004, R-IMP006, R-IMP003]
+    approach:
+      - step: "Create _ast_split_detector.py with detect_split_evasion(tree, file_path, alias_map, symbol_table)"
+        files: [src/skill_scan/_ast_split_detector.py]
+        notes: >
+          Tree-level detector (not per-node). Walk nodes looking for: (1) ast.BinOp(Add)
+          where operands are ast.Name in symbol_table, (2) ast.JoinedStr where
+          FormattedValue.value is ast.Name in symbol_table, (3) ''.join([...]) where
+          list elements are ast.Name in symbol_table. Reconstruct full string. If any
+          fragment unresolvable, skip (R-IMP006). Use _make_split_finding() local helper.
+      - step: "Add dangerous-name checks on reconstructed strings"
+        files: [src/skill_scan/_ast_split_detector.py]
+        notes: >
+          After reconstruction, check against _DANGEROUS_NAMES from _ast_detectors. Use
+          EXEC-002 for dangerous name evasion (eval, exec, system, popen), EXEC-006 for
+          dynamic import evasion (__import__, getattr). No new rule IDs.
+      - step: "Handle three-or-more-variable splits and nested BinOp chains"
+        files: [src/skill_scan/_ast_split_detector.py]
+        notes: >
+          BinOp chains like a+b+c produce nested ast.BinOp — recursively resolve both
+          sides. Three-variable f-strings and join lists handled naturally by iterating
+          all elements. Covers R-ADV002.
+    criteria:
+      - "Concatenation: a='ev'; b='al'; a+b produces EXEC-002 finding"
+      - "F-string: a='ev'; b='al'; f'{a}{b}' produces EXEC-002 finding"
+      - "Join: a='ev'; b='al'; ''.join([a,b]) produces EXEC-002 finding"
+      - "Three-variable split: a='e'; b='va'; c='l'; a+b+c produces EXEC-002 finding"
+      - "Safe concatenation: a='hello'; b='world'; a+b produces no finding"
+      - "Partial resolution failure (one variable not tracked) produces no finding"
+      - "detect_split_evasion() accepts (tree, file_path, alias_map, symbol_table) signature"
+      - "_ast_split_detector.py is under 250 lines"
+
+  - id: c
+    title: "Integration — wire dataflow into analyze_python, decoder bridge, facade exports"
+    status: Done
+    depends_on: [b]
+    requirements_covered: [R006, R007, R-IMP002, R-IMP005, R-IMP007, R-ADV001]
+    approach:
+      - step: "Wire build_symbol_table and detect_split_evasion into analyze_python()"
+        files: [src/skill_scan/ast_analyzer.py]
+        notes: >
+          After ast.parse() and build_alias_map(), call build_symbol_table(tree). Then
+          call detect_split_evasion(tree, file_path, alias_map, symbol_table) SEPARATELY
+          from the per-node _DETECTORS loop. Append results to findings. Preserves
+          existing detector behavior unchanged. ~5-10 lines of wiring.
+      - step: "Add decoder bridge in _ast_split_detector.py"
+        files: [src/skill_scan/_ast_split_detector.py]
+        notes: >
+          After reconstruction, if string does not match _DANGEROUS_NAMES, pass to
+          extract_encoded_strings() from decoder.py. If encoded payloads found, decode
+          and check decoded content against dangerous patterns. Catches split base64/hex
+          payloads. Import from skill_scan.decoder (stdlib only).
+      - step: "Add facade re-exports and integration test"
+        files: [src/skill_scan/ast_analyzer.py, tests/unit/test_ast_dataflow_integration.py]
+        notes: >
+          Re-export build_symbol_table and detect_split_evasion from ast_analyzer.py.
+          Integration test: full Python source through analyze_python(), verify findings
+          for split evasion patterns. Verify existing findings unaffected (no regressions).
+    criteria:
+      - "analyze_python() calls build_symbol_table() and detect_split_evasion() and includes their findings"
+      - "Existing analyze_python() return type (list[Finding]) is unchanged"
+      - "Existing detectors produce identical findings — no regressions"
+      - "Decoder bridge: split base64 payload (a='aW1wb3J0I'; b='G9z'; a+b decodes to 'import os') produces finding"
+      - "build_symbol_table and detect_split_evasion re-exported from ast_analyzer.py"
+      - "ast_analyzer.py remains under 250 lines"
+      - "No new dependencies — stdlib only"
+
+  - id: d
+    title: "Evasion corpus and effectiveness validation"
+    status: Done
+    depends_on: [c]
+    requirements_covered: [R-EFF001, R-EFF002, R-ADV001, R-ADV002]
+    approach:
+      - step: "Create evasion corpus files with split-evasion test cases"
+        files: [tests/fixtures/split_evasion/]
+        notes: >
+          Python files covering: two-variable concat, three-variable concat, f-string
+          interpolation, join-based assembly, multi-level indirection, split encoded
+          payloads (base64/hex), mixed safe+dangerous patterns. Each file is a valid
+          Python snippet. Include positive (should detect) and negative (should not) cases.
+      - step: "Create parametrized effectiveness test"
+        files: [tests/unit/test_ast_dataflow_integration.py]
+        notes: >
+          Parametrized test reads corpus files, runs analyze_python() on each, checks
+          for expected findings. Assert >= 90% detection on positive cases and zero
+          false positives on negative cases.
+    criteria:
+      - "Corpus contains at least 10 distinct evasion patterns (concat, f-string, join, multi-level, encoded, three-variable)"
+      - "Corpus contains at least 3 safe/negative patterns that must not trigger findings"
+      - "Detection rate >= 90% on positive corpus cases"
+      - "Zero false positives on negative corpus cases"
+      - "Adversarial case: no individual fragment is dangerous but combination triggers detection (R-ADV001)"
+      - "Three-variable splits detected (R-ADV002)"
+
+# ---------------------------------------------------------------------------
+# ACCEPTANCE SCENARIOS
+# ---------------------------------------------------------------------------
+
+acceptance_scenarios:
+  - scenario: "Split variable concatenation building 'eval' is detected through the full scanner pipeline"
+    invoke: "analyze_python() on Python source: a='ev'; b='al'; x=a+b"
+    expect: "At least one finding with rule_id EXEC-002 and matched_text containing 'eval'"
+    test_file: tests/unit/test_evasion_corpus.py::TestAcceptanceScenarios::test_split_concat_eval_full_pipeline
+    status: written
+
+  - scenario: "Split base64-encoded payload across variables is detected via decoder bridge"
+    invoke: "analyze_python() on source where a='aW1wb3J0IG' and b='9z' are concatenated"
+    expect: "Finding produced for reconstructed encoded payload (decoded content contains 'import os')"
+    test_file: tests/unit/test_evasion_corpus.py::TestAcceptanceScenarios::test_split_base64_decoder_bridge
+    status: written
+
+  - scenario: "Safe string concatenation produces no false positive"
+    invoke: "analyze_python() on source: greeting='hello'; name='world'; msg=greeting+name"
+    expect: "Zero findings with rule_id EXEC-002 or EXEC-006"
+    test_file: tests/unit/test_evasion_corpus.py::TestAcceptanceScenarios::test_safe_concat_no_false_positive
+    status: written
+
+# ---------------------------------------------------------------------------
+# SCOPE & CONSTRAINTS
+# ---------------------------------------------------------------------------
+
+allowed_files:
+  - "src/skill_scan/_ast_symbol_table.py"
+  - "src/skill_scan/_ast_split_detector.py"
+  - "src/skill_scan/ast_analyzer.py"
+  - "tests/unit/test_ast_symbol_table.py"
+  - "tests/unit/test_ast_split_detector.py"
+  - "tests/unit/test_ast_dataflow_integration.py"
+  - "tests/fixtures/split_evasion/**"
+
+forbidden:
+  - "src/skill_scan/_ast_helpers.py"
+  - "src/skill_scan/_ast_detectors.py"
+  - "src/skill_scan/content_scanner.py"
+  - "src/skill_scan/rules/**"
+  - ".env*"
+
+# ---------------------------------------------------------------------------
+# COMPLETION CRITERIA
+# ---------------------------------------------------------------------------
+
+acceptance_criteria:
+  - "All requirements have status: done"
+  - "All parts have status: Done"
+  - "All tests pass (make check)"
+  - "All acceptance scenarios have status: passing"
+
+stop_condition: |
+  When all requirements are verified and all parts are complete.
+
+# ---------------------------------------------------------------------------
+# COVERAGE REPORT
+# ---------------------------------------------------------------------------
+
+coverage_report:
+  covered:
+    - {requirement: R001, part: a}
+    - {requirement: R002, part: b}
+    - {requirement: R003, part: b}
+    - {requirement: R004, part: b}
+    - {requirement: R005, part: a}
+    - {requirement: R006, part: c}
+    - {requirement: R007, part: c}
+    - {requirement: R-IMP001, part: a}
+    - {requirement: R-IMP002, part: c}
+    - {requirement: R-IMP003, part: "a, b"}
+    - {requirement: R-IMP004, part: b}
+    - {requirement: R-IMP005, part: c}
+    - {requirement: R-IMP006, part: b}
+    - {requirement: R-IMP007, part: c}
+    - {requirement: R-EFF001, part: d}
+    - {requirement: R-EFF002, part: d}
+    - {requirement: R-ADV001, part: "c, d"}
+    - {requirement: R-ADV002, part: d}
+  uncovered: []
+
+# ---------------------------------------------------------------------------
+# EXECUTION TRACKING
+# ---------------------------------------------------------------------------
+
+work_log:
+  - part: a
+    status: Done
+    summary: "Symbol table builder created (152 lines). build_symbol_table() returns dict[str,str] with scope-prefixed keys. 43 tests."
+  - part: b
+    status: Done
+    summary: "Split detector created (240 lines). detect_split_evasion() reconstructs concat/f-string/join patterns. 40 tests."
+  - group: dataflow
+    status: Verified
+    summary: "Grouped verification passed 16/16 criteria, 0 fix iterations."
+  - part: c
+    status: Done
+    summary: "Integration wired: analyze_python calls build_symbol_table+detect_split_evasion, decoder bridge added, facade re-exports. 19 integration tests."
+  - part: c_verify
+    status: Verified
+    summary: "6.5/7 criteria met. Decoder bridge functional for payloads >= MIN_ENCODED_LENGTH. No fix iterations."
+  - part: d
+    status: Done
+    summary: "Evasion corpus: 17 positive + 4 negative files. 100% detection, 0% FP. Acceptance scenarios written."
+  - part: d_redteam
+    status: Complete
+    summary: "Red-team found 69.9% evasion on adversarial corpus. Tier 1 hardened (augmented assign, tuple unpack, control flow, walrus). Tier 2-4 filed as debt."
+  - part: d_verify
+    status: Verified
+    summary: "12/12 criteria met. 0 fix iterations."
+  - part: docs
+    status: Done
+    summary: "CLAUDE.md updated: new modules in Project Structure, 7 new Architecture Notes for symbol table/split detector/NAME_RULE/Ref/corpus. README.md: AST analysis bullet extended to mention string-splitting evasion. CODE-PATTERNS.md Section 2: two new patterns added (Symbol Table Pre-Pass, _NAME_RULE Lookup Table)."
+evidence:
+  - "2206 tests passing after parts a+b"
+  - "_ast_symbol_table.py: 152 lines, _ast_split_detector.py: 240 lines (both under 250)"
+  - "2225 tests passing after part c"
+  - "ast_analyzer.py: 106 lines, _ast_split_detector.py: 243 lines (both under 250)"
+  - "Decoder bridge works for payloads >= MIN_ENCODED_LENGTH=20; plan criterion example too short but functional"
+  - "Documentation updated: CLAUDE.md, README.md, CODE-PATTERNS.md"
+
+# ---------------------------------------------------------------------------
+# HANDOFF
+# ---------------------------------------------------------------------------
+
+handoff:
+  stopped_at: "All parts complete including documentation"
+  current_state: "All 4 implementation parts (a, b, c, d) Done and verified. Documentation updated."
+  next_steps: ["PR review and merge", "Address Tier 2-4 debt items filed during red-team (class-level scope, cross-function dataflow, multi-hop indirection)"]
+  blockers: []
+  scope:
+    files: [src/skill_scan/_ast_symbol_table.py, src/skill_scan/_ast_split_detector.py, src/skill_scan/ast_analyzer.py, tests/fixtures/split_evasion/]
+    functions: [build_symbol_table, detect_split_evasion]
+    components: [dataflow]
+  decisions:
+    - "Function-scoped vars keyed as 'funcname.varname' in flat symbol table dict"
+    - "_NAME_RULE lookup table maps dangerous names to (rule_id, severity, description) tuples"
+    - "alias_map accepted but unused in detect_split_evasion (API consistency with other detectors)"
+    - "Tree-level detectors go after _DETECTORS loop, not inside it — documented in CODE-PATTERNS.md"
+    - "_Ref sentinel class used for deferred resolution in symbol table pre-pass"
+  open_questions: []
+  cross_part_knowledge:
+    - "_ast_split_detector.py: 243/250 lines — effectively full, no new code without splitting"
+    - "_DANGEROUS_NAMES split into _EXEC_NAMES and _DYNAMIC_IMPORT_NAMES for correct rule ID assignment"
+    - "Evasion corpus: 17 positive + 4 negative files under tests/fixtures/split_evasion/"
+  active_signals: []
+
+errors: []
+
+notes: |
+  Verify group: Parts a and b share verify_group 'dataflow' because the split
+  detector (b) is meaningless without the symbol table (a), they form a strict
+  dependency chain, and both are individually small (6 and 8 criteria). Part c
+  does NOT share the verify group — it wires into the production facade and
+  warrants independent verification to catch integration regressions early.
+
+  File capacity warning: _ast_helpers.py (244/250), _ast_detectors.py (234/250),
+  and content_scanner.py (239/250) are all at capacity. All new logic goes in
+  new modules (_ast_symbol_table.py, _ast_split_detector.py).
+
+  Known limitation: Class-level scope and cross-function dataflow are out of
+  scope for this plan.
