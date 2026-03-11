@@ -60,16 +60,7 @@ def build_symbol_table(tree: ast.Module) -> dict[str, str]:
 def _collect_assignments(
     body: list[ast.stmt],
 ) -> dict[str, str | _Ref]:
-    """Extract assignments from a statement list, recursing into control flow.
-
-    Handles: simple Name assignment, tuple/list unpacking, augmented assignment
-    (+=), and walrus operator (:=). Recurses into if/else, for, while, with,
-    and try blocks to find assignments in nested scopes.
-
-    Returns a dict mapping variable names to either:
-    - str: directly resolved string value
-    - _Ref: a reference to another variable (needs indirection resolution)
-    """
+    """Extract assignments from a body, recursing into control flow blocks."""
     table: dict[str, str | _Ref] = {}
     _walk_body(body, table)
     return table
@@ -97,21 +88,43 @@ def _recurse_control_flow(stmt: ast.stmt, table: dict[str, str | _Ref]) -> None:
     if isinstance(stmt, ast.If):
         _walk_body(stmt.body, table)
         _walk_body(stmt.orelse, table)
-    elif isinstance(stmt, ast.For | ast.While | ast.With):
+    elif isinstance(stmt, ast.For | ast.While):
+        _walk_body(stmt.body, table)
+        _walk_body(stmt.orelse, table)
+    elif isinstance(stmt, ast.With):
         _walk_body(stmt.body, table)
     elif isinstance(stmt, ast.Try):
         _walk_body(stmt.body, table)
         for handler in stmt.handlers:
             _walk_body(handler.body, table)
+        _walk_body(stmt.orelse, table)
+        _walk_body(stmt.finalbody, table)
 
 
 def _collect_walrus(stmt: ast.stmt, table: dict[str, str | _Ref]) -> None:
-    """Collect walrus operator (:=) assignments from any statement."""
-    for node in ast.walk(stmt):
-        if isinstance(node, ast.NamedExpr) and isinstance(node.target, ast.Name):
-            resolved = try_resolve_string(node.value)
-            if resolved is not None:
-                table[node.target.id] = resolved
+    """Collect walrus operator (:=) assignments, skipping nested scope bodies."""
+
+    class _WalrusVisitor(ast.NodeVisitor):
+        def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
+            return
+
+        def visit_AsyncFunctionDef(self, node: ast.AsyncFunctionDef) -> None:
+            return
+
+        def visit_ClassDef(self, node: ast.ClassDef) -> None:
+            return
+
+        def visit_Lambda(self, node: ast.Lambda) -> None:
+            return
+
+        def visit_NamedExpr(self, node: ast.NamedExpr) -> None:
+            if isinstance(node.target, ast.Name):
+                resolved = try_resolve_string(node.value)
+                if resolved is not None:
+                    table[node.target.id] = resolved
+            self.generic_visit(node)
+
+    _WalrusVisitor().visit(stmt)
 
 
 def _handle_assign(stmt: ast.Assign, table: dict[str, str | _Ref]) -> None:

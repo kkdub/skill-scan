@@ -37,10 +37,11 @@ def analyze_python(content: str, file_path: str) -> list[Finding]:
     symbol_table = build_symbol_table(tree)
     findings: list[Finding] = []
     try:
-        for node in ast.walk(tree):
+        all_nodes = list(ast.walk(tree))
+        for node in all_nodes:
             for detector in _DETECTORS:
                 findings.extend(detector(node, file_path, alias_map=alias_map))
-        findings.extend(detect_split_evasion(tree, file_path, alias_map, symbol_table))
+        findings.extend(detect_split_evasion(tree, file_path, alias_map, symbol_table, _nodes=all_nodes))
     except RecursionError:
         findings.append(_depth_error_finding(file_path))
     return findings

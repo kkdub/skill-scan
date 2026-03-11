@@ -504,7 +504,7 @@ if entry is not None:
     rule_id, severity, desc_prefix = entry
 ```
 
-> Trap: adding a new dangerous name to `_DANGEROUS_NAMES` does not automatically add it to `_NAME_RULE` — both sets must be updated together.
+> Trap: `_NAME_RULE` is derived from `_EXEC_NAMES` and `_DYNAMIC_IMPORT_NAMES`, so adding a new name to `_DANGEROUS_NAMES` only affects EXEC-006 classification if you also add that name to `_DYNAMIC_IMPORT_NAMES`.
 
 ## Facade Re-export Pattern
 

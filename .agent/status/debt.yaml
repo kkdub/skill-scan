@@ -40,7 +40,7 @@
   plan: PLAN-018
   files:
     - src/skill_scan/_ast_split_detector.py
-  blocker: "_ast_split_detector.py at 243/250 lines — no headroom. Needs new module or extraction."
+  blocker: "_ast_split_detector.py is ~235 lines; remaining blocker is designing safe str.format() / %-format handling with recursion-depth guards."
   resolution: "Add str.format() and BinOp(Mod) resolution to split detector. May require extracting helpers to a new _ast_split_helpers.py module."
   evasions: 3
 
@@ -129,11 +129,10 @@
   evasions: 13
 
 - id: DEBT-018-SEC-RECURSION
-  description: "_resolve_binop_chain/_resolve_operand mutual recursion has no explicit depth limit"
-  type: security
-  severity: low
+  description: "_resolve_binop_chain/_resolve_operand mutual recursion depth limit"
+  type: technical
+  severity: resolved
   plan: PLAN-018
   files:
-    - src/skill_scan/_ast_split_detector.py:67-92
-  blocker: "_ast_split_detector.py at 243/250 lines — no headroom for depth parameter plumbing"
-  resolution: "Add _depth parameter to _resolve_binop_chain and _resolve_operand, check against MAX_AST_RESOLVE_DEPTH. Currently mitigated by outer RecursionError catch in analyze_python()."
+    - src/skill_scan/_ast_split_detector.py
+  resolution: "Added _MAX_BINOP_DEPTH=50 and _depth parameter to _resolve_binop_chain/_resolve_operand. Returns None at depth > 50."

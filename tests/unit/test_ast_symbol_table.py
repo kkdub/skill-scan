@@ -60,7 +60,7 @@ class TestSimpleAssignments:
         assert result == {"x": "hello"}
 
     def test_multiple_targets_skipped(self) -> None:
-        """Tuple unpacking (a, b = ...) is not tracked."""
+        """Multiple assignment targets (a = b = ...) are not tracked."""
         result = build_symbol_table(_PARSE("a = b = 'val'"))
         # a = b = 'val' produces Assign with two targets -- skipped
         assert result == {}
