@@ -84,6 +84,7 @@ from skill_scan._ast_detectors import (  # noqa: E402
 )
 from skill_scan._ast_rot13 import (  # noqa: E402
     _CODEC_DIRECT as _CODEC_DIRECT,
+    _CODEC_ENCODING_ARG1 as _CODEC_ENCODING_ARG1,
     _CODEC_INDIRECT as _CODEC_INDIRECT,
     _detect_rot13_codec as _detect_rot13_codec,
     _detect_rot13_maketrans as _detect_rot13_maketrans,

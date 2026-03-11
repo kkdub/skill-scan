@@ -21,14 +21,14 @@ MAX_AST_RESOLVE_DEPTH = 50
 def build_alias_map(tree: ast.Module) -> dict[str, str]:
     """Build alias -> canonical module name mapping from Import/ImportFrom nodes.
 
-    Walks top-level statements for:
+    Walks module-level statements only (not nested scopes) for:
       - ``import codecs as c``  -> {'c': 'codecs'}
       - ``import os``           -> {'os': 'os'}
       - ``from os import path`` -> {'path': 'os.path'}
       - ``from os import path as p`` -> {'p': 'os.path'}
     """
     alias_map: dict[str, str] = {}
-    for node in ast.walk(tree):
+    for node in tree.body:
         if isinstance(node, ast.Import):
             for alias in node.names:
                 local_name = alias.asname if alias.asname else alias.name

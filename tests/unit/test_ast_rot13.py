@@ -50,6 +50,10 @@ class TestIsRot13Pair:
         bad_to = "a" + _ROT13_TO[1:]
         assert is_rot13_pair(_ROT13_FROM, bad_to) is False
 
+    def test_degenerate_repeated_chars_rejected(self) -> None:
+        """Repeated single letter ('b'*26) must not pass as a full alphabet."""
+        assert is_rot13_pair("b" * 26 + "B" * 26, "o" * 26 + "O" * 26) is False
+
 
 # ---------------------------------------------------------------------------
 # codecs.encode / codecs.decode -- R001
@@ -85,7 +89,6 @@ class TestCodecsIndirect:
             "codecs.getencoder",
             "codecs.getdecoder",
             "codecs.lookup",
-            "codecs.iterencode",
         ],
     )
     @pytest.mark.parametrize("variant", ["rot_13", "rot13"])
@@ -98,13 +101,28 @@ class TestCodecsIndirect:
         assert f.severity.value == "high"
         assert f.category == "obfuscation"
 
+    @pytest.mark.parametrize("variant", ["rot_13", "rot13"])
+    def test_iterencode_encoding_at_arg1(self, variant: str) -> None:
+        """iterencode(iterator, encoding) — encoding is the 2nd argument."""
+        code = f"import codecs\ncodecs.iterencode(data, '{variant}')\n"
+        findings = _ids("OBFS-001", analyze_python(code, _FILE))
+        assert len(findings) == 1
+
+    def test_iterencode_safe_encoding_no_finding(self) -> None:
+        code = "import codecs\ncodecs.iterencode(data, 'utf-8')\n"
+        assert not _ids("OBFS-001", analyze_python(code, _FILE))
+
+    def test_iterencode_single_arg_no_finding(self) -> None:
+        """iterencode with only 1 arg — encoding missing, should not match."""
+        code = "import codecs\ncodecs.iterencode('rot_13')\n"
+        assert not _ids("OBFS-001", analyze_python(code, _FILE))
+
     @pytest.mark.parametrize(
         "func",
         [
             "codecs.getencoder",
             "codecs.getdecoder",
             "codecs.lookup",
-            "codecs.iterencode",
         ],
     )
     def test_safe_codec_no_finding(self, func: str) -> None:

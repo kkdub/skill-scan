@@ -24,14 +24,16 @@ _ROT13_VARIANTS = frozenset({"rot_13", "rot13"})
 
 # codecs functions that accept an encoding name as first positional arg
 _CODEC_DIRECT = frozenset({"codecs.encode", "codecs.decode"})
+# encoding is the first positional arg for these
 _CODEC_INDIRECT = frozenset(
     {
         "codecs.getencoder",
         "codecs.getdecoder",
         "codecs.lookup",
-        "codecs.iterencode",
     }
 )
+# iterencode/iterdecode take (iterator, encoding, ...) — encoding is arg[1]
+_CODEC_ENCODING_ARG1 = frozenset({"codecs.iterencode"})
 
 
 def is_rot13_pair(from_str: str, to_str: str) -> bool:
@@ -39,17 +41,23 @@ def is_rot13_pair(from_str: str, to_str: str) -> bool:
 
     A valid ROT13 pair maps every letter in from_str to its ROT13 counterpart
     at the same position in to_str, and vice versa. Both strings must have the
-    same length and contain at least 26 characters (full alphabet).
+    same length and, considering only alphabetic characters, must cover at
+    least 26 distinct letters (a full alphabet) in each of from_str and to_str.
     """
     if len(from_str) != len(to_str) or len(from_str) < 26:
         return False
-    for fc, tc in zip(from_str, to_str, strict=False):
-        if not fc.isalpha() or not tc.isalpha():
-            continue
-        expected = _rot13_char(fc)
-        if tc != expected:
-            return False
-    return True
+    if not _has_full_alphabet(from_str) or not _has_full_alphabet(to_str):
+        return False
+    return all(
+        _rot13_char(fc) == tc
+        for fc, tc in zip(from_str, to_str, strict=False)
+        if fc.isalpha() and tc.isalpha()
+    )
+
+
+def _has_full_alphabet(s: str) -> bool:
+    """Check that s contains at least 26 distinct alphabetic characters (case-insensitive)."""
+    return len({ch.lower() for ch in s if ch.isalpha()}) >= 26
 
 
 def _rot13_char(c: str) -> str:
@@ -81,6 +89,8 @@ def _extract_codec_encoding(node: ast.Call, name: str) -> str | None:
     """Extract the encoding argument from a codecs call, or None if not applicable."""
     if name in _CODEC_DIRECT:
         return _extract_direct_encoding(node)
+    if name in _CODEC_ENCODING_ARG1 and len(node.args) >= 2:
+        return try_resolve_string(node.args[1])
     if name in _CODEC_INDIRECT and node.args:
         return try_resolve_string(node.args[0])
     return None

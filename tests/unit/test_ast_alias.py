@@ -60,6 +60,13 @@ class TestBuildAliasMap:
         tree = ast.parse("from os import path, getcwd\n")
         assert build_alias_map(tree) == {"path": "os.path", "getcwd": "os.getcwd"}
 
+    def test_nested_import_ignored(self) -> None:
+        """Imports inside functions/classes must not leak into the module alias map."""
+        code = "import os\ndef f():\n    import json as os\n"
+        tree = ast.parse(code)
+        alias_map = build_alias_map(tree)
+        assert alias_map == {"os": "os"}
+
 
 # ---------------------------------------------------------------------------
 # get_call_name with alias_map

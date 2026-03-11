@@ -148,9 +148,12 @@ def _decode_str_payload(payload: EncodedPayload) -> str | None:
     """
     # Pre-decode size estimate — reject oversized payloads before allocation.
     # URL: each %XX (3 chars) encodes 1 byte → ratio 1/3.
-    # unicode_escape: each \uXXXX (6 chars) encodes 1 char → ratio 1/6.
-    ratio = 1 / 3 if payload.encoding_type == "url" else 1 / 6
-    if int(len(payload.encoded_text) * ratio) > MAX_DECODED_SIZE:
+    # unicode_escape: decoded length is always <= encoded length (escape
+    # sequences like \uXXXX and \UXXXXXXXX shrink to a single character).
+    if payload.encoding_type == "url":
+        if int(len(payload.encoded_text) / 3) > MAX_DECODED_SIZE:
+            return None
+    elif len(payload.encoded_text) > MAX_DECODED_SIZE:
         return None
 
     try:
