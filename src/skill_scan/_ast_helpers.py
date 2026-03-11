@@ -1,4 +1,4 @@
-"""AST helper utilities — string resolution and node inspection.
+"""AST helper utilities -- string resolution and node inspection.
 
 Pure functions for extracting call names and resolving string values
 from AST nodes. Used by ast_analyzer.py for evasion detection.
@@ -18,13 +18,45 @@ import ast
 MAX_AST_RESOLVE_DEPTH = 50
 
 
-def get_call_name(node: ast.Call) -> str:
-    """Extract the dotted name of a call (e.g. 'os.system', 'eval')."""
+def build_alias_map(tree: ast.Module) -> dict[str, str]:
+    """Build alias -> canonical module name mapping from Import/ImportFrom nodes.
+
+    Walks top-level statements for:
+      - ``import codecs as c``  -> {'c': 'codecs'}
+      - ``import os``           -> {'os': 'os'}
+      - ``from os import path`` -> {'path': 'os.path'}
+      - ``from os import path as p`` -> {'p': 'os.path'}
+    """
+    alias_map: dict[str, str] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                local_name = alias.asname if alias.asname else alias.name
+                alias_map[local_name] = alias.name
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            for alias in node.names:
+                local_name = alias.asname if alias.asname else alias.name
+                alias_map[local_name] = f"{node.module}.{alias.name}"
+    return alias_map
+
+
+def get_call_name(node: ast.Call, alias_map: dict[str, str] | None = None) -> str:
+    """Extract the dotted name of a call (e.g. 'os.system', 'eval').
+
+    When alias_map is provided, resolves aliased names:
+      - ``c.encode(...)`` with alias_map={'c': 'codecs'} -> 'codecs.encode'
+      - ``p.join(...)``   with alias_map={'p': 'os.path'} -> 'os.path.join'
+    """
     func = node.func
     if isinstance(func, ast.Name):
+        if alias_map and func.id in alias_map:
+            return alias_map[func.id]
         return func.id
     if isinstance(func, ast.Attribute) and isinstance(func.value, ast.Name):
-        return f"{func.value.id}.{func.attr}"
+        raw = f"{func.value.id}.{func.attr}"
+        if alias_map and func.value.id in alias_map:
+            return f"{alias_map[func.value.id]}.{func.attr}"
+        return raw
     return ""
 
 
@@ -84,7 +116,7 @@ def _try_resolve_string(node: ast.AST, *, _depth: int = 0) -> str | None:
     if isinstance(node, ast.Constant) and isinstance(node.value, str):
         return node.value
     if isinstance(node, ast.JoinedStr):
-        return None  # f-string — cannot resolve statically
+        return None  # f-string -- cannot resolve statically
     if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
         return _resolve_binop_add(node, _depth=_depth)
     if isinstance(node, ast.Call):
@@ -180,51 +212,6 @@ def _resolve_iterable_elements(elts: list[ast.expr], sep: str, *, _depth: int = 
     return sep.join(parts)
 
 
-def _resolve_int_list_to_chars(elts: list[ast.expr], sep: str) -> str | None:
-    """Resolve a list of int expressions to chr() characters, joined by sep."""
-    parts: list[str] = []
-    for item in elts:
-        val = _resolve_int_expr(item)
-        if val is None or not (0 <= val <= 0x10FFFF):
-            return None
-        parts.append(chr(val))
-    return sep.join(parts)
-
-
-def _is_chr_of_target(elt: ast.expr, target_name: str) -> bool:
-    """Check if node is chr(target_name) — a chr() call on the loop variable."""
-    if not isinstance(elt, ast.Call) or _get_call_name_from_any(elt) != "chr":
-        return False
-    return len(elt.args) == 1 and isinstance(elt.args[0], ast.Name) and elt.args[0].id == target_name
-
-
-def _resolve_join_listcomp(comp: ast.ListComp, sep: str) -> str | None:
-    """Resolve [chr(c) for c in [101, 118, ...]] inside join."""
-    if len(comp.generators) != 1:
-        return None
-    gen = comp.generators[0]
-    if gen.ifs or not isinstance(gen.iter, ast.List | ast.Tuple):
-        return None
-    if not isinstance(gen.target, ast.Name):
-        return None
-    if not _is_chr_of_target(comp.elt, gen.target.id):
-        return None
-    return _resolve_int_list_to_chars(gen.iter.elts, sep)
-
-
-def _resolve_join_map_chr(call: ast.Call, sep: str) -> str | None:
-    """Resolve map(chr, [101, 118, ...]) inside join."""
-    if _get_call_name_from_any(call) != "map" or len(call.args) != 2:
-        return None
-    func_arg = call.args[0]
-    if not isinstance(func_arg, ast.Name) or func_arg.id != "chr":
-        return None
-    iter_arg = call.args[1]
-    if not isinstance(iter_arg, ast.List | ast.Tuple):
-        return None
-    return _resolve_int_list_to_chars(iter_arg.elts, sep)
-
-
 def _resolve_bytes_decode(node: ast.Call) -> str | None:
     """Resolve b'literal'.decode() to a string."""
     if not isinstance(node.func, ast.Attribute) or node.func.attr != "decode":
@@ -246,3 +233,12 @@ def _get_call_name_from_any(node: ast.Call) -> str:
     if isinstance(func, ast.Attribute):
         return func.attr
     return ""
+
+
+# re-exports at BOTTOM -- backward-compat (Facade Re-export Pattern)
+from skill_scan._ast_join_helpers import (  # noqa: E402
+    _is_chr_of_target as _is_chr_of_target,
+    _resolve_int_list_to_chars as _resolve_int_list_to_chars,
+    _resolve_join_listcomp as _resolve_join_listcomp,
+    _resolve_join_map_chr as _resolve_join_map_chr,
+)

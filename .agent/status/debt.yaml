@@ -3,3 +3,30 @@
 # Last updated: 2026-03-10 (debt review session)
 # DEBT-TEST-001 through DEBT-TEST-008 reviewed and resolved.
 # No remaining test debt entries.
+
+- description: "Lone surrogate characters (\uD800-\uDFFF) pass through unicode_escape decode"
+  type: security
+  severity: medium
+  plan: PLAN-017
+  files:
+    - src/skill_scan/_decoder_url_unicode.py:82-97
+  blocker: "Decoded content is only used for regex rule matching (read-only); no serialization path exists yet that would trigger surrogate errors"
+  resolution: "Add post-decode validation to strip or reject lone surrogates (check for chars in range 0xD800-0xDFFF after decode)"
+
+- description: "Null bytes in URL-decoded content may evade pattern matching"
+  type: security
+  severity: low
+  plan: PLAN-017
+  files:
+    - src/skill_scan/_decoder_url_unicode.py:68-79
+  blocker: "Inherent limitation of single-layer URL decoding; stripping nulls could mask legitimate content in non-security contexts"
+  resolution: "Strip null bytes from decoded content before passing to rule matching, or document as known evasion vector in threat model"
+
+- description: "OBFS-001 (AST-only ROT13 rule) absent from RULES.md catalog"
+  type: technical
+  plan: PLAN-017
+  files:
+    - scripts/generate_rules_catalog.py
+    - src/skill_scan/_ast_rot13.py
+  blocker: "generate_rules_catalog.py only reads TOML rule files; OBFS-001 is defined in Python code (_ast_rot13.py), not in obfuscation.toml. Adding AST-only rules to the catalog requires extending the script to read procedural rules from Python modules."
+  resolution: "Add a _PROCEDURAL_RULES dict to generate_rules_catalog.py that includes AST-only rule IDs (OBFS-001, and existing AST rules like EXEC-006 etc.) so they appear in RULES.md"

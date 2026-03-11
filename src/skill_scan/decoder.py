@@ -1,8 +1,8 @@
 """Decoder module — extract and decode encoded payloads.
 
-Pure module, no I/O. Finds base64 and hex-encoded strings in content
-and attempts to decode them. Used by the scanner to detect obfuscated
-payloads that may contain malicious commands.
+Pure module, no I/O. Finds base64, hex, URL-encoded, and unicode-escape
+strings in content and attempts to decode them. Used by the scanner to
+detect obfuscated payloads that may contain malicious commands.
 """
 
 from __future__ import annotations
@@ -28,7 +28,7 @@ class EncodedPayload:
     """A single encoded string found in source content."""
 
     encoded_text: str
-    encoding_type: str  # 'base64' | 'hex'
+    encoding_type: str  # 'base64' | 'hex' | 'url' | 'unicode_escape'
     line_num: int
     start_offset: int
 
@@ -56,15 +56,27 @@ from skill_scan._decoder_helpers import (  # noqa: E402
     _extract_hex_from_line as _extract_hex_from_line,
 )
 
+# Re-exports from _decoder_url_unicode (Facade Re-export Pattern).
+from skill_scan._decoder_url_unicode import (  # noqa: E402
+    _URL_ENCODED_RE as _URL_ENCODED_RE,
+    _UNICODE_ESCAPE_RE as _UNICODE_ESCAPE_RE,
+    _decode_unicode_escape as _decode_unicode_escape,
+    _decode_url_encoded as _decode_url_encoded,
+    _extract_unicode_escape_from_line as _extract_unicode_escape_from_line,
+    _extract_url_encoded_from_line as _extract_url_encoded_from_line,
+)
+
 # --- Extraction ---
 
 
 def extract_encoded_strings(content: str) -> list[EncodedPayload]:
-    """Find base64 and hex-encoded strings in *content*.
+    """Find base64, hex, URL-encoded, and unicode-escape strings in *content*.
 
     Scans each line for patterns that look like encoded payloads.
-    Strings shorter than MIN_ENCODED_LENGTH are skipped.
+    Strings shorter than MIN_ENCODED_LENGTH are skipped (base64/hex).
     data:image/ URIs are excluded from base64 results.
+    URL-encoded requires 3+ consecutive %XX sequences.
+    Unicode-escape requires 3+ consecutive \\uXXXX or \\UXXXXXXXX.
 
     Args:
         content: Source file content to scan.
@@ -77,6 +89,8 @@ def extract_encoded_strings(content: str) -> list[EncodedPayload]:
     for line_num, line in enumerate(content.splitlines(), start=1):
         payloads.extend(_extract_base64_from_line(line, line_num))
         payloads.extend(_extract_hex_from_line(line, line_num))
+        payloads.extend(_extract_url_encoded_from_line(line, line_num))
+        payloads.extend(_extract_unicode_escape_from_line(line, line_num))
     return payloads
 
 
@@ -86,8 +100,9 @@ def extract_encoded_strings(content: str) -> list[EncodedPayload]:
 def decode_payload(payload: EncodedPayload, *, depth: int = 0) -> str | None:
     """Attempt to decode an encoded payload.
 
-    Returns the decoded UTF-8 string, or None if decoding fails
-    (invalid encoding, non-UTF-8 result, or exceeds size limits).
+    Returns the decoded string, or None if decoding fails.
+    For base64/hex: decodes bytes then interprets as UTF-8.
+    For url/unicode_escape: decodes directly to str (no bytes step).
 
     Args:
         payload: The encoded payload to decode.
@@ -100,6 +115,11 @@ def decode_payload(payload: EncodedPayload, *, depth: int = 0) -> str | None:
     if depth >= MAX_DECODE_DEPTH:
         return None
 
+    # --- str-returning path for url / unicode_escape ---
+    if payload.encoding_type in ("url", "unicode_escape"):
+        return _decode_str_payload(payload)
+
+    # --- bytes-returning path for base64 / hex ---
     # Pre-decode size estimate — reject oversized payloads before allocation.
     ratio = 0.75 if payload.encoding_type == "base64" else 0.5
     if int(len(payload.encoded_text) * ratio) > MAX_DECODED_SIZE:
@@ -115,6 +135,35 @@ def decode_payload(payload: EncodedPayload, *, depth: int = 0) -> str | None:
     try:
         decoded = raw_bytes.decode("utf-8")
     except (UnicodeDecodeError, ValueError):
+        return None
+
+    return decoded
+
+
+def _decode_str_payload(payload: EncodedPayload) -> str | None:
+    """Decode a str-returning payload (url or unicode_escape).
+
+    Returns decoded string or None on failure. Size-checked against
+    MAX_DECODED_SIZE (character count).
+    """
+    # Pre-decode size estimate — reject oversized payloads before allocation.
+    # URL: each %XX (3 chars) encodes 1 byte → ratio 1/3.
+    # unicode_escape: each \uXXXX (6 chars) encodes 1 char → ratio 1/6.
+    ratio = 1 / 3 if payload.encoding_type == "url" else 1 / 6
+    if int(len(payload.encoded_text) * ratio) > MAX_DECODED_SIZE:
+        return None
+
+    try:
+        if payload.encoding_type == "url":
+            decoded = _decode_url_encoded(payload.encoded_text)
+        elif payload.encoding_type == "unicode_escape":
+            decoded = _decode_unicode_escape(payload.encoded_text)
+        else:
+            return None
+    except (ValueError, UnicodeDecodeError):
+        return None
+
+    if len(decoded) > MAX_DECODED_SIZE:
         return None
 
     return decoded

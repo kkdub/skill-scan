@@ -1,10 +1,423 @@
 id: "PLAN-017"
 title: "Alternative Encoding Decoding (rot13, URL-encoding, unicode escapes)"
-status: Placeholder
+type: implementation
+status: Complete
+created: 2026-03-10
 
-# From DEBT-012.md:
-# PLAN-012 scope covers base64 and hex only. Adding rot13, URL-encoding, or unicode
-# escape decoding requires additional extraction regexes and decode functions.
-# Add decode_rot13(), decode_url(), and decode_unicode_escape() with corresponding
-# extraction patterns. Each encoding type gets its own regex and decoder.
-# Target: future plan if red-team data shows these encodings used in real evasion attempts.
+linked_spec: null
+
+description: |
+  Extend the scanner to detect and decode three new encoding types used for
+  obfuscation in agent skill files: ROT13 (via AST analysis of Python codec
+  calls and str.maketrans), URL-encoding (regex rules for suspicious %XX
+  sequences + decoder integration), and unicode escapes (regex for \uXXXX
+  runs + decoder integration).
+
+  Handles cross-cutting debt first: import-alias tracking for the AST pipeline
+  so that aliased codecs imports are resolved correctly (benefits all existing
+  AST detectors). Introduces the OBFS-* rule namespace for obfuscation detection.
+
+  Origin: DEBT-012 — PLAN-012 scope covers base64 and hex only.
+
+  Research findings: .agent/plans/017/Findings.md
+
+requirements:
+  file: REQUIREMENTS-017.yaml
+  ids:
+    - R001    # codecs.encode/decode ROT13 detection
+    - R002    # indirect codec access ROT13 detection
+    - R003    # str.maketrans ROT13 detection
+    - R004    # OBFS-001 metadata (HIGH, obfuscation)
+    - R005    # OBFS-002 URL %XX runs (MEDIUM)
+    - R006    # OBFS-003 double-encoding %25XX (HIGH)
+    - R007    # OBFS-004 unreserved char encoding (MEDIUM)
+    - R008    # URL decoder integration (Pass 4)
+    - R009    # OBFS-005 unicode escape runs (MEDIUM)
+    - R010    # unicode escape decoder integration
+    - R-IMP001   # _decoder_url_unicode.py + facade re-export
+    - R-IMP002   # EncodedPayload.encoding_type + decode_payload dispatch
+    - R-IMP003   # obfuscation.toml (OBFS-002 through OBFS-005)
+    - R-IMP004   # stdlib only
+    - R-IMP005   # Facade Re-export Pattern
+    - R-IMP006   # 250-line limit
+    - R-IMP007   # _ast_rot13.py wired into ast_analyzer.py
+    - R-IMP008   # str-returning decode path
+    - R-IMP009   # is_rot13_pair() pure function
+    - R-IMP010   # try_resolve_string() for maketrans args
+    - R-IMP011   # obfuscation.toml schema conformance
+    - R-IMP012   # both codec name variants tested
+    - R-IMP013   # AST deduplication for OBFS-001
+    - R-IMP014   # _ast_rot13.py under 250 lines
+    - R-IMP015   # Pass 4 integration for URL/unicode
+    - R-ADV001   # import-alias tracking (debt, done first)
+    - R-ADV002   # string-concat limitation documented
+    - R-ADV003   # mixed unicode escape formats tested
+  uncovered: []
+
+utilities_audit:
+  status: complete
+  search_performed:
+    - query: "wc -l on all files that will be modified"
+      found: "_decoder_helpers.py=189, _ast_detectors.py=224, _ast_helpers.py=248, decoder.py=120, ast_analyzer.py=83, engine.py=229, content_scanner.py=239"
+    - query: "grep for existing OBFS-* rule IDs"
+      found: "None — OBFS-* is a new namespace"
+    - query: "TOML rule schema inspection (malicious_code.toml)"
+      found: "Schema: [rules.ID] with severity, category, description, recommendation, patterns, optional exclude_patterns/match_scope/flags/exclude_mode"
+    - query: "decode_payload dispatch and _decode_bytes pattern"
+      found: "_decode_bytes dispatches on encoding_type with if/elif; returns bytes. URL/unicode return str — needs new path in decode_payload()"
+
+  categories:
+    error_handling:
+      needed: false
+    validation:
+      needed: false
+    logging:
+      needed: false
+    types:
+      needed: true
+      exists: "src/skill_scan/decoder.py (EncodedPayload)"
+      gaps: "encoding_type comment documents only 'base64'|'hex'; needs 'url' and 'unicode_escape'"
+      action: extend
+      location: "src/skill_scan/decoder.py"
+    configuration:
+      needed: false
+    http_client:
+      needed: false
+
+  infrastructure_parts: []
+
+environment:
+  status: assessed
+  build:
+    tool: "pyproject.toml + uv (hatchling backend)"
+    install_cmd: "uv sync --group dev"
+    check_cmd: "make check"
+    prerequisites: ["Python 3.13"]
+  runtime_services: []
+  changes:
+    new_dependencies: []
+    env_vars: []
+    schema_changes: []
+    ci_changes: []
+    build_changes: []
+
+# Skeleton decision: Skip
+# Justification: brownfield extension of existing detection patterns
+# across established modules (AST detectors, decoder, regex rules).
+
+parts:
+  - id: a
+    title: "Foundation: import-alias tracking for AST pipeline"
+    status: Done
+    requirements_covered: [R-ADV001]
+    approach:
+      - step: "Refactor _ast_helpers.py to free headroom for alias tracking"
+        files: [src/skill_scan/_ast_helpers.py]
+        notes: |
+          _ast_helpers.py is at 248 lines. Extract join-resolution helpers
+          (_resolve_join_listcomp, _resolve_join_map_chr, _resolve_int_list_to_chars,
+          _is_chr_of_target) into a new _ast_join_helpers.py to free ~50 lines.
+          Follow Facade Re-export Pattern: re-export from _ast_helpers.py at bottom.
+      - step: "Add build_alias_map() and update get_call_name() for alias resolution"
+        files: [src/skill_scan/_ast_helpers.py]
+        notes: |
+          build_alias_map(tree) walks Import/ImportFrom nodes and returns
+          dict[str, str] mapping alias -> canonical module name.
+          get_call_name() gains an optional alias_map parameter to resolve
+          e.g. 'c.encode' -> 'codecs.encode' when alias_map={'c': 'codecs'}.
+      - step: "Thread alias_map through analyze_python() and all _detect_* calls"
+        files: [src/skill_scan/ast_analyzer.py, src/skill_scan/_ast_detectors.py]
+        notes: |
+          analyze_python() builds alias_map from parsed tree, passes to each
+          detector. Existing detectors gain alias_map parameter with empty-dict
+          default — behavior unchanged for existing callers.
+    criteria:
+      - "build_alias_map() returns dict[str, str] from Import/ImportFrom nodes"
+      - "get_call_name() resolves aliased names via alias_map (e.g., 'c.encode' -> 'codecs.encode')"
+      - "_ast_helpers.py is under 250 lines after the split"
+      - "New _ast_join_helpers.py exists with extracted join-resolution helpers"
+      - "All existing tests pass unchanged (alias_map defaults to empty dict)"
+      - "analyze_python() builds and threads alias_map to all _detect_* functions"
+
+  - id: b
+    title: "ROT13 AST detection (OBFS-001)"
+    status: Done
+    depends_on: [a]
+    requirements_covered: [R001, R002, R003, R004, R-IMP007, R-IMP009, R-IMP010, R-IMP012, R-IMP013, R-IMP014]
+    approach:
+      - step: "Create _ast_rot13.py with is_rot13_pair(), _detect_rot13_codec(), _detect_rot13_maketrans()"
+        files: [src/skill_scan/_ast_rot13.py]
+        notes: |
+          _detect_rot13_codec(node, file_path, alias_map) matches codecs.encode/
+          decode/getencoder/getdecoder/lookup/iterencode with 'rot_13' or 'rot13'
+          as the encoding arg. Uses get_call_name(node, alias_map) for alias
+          resolution. _detect_rot13_maketrans(node, file_path) matches
+          str.maketrans() with two string args resolved via try_resolve_string(),
+          validated by is_rot13_pair(). is_rot13_pair(from_str, to_str) -> bool
+          is a pure function. OBFS-001 metadata (HIGH, 'obfuscation') hardcoded
+          here. Do NOT reuse _make_finding from _ast_detectors — it hardcodes
+          category='malicious-code'. Create own Finding() construction with
+          category='obfuscation' directly in this module.
+      - step: "Wire _ast_rot13 detectors into ast_analyzer.py"
+        files: [src/skill_scan/ast_analyzer.py]
+        notes: |
+          Import both detector functions, call in ast.walk loop alongside
+          existing detectors, pass alias_map. Add re-exports at bottom
+          following Facade Re-export Pattern.
+      - step: "Write tests for all ROT13 detection paths"
+        files: [tests/unit/test_ast_rot13.py]
+        notes: |
+          Test via analyze_python(). Cover: codecs.encode/decode with both
+          'rot_13' and 'rot13', all 4 indirect access functions with both
+          variants (8 cases for R-IMP012), str.maketrans with valid ROT13 pair,
+          aliased imports, negative cases. Verify OBFS-001/HIGH/obfuscation.
+    criteria:
+      - "_ast_rot13.py exists and is under 250 lines"
+      - "is_rot13_pair() correctly identifies ROT13 mapping (pure, no external deps)"
+      - "codecs.encode/decode with 'rot_13' and 'rot13' both produce OBFS-001"
+      - "All 4 indirect codec functions with both variants produce OBFS-001 (8 test cases)"
+      - "str.maketrans() with literal ROT13 pair (resolved via try_resolve_string) produces OBFS-001"
+      - "str.maketrans() with unresolvable args (variables) does NOT produce OBFS-001"
+      - "All findings: rule_id='OBFS-001', severity=HIGH, category='obfuscation'"
+      - "Aliased imports (import codecs as c; c.encode(...)) detected via alias_map"
+      - "OBFS-001 deduplicates correctly through content_scanner._deduplicate()"
+
+  - id: c
+    title: "URL-encoding regex rules (OBFS-002, OBFS-003, OBFS-004)"
+    status: Done
+    depends_on: [a]
+    verify_group: url-unicode
+    requirements_covered: [R005, R006, R007, R-IMP003, R-IMP011, R-ADV002]
+    approach:
+      - step: "Create obfuscation.toml with header + OBFS-002, OBFS-003, OBFS-004 rules"
+        files: [src/skill_scan/rules/data/obfuscation.toml]
+        notes: |
+          Create the file with a comment header documenting that multi-line
+          string concatenation is a known limitation of line-based regex
+          scanning (R-ADV002). Must contain at least one rule — empty TOML
+          files fail test_rule_validation.py (assert len(rules) > 0).
+          OBFS-002: 3+ consecutive %XX, MEDIUM, category=obfuscation.
+          Pattern: (?:%[0-9A-Fa-f]{2}){3,}
+          OBFS-003: double-encoding %25XX, HIGH, category=obfuscation.
+          Pattern: %25[0-9A-Fa-f]{2}
+          OBFS-004: unreserved char encoding, MEDIUM, category=obfuscation.
+          Pattern: %(?:3[0-9]|4[1-9A-Fa-f]|5[0-9Aa]|6[1-9A-Fa-f]|7[0-9Aa])
+          Note: ranges must cover exactly RFC 3986 unreserved alphanumeric
+          chars (digits %30-%39, uppercase %41-%5A, lowercase %61-%7A).
+          Do NOT use [56][0-9A-Fa-f] — it would match %5B-%5F and %60
+          which are reserved/special characters.
+          Follow existing TOML schema from malicious_code.toml.
+      - step: "Add 'obfuscation' to catalog tooling"
+        files: [scripts/generate_rules_catalog.py]
+        notes: |
+          Add 'obfuscation' to _CATEGORY_ORDER (after 'tool-abuse') and
+          _CATEGORY_TITLES dict. Without this, OBFS rules load but won't
+          appear in RULES.md, and test_rules_md_is_fresh will fail.
+      - step: "Regenerate RULES.md"
+        files: [RULES.md]
+        notes: |
+          Run `make rules-catalog` to regenerate. test_rule_validation.py
+          checks RULES.md freshness — it must be in sync.
+      - step: "Write tests for URL-encoding regex rules"
+        files: [tests/unit/test_obfs_rules.py]
+        notes: |
+          Use existing match_line()/match_content() helpers. Test positive
+          matches, negative cases (single %20, reserved chars), boundary
+          conditions. Verify severity and category for each rule.
+    criteria:
+      - "OBFS-002 matches 3+ consecutive %XX with MEDIUM severity"
+      - "OBFS-003 matches %25XX double-encoding with HIGH severity"
+      - "OBFS-004 matches unreserved char encoding with MEDIUM severity"
+      - "OBFS-004 does NOT match %5B, %5C, %5D, %5E, %5F, %60 (non-alphanumeric)"
+      - "Single %20 does not trigger OBFS-002"
+      - "%2F (reserved slash) does not trigger OBFS-004"
+      - "All rules conform to existing TOML schema"
+      - "obfuscation.toml header documents string-concat limitation (R-ADV002)"
+      - "generate_rules_catalog.py includes obfuscation category"
+      - "RULES.md regenerated and fresh"
+      - "make check passes"
+
+  - id: d
+    title: "Unicode-escape regex rule (OBFS-005)"
+    status: Done
+    depends_on: [a, c]
+    verify_group: url-unicode
+    requirements_covered: [R009, R-ADV003]
+    notes: |
+      Depends on c because c creates obfuscation.toml with the first rules.
+      This part extends the file with OBFS-005 and regenerates RULES.md.
+    approach:
+      - step: "Add OBFS-005 rule to obfuscation.toml"
+        files: [src/skill_scan/rules/data/obfuscation.toml]
+        notes: |
+          OBFS-005: 3+ consecutive \uXXXX or \UXXXXXXXX, MEDIUM,
+          category=obfuscation. Pattern must handle mixed \uXXXX and
+          \UXXXXXXXX in same run (R-ADV003).
+      - step: "Regenerate RULES.md"
+        files: [RULES.md]
+        notes: |
+          Run `make rules-catalog` after adding OBFS-005.
+      - step: "Add OBFS-005 tests including mixed-format and adjacency coverage"
+        files: [tests/unit/test_obfs_rules.py]
+        notes: |
+          Test pure \uXXXX runs, pure \UXXXXXXXX runs, mixed runs
+          (R-ADV003), sequences adjacent to non-escape characters
+          (R-ADV003), negative cases (single \uXXXX, legitimate unicode).
+    criteria:
+      - "OBFS-005 matches 3+ consecutive \\uXXXX/\\UXXXXXXXX with MEDIUM severity"
+      - "Mixed \\uXXXX and \\UXXXXXXXX in same run detected (R-ADV003)"
+      - "Sequences adjacent to non-escape characters still detected (R-ADV003)"
+      - "2 or fewer sequences do NOT trigger OBFS-005"
+      - "RULES.md regenerated and fresh"
+      - "make check passes"
+
+  - id: e
+    title: "URL/unicode decoder integration (extraction, decode, Pass 4)"
+    status: Done
+    depends_on: [c, d]
+    verify_group: url-unicode
+    requirements_covered: [R008, R010, R-IMP001, R-IMP002, R-IMP004, R-IMP005, R-IMP006, R-IMP008, R-IMP015]
+    approach:
+      - step: "Create _decoder_url_unicode.py with extraction and decode helpers"
+        files: [src/skill_scan/_decoder_url_unicode.py]
+        notes: |
+          _extract_url_encoded_from_line(line, line_num) -> list[EncodedPayload]
+          _extract_unicode_escape_from_line(line, line_num) -> list[EncodedPayload]
+          _decode_url_encoded(text) -> str  (via urllib.parse.unquote, stdlib)
+          _decode_unicode_escape(text) -> str
+          These return str, not bytes — this is the str-returning decode path.
+          Follow _decoder_helpers.py structure and naming conventions.
+      - step: "Wire into decoder.py: extend extract_encoded_strings() and decode_payload()"
+        files: [src/skill_scan/decoder.py]
+        notes: |
+          extract_encoded_strings() calls new extraction helpers per line.
+          decode_payload() extended with encoding_type dispatch for 'url' and
+          'unicode_escape' — calls str-returning helpers directly, bypassing
+          _decode_bytes() -> utf-8 path. Update EncodedPayload.encoding_type
+          comment. Add re-exports at bottom (Facade Re-export Pattern).
+      - step: "Write decoder integration tests"
+        files: [tests/unit/test_decoder_url_unicode.py]
+        notes: |
+          Test extraction, decoding, and end-to-end Pass 4 integration.
+          Verify str return type for URL/unicode. Verify no new external deps.
+    criteria:
+      - "_decoder_url_unicode.py exists and is under 250 lines"
+      - "extract_encoded_strings() finds URL-encoded payloads (3+ %XX)"
+      - "extract_encoded_strings() finds unicode-escape payloads (3+ \\uXXXX)"
+      - "decode_payload() returns str for encoding_type='url'"
+      - "decode_payload() returns str for encoding_type='unicode_escape'"
+      - "EncodedPayload.encoding_type comment updated"
+      - "Re-exports added to decoder.py (Facade Re-export Pattern)"
+      - "No new external dependencies (stdlib only)"
+      - "Decoded payloads feed into Pass 4 recursive scan end-to-end"
+
+acceptance_scenarios:
+  - scenario: "ROT13 obfuscation in Python file detected via AST with aliased import"
+    invoke: "scan_all_files() on a .py file containing 'import codecs as c\\nc.encode(secret, \"rot_13\")'"
+    expect: "Findings include OBFS-001 with severity HIGH and category 'obfuscation'"
+    test_file: tests/unit/test_decoder_url_unicode.py
+    status: passing
+
+  - scenario: "URL-encoded payload extracted, decoded, and scanned recursively"
+    invoke: "scan_all_files() on a file containing '%65%76%61%6C%28%29' (encoding 'eval()')"
+    expect: "Findings include OBFS-002 (regex) AND decoded 'eval()' triggers EXEC-002 in Pass 4"
+    notes: |
+      Payload must decode to something matching an existing rule pattern.
+      EXEC-002 matches \\beval\\s*\\( — bare 'eval' without paren won't match.
+      %65%76%61%6C%28%29 decodes to 'eval()'.
+    test_file: tests/unit/test_decoder_url_unicode.py
+    status: passing
+
+  - scenario: "Unicode escape sequences extracted and decoded"
+    invoke: "extract_encoded_strings() + decode_payload() on '\\u0065\\u0076\\u0061\\u006C'"
+    expect: "EncodedPayload with encoding_type='unicode_escape' extracted; decoded to 'eval'"
+    test_file: tests/unit/test_decoder_url_unicode.py
+    status: passing
+
+allowed_files:
+  - "src/skill_scan/**"
+  - "tests/**"
+  - "scripts/generate_rules_catalog.py"
+  - "RULES.md"
+
+forbidden:
+  - ".env*"
+  - "config/production/**"
+
+acceptance_criteria:
+  - "All requirements have status: done"
+  - "All parts have status: Done"
+  - "All tests pass"
+  - "All acceptance scenarios have status: passing"
+
+stop_condition: |
+  When all requirements are verified and all parts are complete.
+
+work_log:
+  - part: a
+    status: Done
+    files: [src/skill_scan/_ast_join_helpers.py, src/skill_scan/_ast_helpers.py, src/skill_scan/_ast_detectors.py, src/skill_scan/ast_analyzer.py, tests/unit/test_ast_alias.py, tests/unit/test_ast_join_helpers.py]
+    notes: "Extracted join helpers, added build_alias_map + get_call_name alias support, threaded alias_map to all detectors. 1984 tests pass."
+  - part: b
+    status: Done
+    files: [src/skill_scan/_ast_rot13.py, src/skill_scan/ast_analyzer.py, tests/unit/test_ast_rot13.py]
+    notes: "ROT13 AST detection with is_rot13_pair, codec/maketrans detectors, aliased imports. 34 new tests. 2076 pass."
+  - part: c
+    status: Implemented
+    files: [src/skill_scan/rules/data/obfuscation.toml, scripts/generate_rules_catalog.py, RULES.md, tests/unit/test_rules_obfs_detection.py]
+    notes: "OBFS-002/003/004 URL-encoding regex rules, catalog updated, RULES.md regenerated. 52 new tests. Pending group verification."
+  - part: d
+    status: Implemented
+    files: [src/skill_scan/rules/data/obfuscation.toml, RULES.md, tests/unit/test_rules_obfs_detection.py]
+    notes: "OBFS-005 unicode-escape rule added. 19 new tests. Duplicate test_obfs_rules.py deleted."
+  - part: e
+    status: Done
+    files: [src/skill_scan/_decoder_url_unicode.py, src/skill_scan/decoder.py, tests/unit/test_decoder_url_unicode.py]
+    notes: "URL/unicode extraction+decode, str-returning path, Pass 4 integration, acceptance scenarios. 24 new tests."
+  - group: url-unicode
+    status: Verified
+    notes: "Parts c/d/e verified as group. 30/30 criteria. Fixed _ast_join_helpers.py Sequence type. 2120 tests pass."
+  - part: docs
+    date: 2026-03-10
+    type: docs
+    status: Done
+    files: [CLAUDE.md, README.md, .agent/standards/CODE-PATTERNS.md, .agent/plans/017/PLAN-017-alt-encoding-decoding.yaml]
+    notes: "Updated CLAUDE.md (new modules, stdlib entry, architecture notes for alias tracking/OBFS-*/str-decode path/_DETECTORS tuple). Updated README.md (77 rules/9 categories, obfuscation row, encoded payload and AST feature bullets). Added _DETECTORS Tuple and Import-Alias Tracking patterns to CODE-PATTERNS.md Section 2."
+evidence:
+  - type: manual_verification
+    command: "Read src/skill_scan/_ast_helpers.py, _ast_rot13.py, _decoder_url_unicode.py, ast_analyzer.py, decoder.py"
+    result: "APIs confirmed: build_alias_map, get_call_name(alias_map), _DETECTORS tuple, EncodedPayload.encoding_type includes url/unicode_escape, _decode_str_payload private helper"
+  - type: manual_verification
+    command: "Read RULES.md header"
+    result: "77 rules across 9 categories confirmed"
+
+handoff:
+  stopped_at: "All parts complete and verified. Documentation updated. Plan ready for commit/PR."
+  current_state: "2120 tests pass. CLAUDE.md, README.md, CODE-PATTERNS.md, and RULES.md all reflect the new modules and patterns."
+  next_steps:
+    - "Commit all changed files and open PR"
+    - "Verify make check passes after commit"
+  blockers: []
+  scope:
+    files: []
+    functions: []
+    components: []
+  decisions:
+    - "OBFS-* namespace for obfuscation rules (not EXEC-*)"
+    - "ROT13 maketrans detection via pure is_rot13_pair() — no external library"
+    - "Import-alias tracking done first as debt (benefits all detectors)"
+    - "str-returning decode path for URL/unicode (distinct from bytes path)"
+    - "Regex rules for non-Python file detection; AST for Python-specific patterns"
+    - "String-concat splitting documented as known limitation (R-ADV002)"
+    - "_DETECTORS tuple pattern chosen over direct calls for cleaner detector registration"
+  open_questions: []
+  cross_part_knowledge: []
+  active_signals: []
+
+errors: []
+
+depends_on: ["PLAN-012"]
+notes: |
+  Research findings from 2026-03-09 saved in .agent/plans/017/Findings.md.
+  Covers ROT13 invocation patterns, URL-encoding detection thresholds,
+  and SAST tool coverage gaps. No SAST tool currently detects ROT13.

@@ -357,7 +357,51 @@ if relative_path.endswith(".py"):
 return regex_findings
 ```
 
-> Trap: `_ast_helpers.py` is near the 250-line limit. Any new string-resolution helper must be split into a sibling module first (follow the Facade Re-export Pattern). `ast_analyzer.py` is a facade — new detector functions go in `_ast_detectors.py`.
+> Trap: `ast_analyzer.py` is a facade — new detector functions go in `_ast_detectors.py` (malicious-code category) or a dedicated module like `_ast_rot13.py` (obfuscation category). New detectors must be added to the `_DETECTORS` tuple in `ast_analyzer.py` and re-exported from it.
+
+## _DETECTORS Tuple for AST Detector Registration
+
+New AST detectors are registered in the `_DETECTORS` tuple in `ast_analyzer.py`. Each detector has the signature `(node, file_path, *, alias_map) -> list[Finding]`. `analyze_python()` calls every detector for every node in the AST walk.
+
+```python
+# ast_analyzer.py
+_DETECTORS = (
+    _detect_unsafe_calls,
+    _detect_dynamic_imports,
+    _detect_unsafe_deserialization,
+    _detect_string_concat_evasion,
+    _detect_dynamic_access,
+    _detect_rot13_codec,
+    _detect_rot13_maketrans,
+)
+
+for node in ast.walk(tree):
+    for detector in _DETECTORS:
+        findings.extend(detector(node, file_path, alias_map=alias_map))
+```
+
+> Trap: detectors that produce findings with a category other than `'malicious-code'` must build `Finding()` directly — `_make_finding()` in `_ast_detectors.py` hardcodes `category='malicious-code'`.
+
+## Import-Alias Tracking in AST Detectors
+
+`build_alias_map(tree)` in `_ast_helpers.py` returns a `dict[str, str]` mapping local names to canonical dotted module paths. `analyze_python()` builds the map once and passes it to all detectors so aliased imports are resolved correctly.
+
+```python
+# _ast_helpers.py
+def build_alias_map(tree: ast.Module) -> dict[str, str]:
+    # import codecs as c  -> {'c': 'codecs'}
+    # from os import path -> {'path': 'os.path'}
+    ...
+
+# ast_analyzer.py
+alias_map = build_alias_map(tree)
+detector(node, file_path, alias_map=alias_map)
+
+# detector usage via get_call_name
+name = get_call_name(node, alias_map)  # 'c.encode' -> 'codecs.encode'
+```
+
+> Trap: all `_detect_*` functions must declare `alias_map: dict[str, str] | None = None` as a keyword-only parameter and pass it to `get_call_name()`. Omitting the parameter breaks the `_DETECTORS` tuple dispatch.
 
 ## Multi-Pass Scanning in match_content()
 

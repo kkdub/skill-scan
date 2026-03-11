@@ -4,13 +4,13 @@ Security scanner for agent skills — detects prompt injection, malicious code, 
 
 ## Features
 
-- **73 detection rules** across 8 categories: prompt injection, malicious code, data exfiltration, credential exposure, supply chain, tool abuse, file safety, and schema validation
+- **77 detection rules** across 9 categories: prompt injection, malicious code, data exfiltration, credential exposure, supply chain, tool abuse, file safety, schema validation, and obfuscation
 - **Multilingual prompt injection detection** — covers English, Arabic, Chinese, French, German, Japanese, Korean, Russian, and Spanish
 - **Local and remote scanning** — scan a directory on disk or fetch from GitHub
 - **Multiple output formats** — human-readable text, machine-readable JSON, or SARIF v2.1.0 for GitHub Code Scanning
 - **CI-friendly** — `--fail-on` flag exits with code 2 when findings exceed a severity threshold
-- **Encoded payload detection** — base64 and hex-encoded strings are decoded and recursively scanned, catching obfuscated injections that regex-only scanning misses
-- **AST-based Python analysis** — `.py` files are parsed with Python's `ast` module to catch evasion techniques that regex cannot detect (string concatenation building `eval`, `chr()`-based construction, `getattr` with dynamic names, unsafe deserialization)
+- **Encoded payload detection** — base64, hex, URL-encoded, and unicode-escape strings are decoded and recursively scanned, catching obfuscated injections that regex-only scanning misses
+- **AST-based Python analysis** — `.py` files are parsed with Python's `ast` module to catch evasion techniques that regex cannot detect (string concatenation building `eval`, `chr()`-based construction, `getattr` with dynamic names, unsafe deserialization, ROT13 codec usage)
 - **Concurrent scanning** — large skill directories (8+ files) are scanned in parallel using `ProcessPoolExecutor`, with automatic fallback to sequential scanning
 - **Inline suppression** — add `# noqa: RULE-ID` to any line to suppress a specific finding; bare `# noqa` is rejected (security scanner requires explicit rule IDs); suppressed counts are reported for auditability
 - **Zero runtime dependencies** beyond `click` — core engine uses stdlib only
@@ -160,6 +160,7 @@ The container runs as non-root user `scanner`. The scan target is mounted read-o
 | Tool Abuse | TOOL-001 .. TOOL-003 | Destructive file ops, privilege escalation, dangerous command chaining |
 | File Safety | FS-001 .. FS-008 | Binary files, symlink escapes, size limits, encoding issues |
 | Schema Validation | SV-001 | Invalid SKILL.md frontmatter |
+| Obfuscation | OBFS-001 .. OBFS-005 | ROT13 encoding (AST), URL-encoded runs, double-encoding, unicode escape sequences |
 
 See [RULES.md](RULES.md) for the full catalog.
 

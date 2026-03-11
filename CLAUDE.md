@@ -30,22 +30,26 @@ make check    # All quality checks (run early, run often)
 - Rules enforced via `.agent/standards/code-rules.json`
 - Type hints on all public functions
 - Tests in `tests/`
-- Core scanner engine and decoder use stdlib only (`re`, `pathlib`, `json`, `tomllib`, `base64`, `binascii`, `ast`, `concurrent.futures`)
+- Core scanner engine and decoder use stdlib only (`re`, `pathlib`, `json`, `tomllib`, `base64`, `binascii`, `ast`, `concurrent.futures`, `urllib.parse`)
 - Don't add deps without `uv` + `pyproject.toml`
 - **Max 250 lines per file** (source code in `src/` and `tests/`)
-- `_ast_helpers.py` is at 248 lines (near limit) — any addition requires a split first
 
 ## Project Structure
 
 ```
 src/skill_scan/           # Production source code
-  ast_analyzer.py         # Facade: analyze_python() entry point + re-exports from _ast_detectors
+  ast_analyzer.py         # Facade: analyze_python() entry point + re-exports from _ast_detectors + _ast_rot13
   _ast_detectors.py       # Private detector functions (_detect_* and _make_finding)
-  _ast_helpers.py         # Private string-resolution helpers for AST analysis
-  decoder.py              # Facade: EncodedPayload, public constants, extract/decode + re-exports
-  _decoder_helpers.py     # Private regex constants and extraction/decode helpers
+  _ast_helpers.py         # Private string-resolution helpers + build_alias_map + get_call_name; re-exports from _ast_join_helpers
+  _ast_join_helpers.py    # Private join-resolution helpers extracted from _ast_helpers
+  _ast_rot13.py           # ROT13 AST detectors (is_rot13_pair, _detect_rot13_codec, _detect_rot13_maketrans)
+  decoder.py              # Facade: EncodedPayload, public constants, extract/decode + re-exports from _decoder_helpers + _decoder_url_unicode
+  _decoder_helpers.py     # Private regex constants and extraction/decode helpers (base64, hex)
+  _decoder_url_unicode.py # Private URL/unicode-escape extraction and decode helpers
   content_scanner.py      # File I/O + rule dispatch + AST deduplication + concurrent scanning
   suppression.py          # Inline noqa suppression (public: parse_noqa, filter_suppressed)
+  rules/data/
+    obfuscation.toml      # OBFS-002..OBFS-005 URL-encoding and unicode-escape rules
 tests/                    # Test suite (mirrors src/ structure)
 scripts/                  # Quality & analysis scripts
 .agent/                   # Plans, standards, workflow
@@ -64,7 +68,15 @@ Dockerfile                # Containerized scanner (python:3.13-slim, non-root us
 - `AST-PARSE` and `AST-DEPTH` findings are exempt from `active_ids` filtering in `content_scanner._apply_rules()` — they always propagate to output
 - `MAX_AST_RESOLVE_DEPTH = 50` in `_ast_helpers.py` — recursive string-resolution helpers return `None` instead of crashing at depth > 50
 - `match_content()` in `engine.py` is a public wrapper with no `_depth` parameter; `_match_content_recursive()` is the private implementation that carries `_depth`
-- `ast_analyzer.py` and `decoder.py` are facade modules — they re-export all names from their sibling `_ast_detectors.py` and `_decoder_helpers.py` respectively (Facade Re-export Pattern)
+- `ast_analyzer.py` and `decoder.py` are facade modules — they re-export all names from their sibling `_ast_detectors.py`/`_ast_rot13.py` and `_decoder_helpers.py`/`_decoder_url_unicode.py` respectively (Facade Re-export Pattern)
+- `build_alias_map(tree)` in `_ast_helpers.py` returns `dict[str, str]` mapping local alias to canonical module name; called by `analyze_python()` and threaded to all `_detect_*` functions via `alias_map` kwarg
+- `get_call_name(node, alias_map=None)` resolves aliased call names (e.g. `c.encode` with `alias_map={'c': 'codecs'}` → `'codecs.encode'`); all `_detect_*` functions accept `alias_map` kwarg (empty-dict default, backward-compatible)
+- `ast_analyzer.py` uses a `_DETECTORS` tuple to register all detector functions; add new detectors to this tuple
+- `decode_payload()` in `decoder.py` has two return paths: bytes→UTF-8 for `base64`/`hex`; direct `str` for `url`/`unicode_escape` (via `_decode_str_payload()`)
+- `EncodedPayload.encoding_type` accepts `'base64'` | `'hex'` | `'url'` | `'unicode_escape'`
+- OBFS-* is the rule namespace for obfuscation detection (distinct from EXEC-* for malicious code execution); OBFS-001 is AST-based (ROT13), OBFS-002..005 are regex-based in `obfuscation.toml`
+- `_ast_rot13.py` uses its own `_make_rot13_finding()` with `category='obfuscation'` — do NOT reuse `_make_finding` from `_ast_detectors.py` which hardcodes `category='malicious-code'`
+- `is_rot13_pair(from_str, to_str) -> bool` in `_ast_rot13.py` is a public pure function; re-exported from `ast_analyzer.py`
 
 ## Tips
 

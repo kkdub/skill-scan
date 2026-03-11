@@ -1,0 +1,348 @@
+plan: PLAN-017
+generated_at: "2026-03-10"
+
+requirements:
+  # ──────────────────────────────────────────────────────────────
+  # ROT13 Detection (AST-based)
+  # ──────────────────────────────────────────────────────────────
+
+  - id: R001
+    requirement: "Detect codecs.encode() and codecs.decode() calls with 'rot_13' or 'rot13' as the codec argument via AST analysis."
+    category: functional
+    source: user-provided
+    contract:
+      given: "A Python source file containing codecs.encode(text, 'rot_13') or codecs.decode(text, 'rot13') (or variants)"
+      when: "analyze_python() is called on that source"
+      then: "An OBFS-001 finding with severity HIGH is returned"
+    acceptance:
+      - "analyze_python() returns OBFS-001 for codecs.encode(x, 'rot_13')"
+      - "analyze_python() returns OBFS-001 for codecs.encode(x, 'rot13')"
+      - "analyze_python() returns OBFS-001 for codecs.decode(x, 'rot_13')"
+      - "analyze_python() returns OBFS-001 for codecs.decode(x, 'rot13')"
+    verify: test::tests/unit/test_ast_rot13.py
+    status: done
+
+  - id: R002
+    requirement: "Detect indirect ROT13 codec access via codecs.getencoder(), codecs.getdecoder(), codecs.lookup(), and codecs.iterencode() with 'rot_13' or 'rot13' codec strings."
+    category: functional
+    source: user-provided
+    contract:
+      given: "A Python source file containing any of the four indirect codec access patterns"
+      when: "analyze_python() is called on that source"
+      then: "An OBFS-001 finding with severity HIGH is returned for each matched call"
+    acceptance:
+      - "codecs.getencoder('rot_13') produces OBFS-001"
+      - "codecs.getdecoder('rot_13') produces OBFS-001"
+      - "codecs.lookup('rot_13') produces OBFS-001"
+      - "codecs.iterencode(x, 'rot_13') produces OBFS-001"
+      - "All four functions also match 'rot13' variant"
+    verify: test::tests/unit/test_ast_rot13.py
+    status: done
+
+  - id: R003
+    requirement: "Detect str.maketrans() calls where the from/to string arguments constitute a ROT13 character mapping, using is_rot13_pair() and try_resolve_string()."
+    category: functional
+    source: user-provided
+    contract:
+      given: "A Python source with str.maketrans('ABC...XYZ...', 'NOP...MNO...') or equivalent ROT13 mapping"
+      when: "analyze_python() is called on that source"
+      then: "An OBFS-001 finding with severity HIGH is returned"
+    acceptance:
+      - "Full-alphabet ROT13 maketrans call produces OBFS-001"
+      - "Partial-alphabet non-ROT13 maketrans call does NOT produce OBFS-001"
+      - "is_rot13_pair() returns True only when every character maps exactly 13 positions forward"
+      - "String args are resolved via try_resolve_string() before passing to is_rot13_pair()"
+    verify: test::tests/unit/test_ast_rot13.py
+    status: done
+
+  - id: R004
+    requirement: "All ROT13 detection findings use rule ID OBFS-001, severity HIGH, and category 'obfuscation'."
+    category: functional
+    source: user-provided
+    acceptance:
+      - "All findings from _ast_rot13.py have rule_id='OBFS-001'"
+      - "All findings from _ast_rot13.py have severity=HIGH"
+      - "All findings from _ast_rot13.py have category='obfuscation'"
+    verify: test::tests/unit/test_ast_rot13.py
+    status: done
+
+  # ──────────────────────────────────────────────────────────────
+  # URL-Encoding Detection (regex rules)
+  # ──────────────────────────────────────────────────────────────
+
+  - id: R005
+    requirement: "A regex rule OBFS-002 detects 3 or more consecutive %XX percent-encoded sequences with severity MEDIUM."
+    category: functional
+    source: user-provided
+    contract:
+      given: "A file line containing '%41%42%43' (3+ consecutive %XX sequences)"
+      when: "The rule engine processes that line with OBFS-002 active"
+      then: "An OBFS-002 finding with severity MEDIUM is returned"
+    acceptance:
+      - "3 consecutive %XX sequences produce OBFS-002"
+      - "2 consecutive %XX sequences do NOT produce OBFS-002"
+      - "Single %20 (space) does NOT produce OBFS-002"
+      - "Severity is MEDIUM"
+    verify: test::tests/unit/test_obfs_rules.py
+    status: done
+
+  - id: R006
+    requirement: "A regex rule OBFS-003 detects double-encoded percent sequences matching %25[0-9A-Fa-f]{2} with severity HIGH."
+    category: functional
+    source: user-provided
+    contract:
+      given: "A file line containing '%2541' (double-encoded)"
+      when: "The rule engine processes that line with OBFS-003 active"
+      then: "An OBFS-003 finding with severity HIGH is returned"
+    acceptance:
+      - "%2541 produces OBFS-003 finding"
+      - "Plain %41 without double-encoding does NOT produce OBFS-003"
+      - "Severity is HIGH"
+    verify: test::tests/unit/test_obfs_rules.py
+    status: done
+
+  - id: R007
+    requirement: "A regex rule OBFS-004 detects URL-encoding of RFC 3986 unreserved characters (alphanumeric %30-%39, %41-%5A, %61-%7A) with severity MEDIUM."
+    category: functional
+    source: user-provided
+    contract:
+      given: "A file line containing '%41' (URL-encoded uppercase A)"
+      when: "The rule engine processes that line with OBFS-004 active"
+      then: "An OBFS-004 finding with severity MEDIUM is returned"
+    acceptance:
+      - "%41 (letter A) produces OBFS-004"
+      - "%30 (digit 0) produces OBFS-004"
+      - "%2F (reserved slash) does NOT produce OBFS-004"
+      - "Severity is MEDIUM"
+    verify: test::tests/unit/test_obfs_rules.py
+    status: done
+
+  # ──────────────────────────────────────────────────────────────
+  # URL/Unicode Decoder Integration
+  # ──────────────────────────────────────────────────────────────
+
+  - id: R008
+    requirement: "extract_encoded_strings() extracts URL-encoded payloads and decode_payload() decodes them via urllib.parse.unquote(), with decoded content fed into Pass 4 recursive scanning."
+    category: functional
+    source: user-provided
+    contract:
+      given: "A string containing 3+ consecutive %XX sequences"
+      when: "extract_encoded_strings() then decode_payload() are called"
+      then: "decode_payload() returns the decoded plaintext str"
+    acceptance:
+      - "extract_encoded_strings() returns EncodedPayload with encoding_type='url'"
+      - "decode_payload() returns str (not bytes) for url encoding_type"
+      - "Malicious content hidden in URL-encoded payload detected end-to-end via Pass 4"
+    verify: test::tests/unit/test_decoder_url_unicode.py
+    status: done
+
+  # ──────────────────────────────────────────────────────────────
+  # Unicode Escape Detection (regex rule + decoder)
+  # ──────────────────────────────────────────────────────────────
+
+  - id: R009
+    requirement: "A regex rule OBFS-005 detects runs of 3+ consecutive \\uXXXX or \\UXXXXXXXX Unicode escape sequences with severity MEDIUM."
+    category: functional
+    source: user-provided
+    contract:
+      given: "A file line containing '\\u0068\\u0065\\u006c' (3+ consecutive \\uXXXX)"
+      when: "The rule engine processes that line with OBFS-005 active"
+      then: "An OBFS-005 finding with severity MEDIUM is returned"
+    acceptance:
+      - "3+ consecutive \\uXXXX produce OBFS-005"
+      - "3+ consecutive \\UXXXXXXXX produce OBFS-005"
+      - "2 or fewer sequences do NOT produce OBFS-005"
+      - "Severity is MEDIUM"
+    verify: test::tests/unit/test_obfs_rules.py
+    status: done
+
+  - id: R010
+    requirement: "Unicode-escape payload extraction and decoding implemented in the decoder pipeline."
+    category: functional
+    source: user-provided
+    contract:
+      given: "A string containing 3+ consecutive \\uXXXX sequences"
+      when: "extract_encoded_strings() then decode_payload() are called"
+      then: "The decoded plaintext string is returned"
+    acceptance:
+      - "extract_encoded_strings() returns EncodedPayload with encoding_type='unicode_escape'"
+      - "decode_payload() decodes the payload to correct plaintext"
+    verify: test::tests/unit/test_decoder_url_unicode.py
+    status: done
+
+  # ──────────────────────────────────────────────────────────────
+  # Structural / Reliability
+  # ──────────────────────────────────────────────────────────────
+
+  - id: R-IMP001
+    requirement: "URL and unicode-escape helpers in _decoder_url_unicode.py, re-exported from decoder.py via Facade Re-export Pattern."
+    category: reliability
+    acceptance:
+      - "File src/skill_scan/_decoder_url_unicode.py exists"
+      - "decoder.py re-exports all names from _decoder_url_unicode.py"
+    verify: file::src/skill_scan/_decoder_url_unicode.py
+    status: done
+
+  - id: R-IMP002
+    requirement: "EncodedPayload.encoding_type documentation updated; decode_payload() dispatch extended for 'url' and 'unicode_escape'."
+    category: functional
+    acceptance:
+      - "EncodedPayload.encoding_type comment mentions 'url' and 'unicode_escape'"
+      - "decode_payload() handles encoding_type='url' without error"
+      - "decode_payload() handles encoding_type='unicode_escape' without error"
+    verify: grep::encoding_type.*url::src/skill_scan
+    status: done
+
+  - id: R-IMP003
+    requirement: "OBFS-002 through OBFS-005 regex rules defined in src/skill_scan/rules/data/obfuscation.toml (OBFS-001 is AST-only, not in TOML)."
+    category: reliability
+    acceptance:
+      - "File src/skill_scan/rules/data/obfuscation.toml exists"
+      - "Contains OBFS-002, OBFS-003, OBFS-004, OBFS-005"
+      - "Does NOT contain OBFS-001"
+    verify: file::src/skill_scan/rules/data/obfuscation.toml
+    status: done
+
+  - id: R-IMP004
+    requirement: "All new code uses Python stdlib only — no new external dependencies."
+    category: reliability
+    acceptance:
+      - "No new entries in pyproject.toml [project.dependencies]"
+      - "New modules import only from stdlib or existing project modules"
+    verify: manual
+    status: done
+
+  - id: R-IMP005
+    requirement: "All new private modules follow the Facade Re-export Pattern."
+    category: reliability
+    acceptance:
+      - "ast_analyzer.py contains re-exports from _ast_rot13.py at bottom"
+      - "decoder.py contains re-exports from _decoder_url_unicode.py at bottom"
+    verify: grep::from.*_ast_rot13 import::src/skill_scan/ast_analyzer.py
+    status: done
+
+  - id: R-IMP006
+    requirement: "No source file in src/ or tests/ exceeds 250 lines after all changes."
+    category: reliability
+    acceptance:
+      - "wc -l on all modified/created source files shows <= 250 lines"
+    verify: manual
+    status: done
+
+  - id: R-IMP007
+    requirement: "_ast_rot13.py detectors wired into ast_analyzer.py's analyze_python() function."
+    category: reliability
+    acceptance:
+      - "analyze_python() calls detector functions from _ast_rot13.py"
+      - "OBFS-001 findings reachable end-to-end via analyze_python()"
+    verify: grep::_ast_rot13::src/skill_scan/ast_analyzer.py
+    status: done
+
+  - id: R-IMP008
+    requirement: "decode_payload() supports a str-returning path for URL/unicode decoding, distinct from bytes path."
+    category: functional
+    acceptance:
+      - "decode_payload() for encoding_type='url' returns str"
+      - "decode_payload() for encoding_type='unicode_escape' returns str"
+      - "Pass 4 recursive scan handles str payloads"
+    verify: test::tests/unit/test_decoder_url_unicode.py
+    status: done
+
+  - id: R-IMP009
+    requirement: "is_rot13_pair() is a pure function with no external deps, using only builtins."
+    category: reliability
+    acceptance:
+      - "is_rot13_pair() imports nothing beyond builtins"
+      - "Unit test passes without mocking"
+    verify: test::tests/unit/test_ast_rot13.py::test_is_rot13_pair
+    status: done
+
+  - id: R-IMP010
+    requirement: "str.maketrans argument strings resolved via try_resolve_string() before is_rot13_pair()."
+    category: functional
+    acceptance:
+      - "maketrans with string literal arguments produces OBFS-001"
+      - "maketrans with compile-time-resolvable expressions (concatenation, chr, join) produces OBFS-001"
+      - "maketrans with unresolvable arguments (variables, function calls) is NOT falsely flagged"
+    notes: |
+      try_resolve_string() resolves constants, BinOp concatenation, chr(),
+      join(), and b''.decode() — but NOT Name references (variables).
+      Variable-based maketrans is a known limitation of static analysis.
+    verify: test::tests/unit/test_ast_rot13.py
+    status: done
+
+  - id: R-IMP011
+    requirement: "obfuscation.toml conforms to existing TOML rule schema used by other rule files."
+    category: reliability
+    acceptance:
+      - "make check passes after obfuscation.toml is added"
+      - "Rule loader picks up all OBFS-* rules from the file"
+    verify: manual
+    status: done
+
+  - id: R-IMP012
+    requirement: "Both 'rot_13' and 'rot13' variants tested for all four indirect codec access functions."
+    category: functional
+    acceptance:
+      - "8 test cases: 4 functions x 2 variants, all produce OBFS-001"
+    verify: test::tests/unit/test_ast_rot13.py
+    status: done
+
+  - id: R-IMP013
+    requirement: "OBFS-001 findings pass through AST deduplication in content_scanner._deduplicate()."
+    category: reliability
+    acceptance:
+      - "Multiple ROT13 detectors on the same line produce at most one OBFS-001 per line"
+    verify: test::tests/unit/test_ast_rot13.py
+    status: done
+
+  - id: R-IMP014
+    requirement: "_ast_rot13.py is under 250 lines."
+    category: reliability
+    acceptance:
+      - "wc -l src/skill_scan/_ast_rot13.py shows <= 250"
+    verify: manual
+    status: done
+
+  - id: R-IMP015
+    requirement: "URL and unicode decoded payloads feed into Pass 4 recursive scanning pipeline."
+    category: functional
+    acceptance:
+      - "Malicious content in URL-encoded payload detected end-to-end"
+      - "Malicious content in unicode-escape payload detected end-to-end"
+    verify: test::tests/unit/test_decoder_url_unicode.py
+    status: done
+
+  # ──────────────────────────────────────────────────────────────
+  # Effectiveness / Adversarial (handled as debt FIRST)
+  # ──────────────────────────────────────────────────────────────
+
+  - id: R-ADV001
+    requirement: "Import-alias tracking for AST detectors so aliased imports (e.g., import codecs as c) resolve correctly. Cross-cutting — benefits all detectors."
+    category: effectiveness
+    attack_class: import aliasing
+    acceptance:
+      - "import codecs as c; c.encode(x, 'rot_13') produces a finding"
+      - "Alias map built from Import/ImportFrom nodes"
+      - "All existing AST detectors accept alias_map parameter"
+    verify: test::tests/unit/test_ast_alias.py
+    status: done
+
+  - id: R-ADV002
+    requirement: "String-concat splitting for regex rules documented as known limitation of line-based scanning."
+    category: effectiveness
+    attack_class: string concatenation splitting
+    acceptance:
+      - "obfuscation.toml header documents the limitation"
+    verify: manual
+    status: done
+
+  - id: R-ADV003
+    requirement: "Unicode escape regex handles mixed \\uXXXX and \\UXXXXXXXX in the same run."
+    category: effectiveness
+    attack_class: escape sequence variation
+    acceptance:
+      - "Test covers mixed \\uXXXX and \\UXXXXXXXX in same run"
+      - "Test covers sequences adjacent to non-escape characters"
+    verify: test::tests/unit/test_obfs_rules.py
+    status: done
