@@ -1,0 +1,43 @@
+# Obfuscation Detection Rules
+# Category: obfuscation
+# Rules OBFS-002 through OBFS-005
+#
+# Known limitation (R-ADV002): Multi-line string concatenation cannot be
+# detected by line-based regex scanning. Payloads split across lines will
+# not be caught by these rules.
+
+[rules.OBFS-002]
+severity = "medium"
+category = "obfuscation"
+description = "URL-encoded payload -- three or more consecutive percent-encoded bytes"
+recommendation = "Decode and inspect the URL-encoded content; remove if it contains malicious payloads"
+patterns = [
+  '(?:%[0-9A-Fa-f]{2}){3,}'
+]
+
+[rules.OBFS-003]
+severity = "high"
+category = "obfuscation"
+description = "Double URL-encoding -- percent-encoded percent sign followed by hex pair (%25XX)"
+recommendation = "Remove double-encoding layers; this technique is commonly used to bypass security filters"
+patterns = [
+  '%25[0-9A-Fa-f]{2}'
+]
+
+[rules.OBFS-004]
+severity = "medium"
+category = "obfuscation"
+description = "Unnecessarily encoded unreserved character -- RFC 3986 alphanumeric encoded as %XX"
+recommendation = "Replace percent-encoded unreserved characters with their literal equivalents; unnecessary encoding may indicate evasion"
+patterns = [
+  '%(?:3[0-9]|4[1-9A-Fa-f]|5[0-9Aa]|6[1-9A-Fa-f]|7[0-9Aa])'
+]
+
+[rules.OBFS-005]
+severity = "medium"
+category = "obfuscation"
+description = "Unicode-escaped payload -- three or more consecutive \\uXXXX or \\UXXXXXXXX escape sequences"
+recommendation = "Decode and inspect the unicode-escaped content; consecutive unicode escapes may hide malicious payloads"
+patterns = [
+  '(?:\\u[0-9A-Fa-f]{4}|\\U[0-9A-Fa-f]{8}){3,}'
+]

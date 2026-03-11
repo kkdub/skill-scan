@@ -6,7 +6,7 @@ Procedural rules are implemented directly in Python modules.
 
 To add a custom rule, copy a section from [template.toml](src/skill_scan/rules/template.toml) into a new `.toml` file or your `--config` file.
 
-**73 rules** across 8 categories.
+**77 rules** across 9 categories.
 
 ## Prompt Injection
 
@@ -101,6 +101,15 @@ To add a custom rule, copy a section from [template.toml](src/skill_scan/rules/t
 | TOOL-001 | high | Destructive file operations -- rm -rf /, disk overwrite, or filesystem format commands | stable |
 | TOOL-002 | high | Privilege escalation instructions -- overly permissive chmod, root shell, or admin group modification | stable |
 | TOOL-003 | medium | Tool chaining abuse -- dangerous command sequences that chain execution with deletion or device writes | stable |
+
+## Obfuscation
+
+| Rule ID | Severity | Description | Confidence |
+|---------|----------|-------------|------------|
+| OBFS-002 | medium | URL-encoded payload -- three or more consecutive percent-encoded bytes | stable |
+| OBFS-003 | high | Double URL-encoding -- percent-encoded percent sign followed by hex pair (%25XX) | stable |
+| OBFS-004 | medium | Unnecessarily encoded unreserved character -- RFC 3986 alphanumeric encoded as %XX | stable |
+| OBFS-005 | medium | Unicode-escaped payload -- three or more consecutive \uXXXX or \UXXXXXXXX escape sequences | stable |
 
 ## File Safety
 

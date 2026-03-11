@@ -1,4 +1,4 @@
-"""AST detector functions — identify unsafe patterns in parsed syntax trees.
+"""AST detector functions -- identify unsafe patterns in parsed syntax trees.
 
 Pure functions that take AST nodes and return Finding lists. No I/O,
 no logging, no side effects. Used by ast_analyzer.py (the facade).
@@ -58,12 +58,14 @@ _UNSAFE_DESER_CALLS = frozenset(
 )
 
 
-def _detect_unsafe_calls(node: ast.AST, file_path: str) -> list[Finding]:
+def _detect_unsafe_calls(
+    node: ast.AST, file_path: str, *, alias_map: dict[str, str] | None = None
+) -> list[Finding]:
     """Detect eval(), exec(), os.system/popen/exec*/spawn*, subprocess shell=True."""
     if not isinstance(node, ast.Call):
         return []
 
-    name = get_call_name(node)
+    name = get_call_name(node, alias_map)
 
     if name in _UNSAFE_EXEC_CALLS:
         return [
@@ -73,7 +75,7 @@ def _detect_unsafe_calls(node: ast.AST, file_path: str) -> list[Finding]:
                 file=file_path,
                 line=node.lineno,
                 matched_text=f"{name}(",
-                description=f"Dynamic code execution — {name}() call detected via AST",
+                description=f"Dynamic code execution -- {name}() call detected via AST",
             )
         ]
     if is_subprocess_shell_true(node, name):
@@ -84,18 +86,20 @@ def _detect_unsafe_calls(node: ast.AST, file_path: str) -> list[Finding]:
                 file=file_path,
                 line=node.lineno,
                 matched_text=f"{name}(shell=True)",
-                description="Dynamic code execution — subprocess with shell=True detected via AST",
+                description="Dynamic code execution -- subprocess with shell=True detected via AST",
             )
         ]
     return []
 
 
-def _detect_dynamic_imports(node: ast.AST, file_path: str) -> list[Finding]:
+def _detect_dynamic_imports(
+    node: ast.AST, file_path: str, *, alias_map: dict[str, str] | None = None
+) -> list[Finding]:
     """Detect __import__() and importlib.import_module()."""
     if not isinstance(node, ast.Call):
         return []
 
-    name = get_call_name(node)
+    name = get_call_name(node, alias_map)
     if name in ("__import__", "importlib.import_module"):
         return [
             _make_finding(
@@ -104,18 +108,20 @@ def _detect_dynamic_imports(node: ast.AST, file_path: str) -> list[Finding]:
                 file=file_path,
                 line=node.lineno,
                 matched_text=f"{name}(",
-                description=f"Dynamic indirection — {name}() detected via AST",
+                description=f"Dynamic indirection -- {name}() detected via AST",
             )
         ]
     return []
 
 
-def _detect_unsafe_deserialization(node: ast.AST, file_path: str) -> list[Finding]:
+def _detect_unsafe_deserialization(
+    node: ast.AST, file_path: str, *, alias_map: dict[str, str] | None = None
+) -> list[Finding]:
     """Detect pickle/marshal/shelve/cloudpickle/dill, yaml.load/unsafe_load."""
     if not isinstance(node, ast.Call):
         return []
 
-    name = get_call_name(node)
+    name = get_call_name(node, alias_map)
 
     if name in _UNSAFE_DESER_CALLS:
         return [
@@ -125,11 +131,11 @@ def _detect_unsafe_deserialization(node: ast.AST, file_path: str) -> list[Findin
                 file=file_path,
                 line=node.lineno,
                 matched_text=f"{name}(",
-                description=f"Unsafe deserialization — {name}() detected via AST",
+                description=f"Unsafe deserialization -- {name}() detected via AST",
             )
         ]
 
-    # yaml.load — only flag if SafeLoader is NOT used
+    # yaml.load -- only flag if SafeLoader is NOT used
     if name == "yaml.load" and not has_safe_loader(node):
         return [
             _make_finding(
@@ -138,14 +144,16 @@ def _detect_unsafe_deserialization(node: ast.AST, file_path: str) -> list[Findin
                 file=file_path,
                 line=node.lineno,
                 matched_text="yaml.load(",
-                description="Unsafe deserialization — yaml.load() without SafeLoader detected via AST",
+                description="Unsafe deserialization -- yaml.load() without SafeLoader detected via AST",
             )
         ]
 
     return []
 
 
-def _detect_string_concat_evasion(node: ast.AST, file_path: str) -> list[Finding]:
+def _detect_string_concat_evasion(
+    node: ast.AST, file_path: str, *, alias_map: dict[str, str] | None = None
+) -> list[Finding]:
     """Detect string concatenation building dangerous function names.
 
     Catches patterns like:
@@ -153,7 +161,7 @@ def _detect_string_concat_evasion(node: ast.AST, file_path: str) -> list[Finding
     - ''.join(['e','v','a','l'])  (join on list of char constants)
     - chr(101) + chr(118) + ...  (chr() calls building strings)
 
-    Skips plain ast.Constant nodes — a literal like 'eval' in source code
+    Skips plain ast.Constant nodes -- a literal like 'eval' in source code
     is not evasion and must not trigger a finding (R-EFF002).
     """
     if isinstance(node, ast.Constant):
@@ -167,18 +175,20 @@ def _detect_string_concat_evasion(node: ast.AST, file_path: str) -> list[Finding
                 file=file_path,
                 line=getattr(node, "lineno", None),
                 matched_text=f"string evasion building '{resolved}'",
-                description=f"String concatenation evasion — builds '{resolved}' via AST",
+                description=f"String concatenation evasion -- builds '{resolved}' via AST",
             )
         ]
     return []
 
 
-def _detect_dynamic_access(node: ast.AST, file_path: str) -> list[Finding]:
+def _detect_dynamic_access(
+    node: ast.AST, file_path: str, *, alias_map: dict[str, str] | None = None
+) -> list[Finding]:
     """Detect getattr() with string concat building dangerous names."""
     if not isinstance(node, ast.Call):
         return []
 
-    name = get_call_name(node)
+    name = get_call_name(node, alias_map)
     if name != "getattr" or len(node.args) < 2:
         return []
 
@@ -191,7 +201,7 @@ def _detect_dynamic_access(node: ast.AST, file_path: str) -> list[Finding]:
                 file=file_path,
                 line=node.lineno,
                 matched_text=f"getattr(..., '{resolved}')",
-                description=f"Dynamic indirection — getattr building '{resolved}' detected via AST",
+                description=f"Dynamic indirection -- getattr building '{resolved}' detected via AST",
             )
         ]
     return []

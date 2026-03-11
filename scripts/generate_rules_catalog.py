@@ -77,6 +77,7 @@ _CATEGORY_ORDER = [
     "credential-exposure",
     "supply-chain",
     "tool-abuse",
+    "obfuscation",
     "file-safety",
     "schema-validation",
 ]
@@ -88,6 +89,7 @@ _CATEGORY_TITLES = {
     "credential-exposure": "Credential Exposure",
     "supply-chain": "Supply Chain",
     "tool-abuse": "Tool Abuse",
+    "obfuscation": "Obfuscation",
     "file-safety": "File Safety",
     "schema-validation": "Schema Validation",
 }
