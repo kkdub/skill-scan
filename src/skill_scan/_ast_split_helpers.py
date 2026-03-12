@@ -26,8 +26,8 @@ def _scoped_lookup(name: str, symbol_table: dict[str, str], scope: str) -> str |
 # Matches {} or {0}, {1}, etc. (simple positional placeholders only)
 _FORMAT_PLACEHOLDER_RE = re.compile(r"\{(\d*)\}")
 
-# Matches %s placeholders
-_PERCENT_S_RE = re.compile(r"%s")
+# Matches %s placeholders (negative lookbehind excludes escaped %% sequences)
+_PERCENT_S_RE = re.compile(r"(?<!%)%s")
 
 
 def _resolve_format_call(

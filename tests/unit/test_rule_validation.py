@@ -7,7 +7,6 @@ which file is broken. Also checks RULES.md freshness.
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
 import pytest
@@ -60,9 +59,9 @@ class TestRulesCatalog:
     """Verify RULES.md stays in sync with generated output."""
 
     @pytest.fixture(autouse=True)
-    def _import_catalog(self) -> None:
+    def _import_catalog(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """Import catalog generator and make it available to all tests."""
-        sys.path.insert(0, str(_REPO_ROOT / "scripts"))
+        monkeypatch.syspath_prepend(str(_REPO_ROOT / "scripts"))
         import generate_rules_catalog as mod  # type: ignore[import-not-found]
 
         self._catalog_mod = mod
