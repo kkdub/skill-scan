@@ -68,30 +68,34 @@ def _extract_unicode_escape_from_line(line: str, line_num: int) -> list[EncodedP
 def _decode_url_encoded(text: str) -> str:
     """Decode a URL-encoded string to plain text.
 
-    Uses ``urllib.parse.unquote`` (stdlib). Returns the decoded string.
+    Uses ``urllib.parse.unquote`` (stdlib). Strips null bytes from the
+    decoded output to prevent null-byte-interspersed evasion.
 
     Args:
         text: URL-encoded string (e.g. ``%65%76%61%6C%28%29``).
 
     Returns:
-        Decoded plain text string.
+        Decoded plain text string with null bytes removed.
     """
-    return urllib.parse.unquote(text)
+    return urllib.parse.unquote(text).replace("\x00", "")
 
 
 def _decode_unicode_escape(text: str) -> str:
     r"""Decode a unicode-escape string to plain text.
 
     Handles ``\uXXXX`` and ``\UXXXXXXXX`` sequences by encoding to
-    raw bytes and decoding with ``unicode_escape``.
+    raw bytes and decoding with ``unicode_escape``. Strips lone surrogate
+    characters (U+D800-U+DFFF) from the decoded output to prevent
+    surrogate-based evasion.
 
     Args:
         text: Unicode-escaped string (e.g. ``\u0065\u0076\u0061\u006C``).
 
     Returns:
-        Decoded plain text string.
+        Decoded plain text string with surrogates removed.
 
     Raises:
         ValueError: If the escape sequence is malformed.
     """
-    return text.encode("raw_unicode_escape").decode("unicode_escape")
+    decoded = text.encode("raw_unicode_escape").decode("unicode_escape")
+    return "".join(c for c in decoded if not (0xD800 <= ord(c) <= 0xDFFF))

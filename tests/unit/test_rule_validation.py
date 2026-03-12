@@ -59,16 +59,47 @@ class TestRuleUniqueness:
 class TestRulesCatalog:
     """Verify RULES.md stays in sync with generated output."""
 
+    @pytest.fixture(autouse=True)
+    def _import_catalog(self) -> None:
+        """Import catalog generator and make it available to all tests."""
+        sys.path.insert(0, str(_REPO_ROOT / "scripts"))
+        import generate_rules_catalog as mod  # type: ignore[import-not-found]
+
+        self._catalog_mod = mod
+
     def test_rules_md_is_fresh(self) -> None:
         """RULES.md matches generated output. Run `make rules-catalog` to fix."""
         rules_md = _REPO_ROOT / "RULES.md"
         if not rules_md.exists():
             pytest.skip("RULES.md not found")
 
-        # Import the generator script
-        sys.path.insert(0, str(_REPO_ROOT / "scripts"))
-        from generate_rules_catalog import generate_catalog  # type: ignore[import-not-found]
-
-        expected = generate_catalog()
+        expected = self._catalog_mod.generate_catalog()
         actual = rules_md.read_text(encoding="utf-8")
         assert actual == expected, "RULES.md is stale. Run `make rules-catalog` to regenerate."
+
+    def test_obfs001_in_procedural_rules(self) -> None:
+        """OBFS-001 entry exists in _PROCEDURAL_RULES with correct metadata."""
+        rules = self._catalog_mod._PROCEDURAL_RULES
+        obfs = [r for r in rules if r.rule_id == "OBFS-001"]
+        assert len(obfs) == 1, "OBFS-001 must appear exactly once in _PROCEDURAL_RULES"
+        entry = obfs[0]
+        assert entry.severity == "high"
+        assert entry.category == "obfuscation"
+        assert entry.confidence == "stable"
+        assert entry.source == "procedural"
+
+    def test_obfs001_in_obfuscation_section(self) -> None:
+        """Generated catalog places OBFS-001 in the Obfuscation section."""
+        groups = self._catalog_mod.collect_rules()
+        obfuscation_ids = [r.rule_id for r in groups.get("obfuscation", [])]
+        assert "OBFS-001" in obfuscation_ids
+
+    def test_no_missing_ast_procedural_rules(self) -> None:
+        """All AST-only rule IDs are covered by _PROCEDURAL_RULES or TOML rules."""
+        # AST detectors emit these rule IDs
+        ast_rule_ids = {"EXEC-002", "EXEC-006", "EXEC-007", "OBFS-001"}
+        # Collect all rule IDs from TOML + procedural
+        groups = self._catalog_mod.collect_rules()
+        all_catalog_ids = {r.rule_id for rules in groups.values() for r in rules}
+        missing = ast_rule_ids - all_catalog_ids
+        assert not missing, f"AST rule IDs missing from catalog: {sorted(missing)}"

@@ -506,6 +506,33 @@ if entry is not None:
 
 > Trap: `_NAME_RULE` is derived from `_EXEC_NAMES` and `_DYNAMIC_IMPORT_NAMES`, so adding a new name to `_DANGEROUS_NAMES` only affects EXEC-006 classification if you also add that name to `_DYNAMIC_IMPORT_NAMES`.
 
+## Format/%-Format Resolution with Constant-Receiver Gate
+
+When resolving `str.format()` or `%-format` expressions in AST analysis, gate on string-constant receivers/LHS before resolving arguments. This prevents false positives on `variable.format(...)` (which cannot be statically resolved) and `integer % integer` (modulo arithmetic).
+
+```python
+def _resolve_format_call(node: ast.Call, ...) -> str | None:
+    # Gate 1: func must be Attribute with attr == 'format'
+    if not isinstance(node.func, ast.Attribute) or node.func.attr != "format":
+        return None
+    # Gate 2: receiver must be a string constant (not a variable)
+    if not isinstance(node.func.value, ast.Constant):
+        return None
+    if not isinstance(node.func.value.value, str):
+        return None
+    ...
+
+def _resolve_percent_format(node: ast.BinOp, ...) -> str | None:
+    # Gate: LHS must be a string constant (not integer -- avoids 10 % 3)
+    if not isinstance(node.left, ast.Constant):
+        return None
+    if not isinstance(node.left.value, str):
+        return None
+    ...
+```
+
+> Trap: checking only `isinstance(node.func.value, ast.Constant)` without the `isinstance(..., str)` check admits numeric receivers like `(42).format(...)`.
+
 ## Facade Re-export Pattern
 
 When splitting a large module into sibling files, keep the original file as a facade: it retains the orchestrator/entry-point functions and types, then re-exports all names from sibling files at the BOTTOM. This preserves every existing import path and mock.patch target.
