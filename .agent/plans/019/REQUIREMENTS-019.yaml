@@ -1,0 +1,207 @@
+# REQUIREMENTS-019: Decoder sanitization, catalog gap, and format-string evasion
+# Source: .agent/status/debt.yaml (PLAN-017 items 1-3, PLAN-018 DEBT-018-T2-FORMAT)
+# Extracted: 2026-03-12
+
+requirements:
+  # --- Explicit requirements (from spec) ---
+
+  - id: R001
+    description: "_decode_unicode_escape() strips all lone surrogate characters (U+D800-U+DFFF) from decoded output before returning"
+    category: security
+    source: "debt.yaml item 1 / src/skill_scan/_decoder_url_unicode.py:82-97"
+    contract:
+      given: "Input string containing \\uD800 or other surrogates mixed with valid escapes"
+      when: "_decode_unicode_escape(text) is called"
+      then: "Returned string contains no characters with 0xD800 <= ord(c) <= 0xDFFF"
+    acceptance:
+      - "Return value contains no surrogate characters"
+      - "Non-surrogate decoded characters are preserved unchanged"
+    verify: "test::tests/unit/test_decoder_url_unicode.py"
+    status: done
+
+  - id: R002
+    description: "_decode_url_encoded() strips all null bytes (\\x00) from decoded output before returning"
+    category: security
+    source: "debt.yaml item 2 / src/skill_scan/_decoder_url_unicode.py:68-79"
+    contract:
+      given: "URL-encoded string like %65%00%76%61%6C"
+      when: "_decode_url_encoded(text) is called"
+      then: "Returned string is 'eval' with no \\x00 bytes"
+    acceptance:
+      - "Return value contains no \\x00 character"
+      - "Non-null decoded characters are preserved unchanged"
+    verify: "test::tests/unit/test_decoder_url_unicode.py"
+    status: done
+
+  - id: R003
+    description: "_PROCEDURAL_RULES in generate_rules_catalog.py contains OBFS-001 entry with correct metadata"
+    category: functional
+    source: "debt.yaml item 3 / scripts/generate_rules_catalog.py:37-71"
+    contract:
+      given: "_PROCEDURAL_RULES list"
+      when: "Searched for rule_id == 'OBFS-001'"
+      then: "Exactly one RuleInfo with severity='high', category='obfuscation', confidence='stable', source='procedural'"
+    acceptance:
+      - "OBFS-001 entry exists in _PROCEDURAL_RULES"
+      - "All metadata fields match spec"
+    verify: "grep::OBFS-001::scripts/generate_rules_catalog.py"
+    status: done
+
+  - id: R004
+    description: "detect_split_evasion() resolves 'template'.format(a, b) string assembly and checks for dangerous names"
+    category: functional
+    source: "debt.yaml DEBT-018-T2-FORMAT"
+    contract:
+      given: "Python AST of: a = 'ev'; b = 'al'; result = '{}{}'.format(a, b)"
+      when: "detect_split_evasion(tree, file_path, {}, symbol_table) is called"
+      then: "Returns a Finding with rule_id EXEC-002"
+    acceptance:
+      - "Format-assembled dangerous names produce EXEC-002 findings"
+      - "Format-assembled dynamic import names produce EXEC-006 findings"
+    verify: "test::tests/unit/test_ast_split_detector.py"
+    status: done
+
+  - id: R005
+    description: "detect_split_evasion() resolves '%s%s' % (a, b) BinOp(Mod) string assembly and checks for dangerous names"
+    category: functional
+    source: "debt.yaml DEBT-018-T2-FORMAT"
+    contract:
+      given: "Python AST of: a = 'ev'; b = 'al'; result = '%s%s' % (a, b)"
+      when: "detect_split_evasion(tree, file_path, {}, symbol_table) is called"
+      then: "Returns a Finding with rule_id EXEC-002"
+    acceptance:
+      - "%-assembled dangerous names produce EXEC-002 findings"
+      - "Integer modulo expressions do not produce findings"
+    verify: "test::tests/unit/test_ast_split_detector.py"
+    status: done
+
+  - id: R006
+    description: "New format/%-format resolution logic resides in new _ast_split_helpers.py, not in _ast_split_detector.py"
+    category: structural
+    source: "debt.yaml DEBT-018-T2-FORMAT (file capacity constraint: 249/250 lines)"
+    acceptance:
+      - "_ast_split_detector.py remains at or below 250 lines"
+      - "_ast_split_helpers.py exists and contains the format/%-resolution functions"
+    verify: "file::src/skill_scan/_ast_split_helpers.py"
+    status: done
+
+  # --- Implicit requirements ---
+
+  - id: R-IMP001
+    description: "Surrogate stripping handles both isolated high (D800-DBFF) and low (DC00-DFFF) surrogates without exception"
+    category: security
+    source: implicit
+    verify: "test::tests/unit/test_decoder_url_unicode.py"
+    status: done
+
+  - id: R-IMP002
+    description: "Surrogate sanitization has regression tests for boundary values U+D800, U+DC00, U+DFFF"
+    category: reliability
+    source: implicit
+    verify: "test::tests/unit/test_decoder_url_unicode.py"
+    status: done
+
+  - id: R-IMP003
+    description: "Null-byte stripping removes only \\x00 and leaves all other decoded bytes unchanged"
+    category: security
+    source: implicit
+    verify: "test::tests/unit/test_decoder_url_unicode.py"
+    status: done
+
+  - id: R-IMP004
+    description: "Null-byte stripping tested with %00-encoded payload input"
+    category: reliability
+    source: implicit
+    verify: "test::tests/unit/test_decoder_url_unicode.py"
+    status: done
+
+  - id: R-IMP005
+    description: "generate_rules_catalog.py output places OBFS-001 in the Obfuscation section"
+    category: reliability
+    source: implicit
+    verify: "test::scripts/generate_rules_catalog.py output"
+    status: done
+
+  - id: R-IMP006
+    description: "No other AST-only rule IDs beyond OBFS-001 are absent from catalog coverage"
+    category: reliability
+    source: implicit
+    verify: manual
+    status: done
+
+  - id: R-IMP007
+    description: "detect_split_evasion() signature unchanged — helpers imported by _ast_split_detector.py"
+    category: functional
+    source: implicit
+    verify: "test::tests/unit/test_ast_split_detector.py"
+    status: done
+
+  - id: R-IMP008
+    description: "str.format() resolution triggers only on string-constant receiver (not variable.format())"
+    category: functional
+    source: implicit
+    verify: "test::tests/unit/test_ast_split_detector.py"
+    status: done
+
+  - id: R-IMP009
+    description: "%-formatting resolution triggers only on string-constant LHS (not integer modulo)"
+    category: functional
+    source: implicit
+    verify: "test::tests/unit/test_ast_split_detector.py"
+    status: done
+
+  - id: R-IMP010
+    description: "Resolved format/%-strings pass through existing _check_dangerous() and _check_encoded() pipeline"
+    category: functional
+    source: implicit
+    verify: "test::tests/unit/test_ast_split_detector.py"
+    status: done
+
+  - id: R-IMP011
+    description: "Evasion corpus includes positive fixtures for str.format() and %-formatting evasions"
+    category: reliability
+    source: implicit
+    verify: "file::tests/fixtures/split_evasion/pos_format_*.py"
+    status: done
+
+  - id: R-IMP012
+    description: "All existing negative fixtures still produce zero findings after format/%-format resolution"
+    category: reliability
+    source: implicit
+    verify: "test::tests/unit/test_evasion_corpus.py"
+    status: done
+
+  # --- Effectiveness requirements ---
+
+  - id: R-EFF001
+    description: "Surrogate-mixed payloads produce surrogate-free strings enabling downstream rule matching"
+    category: effectiveness
+    source: implicit
+    attack_class: "surrogate injection via unicode-escape encoding"
+    verify: "test::tests/unit/test_decoder_url_unicode.py"
+    status: done
+
+  - id: R-EFF002
+    description: "Null-byte-interspersed payloads produce null-free strings enabling dangerous name detection"
+    category: effectiveness
+    source: implicit
+    attack_class: "null-byte injection via URL encoding"
+    verify: "test::tests/unit/test_decoder_url_unicode.py"
+    status: done
+
+  - id: R-EFF003
+    description: "All 3 known format/%-formatting evasions detected with zero misses"
+    category: effectiveness
+    source: "debt.yaml DEBT-018-T2-FORMAT (3 evasions)"
+    threshold: "3/3"
+    corpus: "tests/fixtures/split_evasion/ (pos_format_*, pos_percent_*)"
+    verify: "corpus::tests/fixtures/split_evasion"
+    status: done
+
+  - id: R-EFF004
+    description: "No false positives from format/%-format resolution on safe patterns"
+    category: effectiveness
+    source: implicit
+    threshold: "0 false positives"
+    verify: "test::tests/unit/test_ast_split_detector.py"
+    status: done

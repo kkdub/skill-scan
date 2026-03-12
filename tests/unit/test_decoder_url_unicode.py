@@ -7,7 +7,6 @@ from pathlib import Path
 from skill_scan.ast_analyzer import analyze_python
 from skill_scan.content_scanner import scan_all_files
 from skill_scan.decoder import (
-    EncodedPayload,
     _UNICODE_ESCAPE_RE,
     _URL_ENCODED_RE,
     _decode_unicode_escape,
@@ -19,10 +18,7 @@ from skill_scan.decoder import (
 )
 from skill_scan.rules import load_default_rules
 
-
-def _make_payload(text: str, encoding: str) -> EncodedPayload:
-    """Construct an EncodedPayload with default line/offset for unit tests."""
-    return EncodedPayload(encoded_text=text, encoding_type=encoding, line_num=1, start_offset=0)
+from .rule_helpers import make_encoded_payload as _make_payload
 
 
 class TestExtractUrlEncoded:

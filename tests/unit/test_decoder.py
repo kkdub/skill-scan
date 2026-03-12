@@ -8,15 +8,11 @@ from skill_scan.decoder import (
     MAX_DECODED_SIZE,
     MAX_DECODE_DEPTH,
     MIN_ENCODED_LENGTH,
-    EncodedPayload,
     decode_payload,
     extract_encoded_strings,
 )
 
-
-def _make_payload(text: str, encoding: str) -> EncodedPayload:
-    """Construct an EncodedPayload with default line/offset for unit tests."""
-    return EncodedPayload(encoded_text=text, encoding_type=encoding, line_num=1, start_offset=0)
+from .rule_helpers import make_encoded_payload as _make_payload
 
 
 class TestExtractBase64:

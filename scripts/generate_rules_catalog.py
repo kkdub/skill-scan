@@ -31,9 +31,11 @@ class RuleInfo:
     source: str  # "pattern" or "procedural"
 
 
-# FS-001..008 and SV-001: procedural rules defined in Python code.
-# These change very rarely. Update here if file_checks.py, content_scanner.py,
-# or scanner.py rule metadata changes.
+# Procedural rules defined in Python code (not in TOML files).
+# FS-001..008: file_checks.py / content_scanner.py / scanner.py
+# SV-001: schema validation in scanner.py
+# OBFS-001: ROT13 obfuscation detection in _ast_rot13.py
+# Update here if procedural rule metadata changes.
 _PROCEDURAL_RULES: list[RuleInfo] = [
     RuleInfo(
         "FS-001", "medium", "file-safety", "File is not valid UTF-8 and was skipped", "stable", "procedural"
@@ -60,6 +62,14 @@ _PROCEDURAL_RULES: list[RuleInfo] = [
         "FS-007", "medium", "file-safety", "File count exceeds configured limit", "stable", "procedural"
     ),
     RuleInfo("FS-008", "medium", "file-safety", "File could not be read (OS error)", "stable", "procedural"),
+    RuleInfo(
+        "OBFS-001",
+        "high",
+        "obfuscation",
+        "ROT13 obfuscation detected via AST analysis",
+        "stable",
+        "procedural",
+    ),
     RuleInfo(
         "SV-001",
         "medium",

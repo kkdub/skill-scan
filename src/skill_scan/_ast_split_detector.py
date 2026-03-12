@@ -6,6 +6,12 @@ import ast
 import re
 
 from skill_scan._ast_detectors import _DANGEROUS_NAMES, _make_finding
+from skill_scan._ast_split_helpers import (
+    _resolve_format_call,
+    _resolve_join_elements,
+    _resolve_percent_format,
+    _scoped_lookup,
+)
 from skill_scan.decoder import decode_payload, extract_encoded_strings
 from skill_scan.models import Finding, Severity
 
@@ -56,27 +62,23 @@ def _build_scope_map(tree: ast.Module) -> dict[int, str]:
     return result
 
 
-def _scoped_lookup(name: str, symbol_table: dict[str, str], scope: str) -> str | None:
-    """Look up name in symbol table, trying function scope first."""
-    if scope:
-        val = symbol_table.get(f"{scope}.{name}")
-        if val is not None:
-            return val
-    return symbol_table.get(name)
-
-
 def _try_resolve_split(
     node: ast.AST,
     symbol_table: dict[str, str],
     scope: str,
 ) -> str | None:
-    """Try to resolve a node to a string via BinOp(Add), f-string, or join."""
-    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
-        return _resolve_binop_chain(node, symbol_table, scope)
+    """Try to resolve a node to a string via BinOp(Add/Mod), f-string, join, or format."""
+    if isinstance(node, ast.BinOp):
+        if isinstance(node.op, ast.Add):
+            return _resolve_binop_chain(node, symbol_table, scope)
+        if isinstance(node.op, ast.Mod):
+            return _resolve_percent_format(node, symbol_table, scope)
     if isinstance(node, ast.JoinedStr):
         return _resolve_fstring(node, symbol_table, scope)
     if isinstance(node, ast.Call):
-        return _resolve_join_call(node, symbol_table, scope)
+        return _resolve_join_call(node, symbol_table, scope) or _resolve_format_call(
+            node, symbol_table, scope
+        )
     return None
 
 
@@ -159,11 +161,7 @@ def _resolve_join_call(
     symbol_table: dict[str, str],
     scope: str,
 ) -> str | None:
-    """Resolve ''.join([a, b, ...]) where elements are tracked variables.
-
-    The receiver must be a string constant (the separator).
-    The argument must be a list/tuple literal with Name or Constant elements.
-    """
+    """Resolve ''.join([a, b, ...]) where receiver is a string constant separator."""
     if not _is_str_join_call(node):
         return None
 
@@ -187,27 +185,6 @@ def _is_str_join_call(node: ast.Call) -> bool:
         and isinstance(node.func.value.value, str)
         and len(node.args) == 1
     )
-
-
-def _resolve_join_elements(
-    elts: list[ast.expr],
-    sep: str,
-    symbol_table: dict[str, str],
-    scope: str,
-) -> str | None:
-    """Resolve list/tuple elements to a joined string using the symbol table."""
-    parts: list[str] = []
-    for elt in elts:
-        if isinstance(elt, ast.Name):
-            val = _scoped_lookup(elt.id, symbol_table, scope)
-            if val is None:
-                return None
-            parts.append(val)
-        elif isinstance(elt, ast.Constant) and isinstance(elt.value, str):
-            parts.append(elt.value)
-        else:
-            return None
-    return sep.join(parts)
 
 
 def _check_dangerous(

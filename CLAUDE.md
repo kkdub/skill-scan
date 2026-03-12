@@ -44,7 +44,8 @@ src/skill_scan/           # Production source code
   _ast_join_helpers.py    # Private join-resolution helpers extracted from _ast_helpers
   _ast_rot13.py           # ROT13 AST detectors (is_rot13_pair, _detect_rot13_codec, _detect_rot13_maketrans)
   _ast_symbol_table.py    # Symbol table builder (build_symbol_table); pre-pass variable-to-string mapping with scope isolation
-  _ast_split_detector.py  # Split-evasion detector (detect_split_evasion); reconstructs concat/f-string/join payloads
+  _ast_split_detector.py  # Split-evasion detector (detect_split_evasion); reconstructs concat/f-string/join/format/%-format payloads
+  _ast_split_helpers.py   # Private format/%-format resolution helpers (_resolve_format_call, _resolve_percent_format, _resolve_expr_list, _resolve_join_elements, _scoped_lookup)
   decoder.py              # Facade: EncodedPayload, public constants, extract/decode + re-exports from _decoder_helpers + _decoder_url_unicode
   _decoder_helpers.py     # Private regex constants and extraction/decode helpers (base64, hex)
   _decoder_url_unicode.py # Private URL/unicode-escape extraction and decode helpers
@@ -76,11 +77,14 @@ Dockerfile                # Containerized scanner (python:3.13-slim, non-root us
 - `ast_analyzer.py` uses a `_DETECTORS` tuple to register all detector functions; add new detectors to this tuple
 - `analyze_python()` also calls `build_symbol_table(tree)` and `detect_split_evasion(tree, file_path, alias_map, symbol_table)` separately from the `_DETECTORS` loop — tree-level detectors that need the full symbol table go here, not in `_DETECTORS`
 - `build_symbol_table(tree: ast.Module) -> dict[str, str]` in `_ast_symbol_table.py` — pre-pass that returns a flat dict of variable-to-string mappings; function-scoped variables are prefixed `"funcname.varname"`; bounded by `MAX_RESOLVE_DEPTH = 50`; circular references are dropped silently
-- `detect_split_evasion(tree, file_path, alias_map, symbol_table) -> list[Finding]` in `_ast_split_detector.py` — reconstructs strings assembled via `BinOp(Add)`, f-string interpolation, or `"".join(...)` using the symbol table; emits EXEC-002 for dangerous names (eval, exec, system, popen), EXEC-006 for dynamic import names (`__import__`, `getattr`); also bridges to decoder for split encoded payloads
+- `detect_split_evasion(tree, file_path, alias_map, symbol_table) -> list[Finding]` in `_ast_split_detector.py` — reconstructs strings assembled via `BinOp(Add)`, f-string interpolation, `"".join(...)`, `'template'.format(...)`, or `'%s%s' % (a, b)` using the symbol table; emits EXEC-002 for dangerous names (eval, exec, system, popen), EXEC-006 for dynamic import names (`__import__`, `getattr`); also bridges to decoder for split encoded payloads
 - `_NAME_RULE` in `_ast_split_detector.py` is a lookup table mapping each dangerous name to `(rule_id, severity, description_prefix)` — use this pattern when one detector must emit different rule IDs per matched name
+- `_ast_split_helpers.py` — private module with format/%-format resolution helpers; `_resolve_format_call(node, symbol_table, scope)` handles `'template'.format(a, b)` (gates on string-constant receiver); `_resolve_percent_format(node, symbol_table, scope)` handles `'%s%s' % (a, b)` (gates on string-constant LHS, avoids integer modulo); `_scoped_lookup` and `_resolve_join_elements` moved here from `_ast_split_detector.py` (re-imported back for backward compat)
 - `_Ref` sentinel class in `_ast_symbol_table.py` marks unresolved variable references during the pre-pass; resolved to `str` or dropped before `build_symbol_table()` returns
-- Evasion corpus at `tests/fixtures/split_evasion/` — 17 positive (should detect) and 4 negative (should not trigger) Python fixture files; prefix `pos_` / `neg_`
+- Evasion corpus at `tests/fixtures/split_evasion/` — 21 positive (should detect) and 4 negative (should not trigger) Python fixture files; prefix `pos_` / `neg_`; format/%-format fixtures use `UP030`/`UP031`/`UP032` ruff ignores (intentional old-style format syntax)
 - `decode_payload()` in `decoder.py` has two return paths: bytes→UTF-8 for `base64`/`hex`; direct `str` for `url`/`unicode_escape` (via `_decode_str_payload()`)
+- `_decode_unicode_escape()` in `_decoder_url_unicode.py` strips lone surrogate characters (U+D800–U+DFFF) from the decoded output to prevent surrogate-interspersed evasion; uses a generator expression filtering `0xD800 <= ord(c) <= 0xDFFF`
+- `_decode_url_encoded()` in `_decoder_url_unicode.py` strips null bytes (`\x00`) from the decoded output via `.replace('\x00', '')` to prevent null-byte-interspersed evasion
 - `EncodedPayload.encoding_type` accepts `'base64'` | `'hex'` | `'url'` | `'unicode_escape'`
 - OBFS-* is the rule namespace for obfuscation detection (distinct from EXEC-* for malicious code execution); OBFS-001 is AST-based (ROT13), OBFS-002..005 are regex-based in `obfuscation.toml`
 - `_ast_rot13.py` uses its own `_make_rot13_finding()` with `category='obfuscation'` — do NOT reuse `_make_finding` from `_ast_detectors.py` which hardcodes `category='malicious-code'`

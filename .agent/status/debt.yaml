@@ -1,48 +1,9 @@
 # .agent/status/debt.yaml
 # Entries are removed when resolved. Git history tracks removals.
-# Last updated: 2026-03-10 (debt review session)
-# DEBT-TEST-001 through DEBT-TEST-008 reviewed and resolved.
-# No remaining test debt entries.
-
-- description: "Lone surrogate characters (\uD800-\uDFFF) pass through unicode_escape decode"
-  type: security
-  severity: medium
-  plan: PLAN-017
-  files:
-    - src/skill_scan/_decoder_url_unicode.py:82-97
-  blocker: "Decoded content is only used for regex rule matching (read-only); no serialization path exists yet that would trigger surrogate errors"
-  resolution: "Add post-decode validation to strip or reject lone surrogates (check for chars in range 0xD800-0xDFFF after decode)"
-
-- description: "Null bytes in URL-decoded content may evade pattern matching"
-  type: security
-  severity: low
-  plan: PLAN-017
-  files:
-    - src/skill_scan/_decoder_url_unicode.py:68-79
-  blocker: "Inherent limitation of single-layer URL decoding; stripping nulls could mask legitimate content in non-security contexts"
-  resolution: "Strip null bytes from decoded content before passing to rule matching, or document as known evasion vector in threat model"
-
-- description: "OBFS-001 (AST-only ROT13 rule) absent from RULES.md catalog"
-  type: technical
-  plan: PLAN-017
-  files:
-    - scripts/generate_rules_catalog.py
-    - src/skill_scan/_ast_rot13.py
-  blocker: "generate_rules_catalog.py only reads TOML rule files; OBFS-001 is defined in Python code (_ast_rot13.py), not in obfuscation.toml. Adding AST-only rules to the catalog requires extending the script to read procedural rules from Python modules."
-  resolution: "Add a _PROCEDURAL_RULES dict to generate_rules_catalog.py that includes AST-only rule IDs (OBFS-001, and existing AST rules like EXEC-006 etc.) so they appear in RULES.md"
+# Last updated: 2026-03-12 (PLAN-019 resolved items 1-3 + DEBT-018-T2-FORMAT)
+# Resolved by PLAN-019: lone surrogates, null bytes, OBFS-001 catalog, str.format/%-format evasion
 
 # --- PLAN-018 Red-Team Debt (Tier 2-4) ---
-
-- id: DEBT-018-T2-FORMAT
-  description: "Split detector does not resolve str.format() or %-formatting string assembly"
-  type: effectiveness
-  severity: medium
-  plan: PLAN-018
-  files:
-    - src/skill_scan/_ast_split_detector.py
-  blocker: "_ast_split_detector.py is ~235 lines; remaining blocker is designing safe str.format() / %-format handling with recursion-depth guards."
-  resolution: "Add str.format() and BinOp(Mod) resolution to split detector. May require extracting helpers to a new _ast_split_helpers.py module."
-  evasions: 3
 
 - id: DEBT-018-T2-FSTRING-CONV
   description: "F-strings with conversion (!s, !r) or format specs (:>2) are not resolved"
@@ -128,11 +89,24 @@
   resolution: "Plan a comprehensive string-building resolution module that handles slice, reverse, chr(), comprehension, and bytes patterns."
   evasions: 13
 
-- id: DEBT-018-SEC-RECURSION
-  description: "_resolve_binop_chain/_resolve_operand mutual recursion depth limit"
-  type: technical
-  severity: resolved
-  plan: PLAN-018
+# --- PLAN-019 Security Review Debt ---
+
+- id: DEBT-019-PERCENT-OVERPROVISIONED
+  description: "_substitute_percent() does not detect over-provisioned value lists (more values than %s placeholders)"
+  type: security
+  severity: low
+  plan: PLAN-019
   files:
-    - src/skill_scan/_ast_split_detector.py
-  resolution: "Added _MAX_BINOP_DEPTH=50 and _depth parameter to _resolve_binop_chain/_resolve_operand. Returns None at depth > 50."
+    - src/skill_scan/_ast_split_helpers.py:137-168
+  blocker: "_resolve_percent_format() already guards with count == element count check; the inner _substitute_percent() is defense-in-depth only"
+  resolution: "Add len(values) == placeholder_count assertion in _substitute_percent() for defense-in-depth"
+
+- id: DEBT-019-PERCENT-MIXED-SPECIFIERS
+  description: "%-format resolver only matches %s; templates mixing %d/%r with %s evade detection"
+  type: security
+  severity: low
+  plan: PLAN-019
+  files:
+    - src/skill_scan/_ast_split_helpers.py:137-168
+  blocker: "Conservative design — %s-only matching produces zero false positives; enumerating all specifiers requires careful handling of %% literals and width/precision modifiers"
+  resolution: "Enumerate all %-specifiers (%s, %d, %r, %f, etc.) in _PERCENT_S_RE or document as known blind spot in threat model"
