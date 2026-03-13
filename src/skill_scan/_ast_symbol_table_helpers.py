@@ -168,16 +168,27 @@ def _handle_subscript_assign(
     value_node: ast.expr,
     table: dict[str, str | _Ref],
 ) -> None:
-    """Handle subscript assignment: d['key'] = 'value' -> composite key 'varname[key]'."""
+    """Handle subscript assignment: d['key'] = 'value' -> composite key 'varname[key]'.
+
+    Accepts both string keys (d['k']) and non-negative integer indices (parts[0]).
+    Integer 0 and string '0' produce the same composite key 'varname[0]' -- documented
+    collision edge case (R-IMP002).
+    """
     if not isinstance(target.value, ast.Name):
         return
-    if not isinstance(target.slice, ast.Constant) or not isinstance(target.slice.value, str):
+    if not isinstance(target.slice, ast.Constant):
+        return
+    slice_val = target.slice.value
+    if isinstance(slice_val, str):
+        key = slice_val
+    elif isinstance(slice_val, int) and slice_val >= 0:
+        key = str(slice_val)
+    else:
         return
     resolved = try_resolve_string(value_node)
     if resolved is None:
         return
     base = target.value.id
-    key = target.slice.value
     table[f"{base}[{key}]"] = resolved
 
 
@@ -197,6 +208,31 @@ def _handle_dict_literal(
             table[f"{var_name}[{k.value}]"] = resolved
 
 
+def _collect_scope_declarations(
+    body: list[ast.stmt],
+) -> tuple[set[str], set[str]]:
+    """Collect global and nonlocal declarations from a function body.
+
+    Walks only the immediate body (plus control-flow branches) but does NOT
+    recurse into nested functions. Returns (global_names, nonlocal_names).
+    """
+    global_names: set[str] = set()
+    nonlocal_names: set[str] = set()
+    for stmt in body:
+        if isinstance(stmt, ast.Global):
+            global_names.update(stmt.names)
+        elif isinstance(stmt, ast.Nonlocal):
+            nonlocal_names.update(stmt.names)
+        elif isinstance(stmt, ast.If):
+            g, n = _collect_scope_declarations(stmt.body)
+            global_names |= g
+            nonlocal_names |= n
+            g, n = _collect_scope_declarations(stmt.orelse)
+            global_names |= g
+            nonlocal_names |= n
+    return global_names, nonlocal_names
+
+
 def _handle_aug_assign(stmt: ast.AugAssign, table: dict[str, str | _Ref]) -> None:
     """Handle ast.AugAssign: augmented string assignment when x is already tracked."""
     if not isinstance(stmt.op, ast.Add):
@@ -210,3 +246,18 @@ def _handle_aug_assign(stmt: ast.AugAssign, table: dict[str, str | _Ref]) -> Non
     rhs = try_resolve_string(stmt.value)
     if rhs is not None:
         table[var_name] = existing + rhs
+
+
+def _handle_self_attr_assign(
+    body: list[ast.stmt],
+    result: dict[str, str],
+    self_name: str,
+    class_name: str,
+) -> None:
+    """Walk a method body for self.attr = 'string' assignments.
+
+    Delegates to _ast_symbol_table_class_helpers for the actual walking.
+    """
+    from skill_scan._ast_symbol_table_class_helpers import _walk_self_attrs
+
+    _walk_self_attrs(body, result, self_name, class_name)

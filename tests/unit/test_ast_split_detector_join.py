@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import ast
 
+import pytest
+
 from skill_scan._ast_split_detector import detect_split_evasion
 from skill_scan._ast_symbol_table import build_symbol_table
 from skill_scan.ast_analyzer import analyze_python
@@ -136,30 +138,113 @@ class TestAcceptanceScenarios:
         )
 
 
+# -- R009/R-EFF001/R-EFF002: List-index subscript resolution -----------------
+
+
+class TestListIndexSubscriptDetection:
+    """Split detector resolves integer-index subscripts to dangerous names (R009)."""
+
+    def test_list_index_concat_produces_exec002(self) -> None:
+        """parts[0] + parts[1] -> 'eval' triggers EXEC-002 (R-EFF001)."""
+        code = "parts = {}\nparts[0] = 'ev'\nparts[1] = 'al'\nx = parts[0] + parts[1]"
+        findings = _detect(code)
+        assert len(findings) >= 1
+        assert findings[0].rule_id == "EXEC-002"
+
+    def test_list_index_mutate_produces_exec002(self) -> None:
+        """items[0] = 'ex'; items[1] = 'ec' -> exec triggers EXEC-002 (R-EFF002)."""
+        code = "items = {}\nitems[0] = 'ex'\nitems[1] = 'ec'\nx = items[0] + items[1]"
+        findings = _detect(code)
+        assert len(findings) >= 1
+        assert findings[0].rule_id == "EXEC-002"
+
+    def test_list_index_fstring_produces_exec002(self) -> None:
+        """f'{parts[0]}{parts[1]}' -> 'eval' triggers EXEC-002."""
+        code = "parts = {}\nparts[0] = 'ev'\nparts[1] = 'al'\nresult = f'{parts[0]}{parts[1]}'"
+        findings = _detect(code)
+        assert len(findings) >= 1
+        assert findings[0].rule_id == "EXEC-002"
+
+    def test_list_index_safe_no_finding(self) -> None:
+        """Non-dangerous list-index concat produces no finding."""
+        code = "parts = {}\nparts[0] = 'hell'\nparts[1] = 'o'\nx = parts[0] + parts[1]"
+        assert len(_detect(code)) == 0
+
+    def test_string_key_still_works(self) -> None:
+        """String-key dict subscript detection unchanged (R-IMP001 regression)."""
+        code = "d = {'a': 'ev', 'b': 'al'}\nresult = d['a'] + d['b']"
+        findings = _detect(code)
+        assert len(findings) >= 1
+        assert findings[0].rule_id == "EXEC-002"
+
+
 # -- File size constraints ----------------------------------------------------
 
 
 class TestFileSizeConstraints:
-    def test_split_detector_under_250_lines(self) -> None:
+    _SPLIT_FILES = (
+        "_ast_split_detector.py",
+        "_ast_split_helpers.py",
+        "_ast_split_join_helpers.py",
+        "_ast_split_resolve.py",
+    )
+
+    @pytest.mark.parametrize("filename", _SPLIT_FILES)
+    def test_split_module_under_250_lines(self, filename: str) -> None:
         import pathlib
 
-        src = pathlib.Path(__file__).resolve().parent.parent.parent
-        target = src / "src" / "skill_scan" / "_ast_split_detector.py"
+        target = pathlib.Path(__file__).resolve().parent.parent.parent / "src" / "skill_scan" / filename
         count = len(target.read_text().splitlines())
-        assert count <= 250, f"_ast_split_detector.py is {count} lines (max 250)"
+        assert count <= 250, f"{filename} is {count} lines (max 250)"
 
-    def test_split_helpers_under_250_lines(self) -> None:
-        import pathlib
 
-        src = pathlib.Path(__file__).resolve().parent.parent.parent
-        target = src / "src" / "skill_scan" / "_ast_split_helpers.py"
-        count = len(target.read_text().splitlines())
-        assert count <= 250, f"_ast_split_helpers.py is {count} lines (max 250)"
+# -- R010: Class self.attr resolution -----------------------------------------
 
-    def test_split_join_helpers_under_250_lines(self) -> None:
-        import pathlib
 
-        src = pathlib.Path(__file__).resolve().parent.parent.parent
-        target = src / "src" / "skill_scan" / "_ast_split_join_helpers.py"
-        count = len(target.read_text().splitlines())
-        assert count <= 250, f"_ast_split_join_helpers.py is {count} lines (max 250)"
+class TestClassSelfAttrResolution:
+    def test_self_attr_fstring_produces_exec002(self) -> None:
+        code = 'class C:\n  def f(self):\n    self.cmd="eval"\n  def g(self):\n    x=f"{self.cmd}"'
+        findings = _detect(code)
+        assert len(findings) >= 1
+        assert findings[0].rule_id == "EXEC-002"
+
+    def test_cross_method_binop_produces_exec002(self) -> None:
+        code = "class E:\n  def a(self):\n    self.x='ev'\n  def b(self):\n    self.y='al'\n  def c(self):\n    r=self.x+self.y"
+        findings = _detect(code)
+        assert len(findings) >= 1
+        assert findings[0].rule_id == "EXEC-002"
+
+    def test_self_attr_format_call_produces_exec002(self) -> None:
+        code = "class C:\n  def f(self):\n    self.a='ev'\n    self.b='al'\n  def g(self):\n    r='{}{}'.format(self.a,self.b)"
+        findings = _detect(code)
+        assert len(findings) >= 1
+        assert findings[0].rule_id == "EXEC-002"
+
+    def test_safe_self_attr_no_finding(self) -> None:
+        code = "class C:\n  def f(self):\n    self.x='hello'\n  def g(self):\n    r=f'{self.x}'"
+        assert len(_detect(code)) == 0
+
+
+# -- Acceptance scenarios (plan-level full path) -------------------------------
+
+
+class TestPlanAcceptance:
+    def test_list_index_evasion_e2e(self) -> None:
+        code = "parts=['ev','al']\neval(parts[0]+parts[1])"
+        findings = analyze_python(code, _FILE)
+        exec002 = [f for f in findings if f.rule_id == "EXEC-002"]
+        assert len(exec002) >= 1
+        assert any("eval" in f.matched_text for f in exec002)
+
+    def test_global_overwrite_evasion_e2e(self) -> None:
+        code = "x='safe'\ndef f():\n  global x\n  x='exec'\nf()\nexec(x)"
+        findings = analyze_python(code, _FILE)
+        dangerous = [f for f in findings if f.rule_id in ("EXEC-002", "EXEC-006")]
+        assert len(dangerous) >= 1
+
+    def test_cross_method_class_attr_evasion_e2e(self) -> None:
+        code = "class E:\n  def build(self):\n    self.x='ev'\n  def setup(self):\n    self.y='al'\n  def run(self):\n    r=self.x+self.y"
+        findings = analyze_python(code, _FILE)
+        exec002 = [f for f in findings if f.rule_id == "EXEC-002"]
+        assert len(exec002) >= 1
+        assert any("eval" in f.matched_text for f in exec002)

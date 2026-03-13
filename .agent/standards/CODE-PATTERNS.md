@@ -548,7 +548,7 @@ composite_key = f"{node.value.id}[{node.slice.value}]"  # 'parts[cmd]'
 return _scoped_lookup(composite_key, symbol_table, scope)
 ```
 
-> Trap: only track subscripts where both the base name and the slice are statically resolvable; skip integer-index subscripts (those are a separate debt item).
+> Trap: only track subscripts where both the base name and the slice are statically resolvable. Integer-index subscripts (`parts[0]`) are tracked using the same bracket format with the index converted to string (`'parts[0]'`). Integer `0` and string `'0'` produce the same composite key — documented collision edge case.
 
 ## Deferred Local Import for Circular-Import Breaking
 
