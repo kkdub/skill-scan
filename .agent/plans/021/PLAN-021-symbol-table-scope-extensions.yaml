@@ -1,0 +1,463 @@
+id: "PLAN-021"
+title: "Symbol table scope extensions: list-index, global/nonlocal, class-scope"
+type: implementation
+status: Complete
+created: 2026-03-13
+
+linked_spec: null
+
+description: |
+  Extend the symbol table builder (build_symbol_table) to track three
+  currently-unhandled scope patterns, closing 7 known evasion techniques
+  from PLAN-018 red-team debt (Tiers 2-3).
+
+  Debt items resolved:
+    - DEBT-018-T2-LIST-INDEX: list index subscript assignments (parts[0]='ev')
+    - DEBT-018-T3-GLOBAL-NONLOCAL: global/nonlocal keyword scope modifiers
+    - DEBT-018-T3-CLASS-SCOPE: class-level attribute assignments (self.x)
+
+  No backwards compatibility constraint. Key format conventions can change freely.
+
+requirements:
+  file: REQUIREMENTS-021.yaml
+  ids:
+    - R001    # integer-index composite keys in _handle_subscript_assign
+    - R002    # multi-statement list-index assembly
+    - R003    # global declaration -> module scope routing
+    - R004    # nonlocal declaration -> enclosing scope routing
+    - R005    # global last-write-wins semantics
+    - R006    # nonlocal updates enclosing scope, not module scope
+    - R007    # cross-method self-attribute same key
+    - R008    # ClassDef walking in build_symbol_table
+    - R009    # integer-constant slice in _resolve_subscript_lookup
+    - R010    # self.attr -> ClassName.attr in split detector
+    - R-IMP001  # no regression on string-key subscripts
+    - R-IMP002  # int/string composite key collision documented
+    - R-IMP003  # no crash on nested classes/functions
+    - R-IMP004  # self-attr keyed to class name, not method name
+    - R-IMP005  # file line count limits maintained
+    - R-IMP006  # no duplicate function-scoped key for global vars
+    - R-IMP007  # global/nonlocal scoped per function
+    - R-IMP008  # _build_scope_map walks class method bodies
+    - R-EFF001  # pos_list_index_concat.py detected
+    - R-EFF002  # pos_list_index_mutate.py detected
+    - R-EFF003  # pos_global_overwrite.py detected
+    - R-EFF004  # pos_nonlocal_overwrite.py detected
+    - R-EFF005  # pos_class_self_attr.py detected
+    - R-EFF006  # pos_class_level_attr.py detected
+    - R-EFF007  # pos_class_cross_method.py detected
+    - R-ADV001  # all 7 evasion examples zero misses
+  uncovered: []
+
+utilities_audit:
+  status: complete
+  search_performed:
+    - query: "File line counts for target modules"
+      found: "_ast_symbol_table.py: 126/300, _ast_symbol_table_helpers.py: 212/300, _ast_split_detector.py: 247/300, _ast_split_helpers.py: 238/300"
+    - query: "Test file headroom"
+      found: "test_ast_symbol_table_edge.py: 184/250 (best overflow), test_ast_split_detector_join.py: 165/250, test_ast_symbol_table.py: 245/250 (full)"
+    - query: "Extension points for subscript, scope, class"
+      found: "_handle_subscript_assign ~line 166, _resolve_subscript_lookup ~line 164, build_symbol_table FunctionDef loop ~line 47"
+  categories:
+    error_handling:
+      needed: false
+    validation:
+      needed: false
+    logging:
+      needed: false
+    types:
+      needed: true
+      exists: "src/skill_scan/models.py, src/skill_scan/_ast_symbol_table.py (_Ref)"
+      gaps: []
+      action: use
+    configuration:
+      needed: false
+    http_client:
+      needed: false
+  infrastructure_parts: []
+
+environment:
+  status: assessed
+  build:
+    tool: "pyproject.toml (hatchling) + Makefile"
+    install_cmd: "uv sync --group dev"
+    check_cmd: "make check"
+    prerequisites: ["Python 3.13", "uv"]
+  runtime_services: []
+  changes:
+    new_dependencies: []
+    env_vars: []
+    schema_changes: []
+    ci_changes: []
+    build_changes: []
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PARTS
+# ─────────────────────────────────────────────────────────────────────────────
+# Skeleton: skip (brownfield single-layer, all changes extend existing modules)
+#
+# Dependency graph:
+#   a           (list-index: symbol table + detector, independent)
+#   b           (global/nonlocal: symbol table, independent)
+#   c ──► d     (class-scope: symbol table → detector, verify_group: class-scope)
+#
+# Parts a and b are independent of each other and of c/d.
+# Parts c and d are tightly coupled (d consumes c's symbol table entries).
+
+parts:
+
+  - id: a
+    title: "List-index composite keys in symbol table and split detector"
+    status: Done
+    depends_on: []
+    requirements_covered: [R001, R002, R009, R-IMP001, R-IMP002, R-EFF001, R-EFF002]
+    approach:
+      - step: "Extend _handle_subscript_assign to accept integer-constant slice indices"
+        files:
+          - src/skill_scan/_ast_symbol_table_helpers.py
+        notes: >
+          Add elif branch after existing str check: if isinstance(slice.value, int)
+          and int >= 0, store as 'varname[N]'. Same bracket convention as string
+          keys. Collision between int 0 and string '0' is documented edge case.
+      - step: "Extend _resolve_subscript_lookup and _resolve_subscript_expr for integer slices"
+        files:
+          - src/skill_scan/_ast_split_detector.py
+          - src/skill_scan/_ast_split_helpers.py
+        notes: >
+          Both functions gate on isinstance(node.slice.value, str). Add
+          'or isinstance(node.slice.value, int)' branch constructing same
+          'varname[N]' key format. ~5 lines each.
+      - step: "Create evasion fixtures and tests"
+        files:
+          - tests/fixtures/split_evasion/pos_list_index_concat.py
+          - tests/fixtures/split_evasion/pos_list_index_mutate.py
+          - tests/unit/test_ast_symbol_table_edge.py
+          - tests/unit/test_ast_split_detector_join.py
+        notes: >
+          pos_list_index_concat.py: parts=['ev','al']; eval(parts[0]+parts[1]).
+          pos_list_index_mutate.py: items[0]='ex'; items[1]='ec'; exec(items[0]+items[1]).
+          Symbol table tests in test_ast_symbol_table_edge.py (66 headroom).
+          Detector tests in test_ast_split_detector_join.py (85 headroom).
+    criteria:
+      - "_handle_subscript_assign stores 'varname[0]' for integer-constant subscript assignments"
+      - "Existing string-key dict subscript tracking unchanged (no regression)"
+      - "_resolve_subscript_lookup resolves integer-constant subscript reads to composite key values"
+      - "_resolve_subscript_expr resolves integer subscripts in format/percent-format contexts"
+      - "pos_list_index_concat.py triggers EXEC-002"
+      - "pos_list_index_mutate.py triggers EXEC-002"
+      - "make check passes"
+
+  - id: b
+    title: "Global and nonlocal declaration handling in symbol table"
+    status: Done
+    depends_on: []
+    requirements_covered: [R003, R004, R005, R006, R-IMP006, R-IMP007, R-EFF003, R-EFF004]
+    approach:
+      - step: "Add _collect_scope_declarations helper"
+        files:
+          - src/skill_scan/_ast_symbol_table_helpers.py
+        notes: >
+          New function _collect_scope_declarations(body) -> tuple[set[str], set[str]]
+          that walks a function body collecting ast.Global.names and ast.Nonlocal.names.
+          Only walk the immediate body (no recursion into nested functions). ~10-15 lines.
+      - step: "Add global/nonlocal routing in build_symbol_table function body processing"
+        files:
+          - src/skill_scan/_ast_symbol_table.py
+        notes: >
+          In the FunctionDef loop (~line 47): before calling _collect_assignments on
+          node.body, call _collect_scope_declarations to get global_names and
+          nonlocal_names sets. After _collect_assignments + _resolve_indirections for
+          the function scope, route global-declared writes back to module_scope
+          (last-write-wins) and remove the function-prefixed key. For nonlocal,
+          route writes to enclosing function scope (requires tracking parent scope name).
+          _ast_symbol_table.py has 174 lines headroom. ~20 lines addition.
+      - step: "Create evasion fixtures and tests"
+        files:
+          - tests/fixtures/split_evasion/pos_global_overwrite.py
+          - tests/fixtures/split_evasion/pos_nonlocal_overwrite.py
+          - tests/unit/test_ast_symbol_table_edge.py
+        notes: >
+          pos_global_overwrite.py: x='eval'; def f(): global x; x='exec'; f(); exec(x).
+          pos_nonlocal_overwrite.py: def outer(): x='eval'; def inner(): nonlocal x; x='exec'.
+          Tests in test_ast_symbol_table_edge.py. If headroom tight after part a,
+          overflow to new test_ast_symbol_table_scope.py.
+    criteria:
+      - "build_symbol_table collects ast.Global declarations and routes writes to module scope"
+      - "build_symbol_table collects ast.Nonlocal declarations and routes writes to enclosing function scope"
+      - "Global writes use last-write-wins (no stale function-prefixed key remains)"
+      - "Nonlocal writes update enclosing function scope, not module scope"
+      - "Declarations scoped per function -- no cross-function contamination"
+      - "pos_global_overwrite.py triggers a finding"
+      - "pos_nonlocal_overwrite.py triggers a finding"
+      - "make check passes"
+
+  - id: c
+    title: "Class-scope symbol table: ClassDef walking and attribute storage"
+    status: Done
+    depends_on: []
+    verify_group: class-scope
+    requirements_covered: [R007, R008, R-IMP003, R-IMP004, R-IMP008, R-EFF006]
+    approach:
+      - step: "Add ClassDef branch to build_symbol_table"
+        files:
+          - src/skill_scan/_ast_symbol_table.py
+        notes: >
+          In loop over tree.body (~line 47), add isinstance(node, ast.ClassDef).
+          Walk class body: (1) collect class-level assignments with _collect_assignments,
+          prefix results as 'ClassName.attr'; (2) recurse into method bodies
+          (FunctionDef/AsyncFunctionDef), detect self.attr = val pattern where self is
+          the first parameter, store as 'ClassName.attr'. ~25 lines addition.
+      - step: "Add _handle_self_attr_assign helper"
+        files:
+          - src/skill_scan/_ast_symbol_table_helpers.py
+        notes: >
+          New function _handle_self_attr_assign(stmt, table, self_name, class_name)
+          that handles ast.Attribute targets where value is Name matching self_name.
+          Stores as 'ClassName.attr_name'. ~15-20 lines. If helpers file exceeds
+          headroom, extract to new _ast_symbol_table_class_helpers.py.
+      - step: "Update _build_scope_map to walk ClassDef bodies"
+        files:
+          - src/skill_scan/_ast_split_detector.py
+        notes: >
+          _build_scope_map (~line 57) currently only walks top-level FunctionDef.
+          Add ClassDef walking: for each ClassDef, walk its methods, mapping nodes
+          to scope. ~10-15 lines addition.
+      - step: "Create fixtures and tests for class-level attributes"
+        files:
+          - tests/fixtures/split_evasion/pos_class_level_attr.py
+          - tests/unit/test_ast_symbol_table_edge.py
+        notes: >
+          pos_class_level_attr.py: class E: payload='eval'; def run(self): eval(self.payload).
+          Tests verify 'ClassName.attr' key appears in symbol table.
+    criteria:
+      - "build_symbol_table walks ast.ClassDef bodies and stores class-level attributes as 'ClassName.attr'"
+      - "Self-attribute writes (self.x = 'val') inside methods stored as 'ClassName.x'"
+      - "Writes from different methods of same class resolve to same 'ClassName.x' key"
+      - "_build_scope_map maps class method body nodes to correct scope"
+      - "No exception on nested classes or nested functions inside class methods"
+      - "pos_class_level_attr.py triggers EXEC-002"
+
+  - id: d
+    title: "Class-scope split detector: self.attr resolution and cross-method evasion"
+    status: Done
+    depends_on: [c]
+    verify_group: class-scope
+    requirements_covered: [R010, R-IMP005, R-EFF005, R-EFF007, R-ADV001]
+    approach:
+      - step: "Add ast.Attribute resolution to _resolve_operand and _resolve_formatted_value"
+        files:
+          - src/skill_scan/_ast_split_detector.py
+        notes: >
+          In _resolve_operand (~line 108) and _resolve_formatted_value (~line 150),
+          add handling for ast.Attribute: when node is ast.Attribute with Name value,
+          construct 'Name.attr' and do _scoped_lookup. For self.attr inside class
+          methods, the key 'ClassName.attr' is at module level so _scoped_lookup's
+          fallback finds it. If detector exceeds headroom, extract helper to
+          _ast_split_helpers.py.
+      - step: "Add ast.Attribute resolution to _resolve_expr_list"
+        files:
+          - src/skill_scan/_ast_split_helpers.py
+        notes: >
+          _resolve_expr_list (~line 64) handles Name, Constant, Subscript. Add
+          Attribute branch: isinstance(expr, ast.Attribute) and isinstance(expr.value, ast.Name),
+          construct 'value.attr' key and look up via _scoped_lookup. ~5 lines.
+      - step: "Create cross-method evasion fixtures and integration tests"
+        files:
+          - tests/fixtures/split_evasion/pos_class_self_attr.py
+          - tests/fixtures/split_evasion/pos_class_cross_method.py
+          - tests/unit/test_ast_split_detector_join.py
+        notes: >
+          pos_class_self_attr.py: class with self.cmd='eval'; eval(self.cmd).
+          pos_class_cross_method.py: self.x='ev' in one method, self.y='al' in
+          another, eval(self.x+self.y) in a third.
+    criteria:
+      - "_resolve_operand handles ast.Attribute nodes (self.x -> ClassName.x lookup)"
+      - "_resolve_formatted_value handles ast.Attribute in f-strings"
+      - "_resolve_expr_list handles ast.Attribute in format/percent-format args"
+      - "pos_class_self_attr.py triggers EXEC-002"
+      - "pos_class_cross_method.py triggers EXEC-002"
+      - "All 7 new evasion corpus fixtures detected with zero misses"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ACCEPTANCE SCENARIOS
+# ─────────────────────────────────────────────────────────────────────────────
+
+acceptance_scenarios:
+  - scenario: "List-index evasion detected end-to-end through symbol table and split detector"
+    invoke: "analyze_python() on source: parts=['ev','al']; eval(parts[0]+parts[1])"
+    expect: "EXEC-002 finding emitted with 'eval' as the assembled dangerous name"
+    test_file: tests/unit/test_ast_split_detector_join.py::TestPlanAcceptance
+    status: passing
+
+  - scenario: "Global variable overwrite evasion detected end-to-end"
+    invoke: "analyze_python() on source: x='safe'; def f(): global x; x='exec'; f(); exec(x)"
+    expect: "Finding emitted identifying dangerous name assembled via global overwrite"
+    test_file: tests/unit/test_ast_split_detector_join.py::TestPlanAcceptance
+    status: passing
+
+  - scenario: "Cross-method class attribute evasion detected end-to-end"
+    invoke: "analyze_python() on source: class E with self.x='ev' in build(), self.y='al' in setup(), eval(self.x+self.y) in run()"
+    expect: "EXEC-002 finding emitted with 'eval' as the assembled dangerous name"
+    test_file: tests/unit/test_ast_split_detector_join.py::TestPlanAcceptance
+    status: passing
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SCOPE & CONSTRAINTS
+# ─────────────────────────────────────────────────────────────────────────────
+
+allowed_files:
+  - "src/skill_scan/_ast_symbol_table.py"
+  - "src/skill_scan/_ast_symbol_table_helpers.py"
+  - "src/skill_scan/_ast_symbol_table_class_helpers.py"  # new, if overflow needed
+  - "src/skill_scan/_ast_split_detector.py"
+  - "src/skill_scan/_ast_split_helpers.py"
+  - "src/skill_scan/_ast_split_resolve.py"   # created in part c (MI extraction)
+  - "src/skill_scan/ast_analyzer.py"
+  - "tests/fixtures/split_evasion/**"
+  - "tests/unit/test_ast_symbol_table*.py"
+  - "tests/unit/test_ast_split_detector*.py"
+  - "tests/unit/rule_helpers.py"
+  - ".agent/status/debt.yaml"
+
+forbidden:
+  - "src/skill_scan/content_scanner.py"
+  - "src/skill_scan/rules/engine.py"
+  - ".env*"
+
+acceptance_criteria:
+  - "All 26 requirements have status: done"
+  - "All parts have status: Done"
+  - "All tests pass"
+  - "All acceptance scenarios have status: passing"
+  - "3 debt items closeable (DEBT-018-T2-LIST-INDEX, DEBT-018-T3-GLOBAL-NONLOCAL, DEBT-018-T3-CLASS-SCOPE)"
+
+stop_condition: |
+  When all requirements are verified, all parts complete, all tests pass (make check),
+  all acceptance scenarios passing, and resolved debt items removed from debt.yaml.
+
+# ─────────────────────────────────────────────────────────────────────────────
+# COVERAGE REPORT
+# ─────────────────────────────────────────────────────────────────────────────
+
+coverage_report:
+  R001: a
+  R002: a
+  R003: b
+  R004: b
+  R005: b
+  R006: b
+  R007: c
+  R008: c
+  R009: a
+  R010: d
+  R-IMP001: a
+  R-IMP002: a
+  R-IMP003: c
+  R-IMP004: c
+  R-IMP005: d
+  R-IMP006: b
+  R-IMP007: b
+  R-IMP008: c
+  R-EFF001: a
+  R-EFF002: a
+  R-EFF003: b
+  R-EFF004: b
+  R-EFF005: d
+  R-EFF006: c
+  R-EFF007: d
+  R-ADV001: d
+
+# ─────────────────────────────────────────────────────────────────────────────
+# EXECUTION TRACKING
+# ─────────────────────────────────────────────────────────────────────────────
+
+work_log:
+  - part: a
+    status: Done
+    verified: true
+    iterations: 1
+    files: [_ast_symbol_table_helpers.py, _ast_split_detector.py, _ast_split_helpers.py, _ast_split_resolve.py]
+  - part: b
+    status: Done
+    verified: true
+    iterations: 1
+    files: [_ast_symbol_table.py, _ast_symbol_table_helpers.py, test_ast_symbol_table_scope.py]
+  - part: c
+    status: Done
+    verified: true (grouped with d)
+    iterations: 2
+    files: [_ast_symbol_table.py, _ast_symbol_table_class_helpers.py, _ast_split_detector.py, _ast_split_resolve.py]
+  - part: d
+    status: Done
+    verified: true (grouped with c)
+    iterations: 2
+    files: [_ast_split_helpers.py, test_ast_split_detector_join.py]
+    notes: "Fixed _resolve_single_percent to delegate to _resolve_single_expr for Attribute"
+  - part: docs
+    date: 2026-03-13
+    type: docs
+    note: "Updated CLAUDE.md: Project Structure (2 new files, 4 modified entries), Architecture Notes (8 new bullet points, 6 updated bullet points); evasion corpus count updated 30→37"
+
+evidence:
+  tests_passing: 2499
+  all_corpus_fixtures_detected: true
+  acceptance_scenarios: 3/3 passing
+  file_counts:
+    _ast_symbol_table.py: 198/300
+    _ast_symbol_table_helpers.py: 263/300
+    _ast_symbol_table_class_helpers.py: 64/300
+    _ast_split_detector.py: 160/300
+    _ast_split_helpers.py: ~248/300
+    _ast_split_resolve.py: 91/300
+  docs_updated:
+    - CLAUDE.md: Project Structure and Architecture Notes updated for all new and modified modules
+
+handoff:
+  stopped_at: "documentation complete"
+  current_state: "All 4 parts Done and verified. CLAUDE.md updated. Pending: debt.yaml update and PR."
+  next_steps: ["Update debt.yaml to close DEBT-018-T2-LIST-INDEX, DEBT-018-T3-GLOBAL-NONLOCAL, DEBT-018-T3-CLASS-SCOPE", "PR"]
+  blockers: []
+  scope:
+    files:
+      - src/skill_scan/_ast_symbol_table.py
+      - src/skill_scan/_ast_symbol_table_helpers.py
+      - src/skill_scan/_ast_symbol_table_class_helpers.py
+      - src/skill_scan/_ast_split_detector.py
+      - src/skill_scan/_ast_split_helpers.py
+      - src/skill_scan/_ast_split_resolve.py
+    functions: [_handle_subscript_assign, _collect_scope_declarations, _route_globals, _process_nested, _process_class, _handle_self_attr_assign, _resolve_subscript_key, _resolve_single_expr, resolve_expr]
+    components: [symbol_table, split_detector]
+  decisions:
+    - "Class attributes stored as 'ClassName.attr' at module scope level"
+    - "List index composite keys use 'varname[0]' (same bracket format as dict keys)"
+    - "Global/nonlocal handled by pre-pass declaration collection per function body"
+    - "_scoped_lookup unchanged -- class keys stored at module level, found by bare name fallback"
+    - "self.attr resolution: detect ast.Attribute where value matches first method parameter -> ClassName.attr"
+    - "No backwards compatibility constraint"
+    - "Int/string composite key collision documented edge case, not guarded"
+    - "Extracted _ast_split_resolve.py from detector for MI compliance"
+    - "Extracted _ast_symbol_table_class_helpers.py from helpers for size compliance"
+  open_questions: []
+  cross_part_knowledge:
+    - "_ast_symbol_table_helpers.py at 263 lines -- near capacity"
+    - "_ast_split_helpers.py at ~248 lines -- near capacity"
+    - "Part c created _ast_split_resolve.py (new file, not in original allowed_files)"
+  active_signals: []
+
+errors:
+
+notes: |
+  Parts a and b are fully independent (list-index and global/nonlocal touch
+  different code paths). Parts c and d share verify_group "class-scope" because
+  d (detector attribute resolution) depends on c (symbol table class walking).
+
+  File headroom is the primary constraint:
+  - _ast_symbol_table_helpers.py: 88 lines free (parts a+b+c add ~45-50 lines)
+  - _ast_split_detector.py: 53 lines free (parts a+c+d add ~30-35 lines)
+  - Approach notes include extraction fallbacks if headroom exceeded.
+
+  Cumulative estimates:
+  - _ast_symbol_table_helpers.py: 212 -> ~260 (within 300)
+  - _ast_symbol_table.py: 126 -> ~170 (within 300)
+  - _ast_split_detector.py: 247 -> ~280 (within 300)
+  - _ast_split_helpers.py: 238 -> ~248 (within 300)

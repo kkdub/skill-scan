@@ -44,8 +44,8 @@ coverage.xml
 .DS_Store
 Thumbs.db
 
-
 # Temporary
 *.tmp
 *.bak
 .claude/settings.local.json
+tools/repomap/.venv/

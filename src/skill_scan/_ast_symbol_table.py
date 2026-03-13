@@ -31,13 +31,17 @@ def build_symbol_table(tree: ast.Module) -> dict[str, str]:
 
     Walks module-level statements and function bodies separately.
     Function-local assignments are scoped -- they can read from module scope
-    but do not write back to it. Returns a flat dict merging all scopes
-    (function-scoped names are prefixed with ``funcname.varname``).
+    but do not write back to it unless a ``global`` declaration is present.
+    ``nonlocal`` declarations route writes to the enclosing function scope.
+    Returns a flat dict merging all scopes (function-scoped names are
+    prefixed with ``funcname.varname``).
 
     Only tracks assignments where the RHS resolves to a string constant
     or a chain of variable references ending in a string constant.
     Non-string assignments (int, list, etc.) are silently skipped.
     """
+    from skill_scan._ast_symbol_table_helpers import _collect_scope_declarations
+
     module_scope = _collect_assignments(tree.body)
     _resolve_indirections(module_scope)
 
@@ -48,11 +52,91 @@ def build_symbol_table(tree: ast.Module) -> dict[str, str]:
         if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
             func_scope = _collect_assignments(node.body)
             _resolve_indirections(func_scope, parent_scope=module_scope)
+            global_names, _ = _collect_scope_declarations(node.body)
+            _route_globals(func_scope, global_names, result, module_scope)
+            _process_nested(node.body, func_scope, result)
             for var_name, value in func_scope.items():
                 if isinstance(value, str):
                     result[f"{node.name}.{var_name}"] = value
+        elif isinstance(node, ast.ClassDef):
+            _process_class(node, module_scope, result)
 
     return result
+
+
+def _route_globals(
+    func_scope: dict[str, str | _Ref],
+    global_names: set[str],
+    result: dict[str, str],
+    module_scope: dict[str, str | _Ref] | None = None,
+) -> None:
+    """Move global-declared writes from function scope to module result.
+
+    Also updates module_scope so subsequent function scopes resolving
+    against it see the routed value (avoids stale parent lookups).
+    """
+    for name in global_names:
+        if name in func_scope:
+            value = func_scope.pop(name)
+            if isinstance(value, str):
+                result[name] = value
+                if module_scope is not None:
+                    module_scope[name] = value
+
+
+def _process_nested(
+    body: list[ast.stmt],
+    parent_scope: dict[str, str | _Ref],
+    result: dict[str, str],
+) -> None:
+    """Handle nested functions -- route nonlocal writes to enclosing scope."""
+    from skill_scan._ast_symbol_table_helpers import _collect_scope_declarations
+
+    for node in body:
+        if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+            continue
+        inner_scope = _collect_assignments(node.body)
+        _resolve_indirections(inner_scope, parent_scope=parent_scope)
+        global_names, nonlocal_names = _collect_scope_declarations(node.body)
+        # Route global-declared writes to module scope
+        for name in global_names:
+            if name in inner_scope:
+                value = inner_scope.pop(name)
+                if isinstance(value, str):
+                    result[name] = value
+        for name in nonlocal_names:
+            if name in inner_scope:
+                value = inner_scope.pop(name)
+                parent_scope[name] = value
+        for var_name, value in inner_scope.items():
+            if isinstance(value, str):
+                result[f"{node.name}.{var_name}"] = value
+
+
+def _process_class(
+    node: ast.ClassDef,
+    module_scope: dict[str, str | _Ref],
+    result: dict[str, str],
+) -> None:
+    """Walk a ClassDef body: class-level assignments and self.attr in methods."""
+    from skill_scan._ast_symbol_table_helpers import _handle_self_attr_assign
+
+    cls_name = node.name
+    # Class-level assignments (e.g. payload = 'eval')
+    cls_scope = _collect_assignments(node.body)
+    _resolve_indirections(cls_scope, parent_scope=module_scope)
+    for var_name, value in cls_scope.items():
+        if isinstance(value, str):
+            result[f"{cls_name}.{var_name}"] = value
+
+    # Walk methods for self.attr = val pattern
+    for stmt in node.body:
+        if not isinstance(stmt, ast.FunctionDef | ast.AsyncFunctionDef):
+            continue
+        if not stmt.args.args:
+            continue
+        self_name = stmt.args.args[0].arg
+        _handle_self_attr_assign(stmt.body, result, self_name, cls_name)
 
 
 def _collect_assignments(

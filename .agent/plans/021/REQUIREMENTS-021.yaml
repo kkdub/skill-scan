@@ -1,0 +1,289 @@
+id: REQUIREMENTS-021
+title: "Symbol table scope extensions: list-index, global/nonlocal, class-scope"
+created: 2026-03-13
+
+requirements:
+
+  # --- Explicit: Functional ---
+
+  - id: R001
+    requirement: "_handle_subscript_assign must accept integer-constant slice indices and store them using composite key format 'varname[0]' (decimal integer as string in brackets)."
+    category: functional
+    source: "DEBT-018-T2-LIST-INDEX"
+    contract:
+      given: "An ast.Assign with target ast.Subscript(value=Name('parts'), slice=Constant(0)) and value Constant('ev')"
+      when: "_handle_subscript_assign is called"
+      then: "table contains key 'parts[0]' with value 'ev'"
+    acceptance:
+      - "build_symbol_table on 'parts[0] = \"ev\"' produces {'parts[0]': 'ev'}"
+      - "build_symbol_table on 'd[\"k\"] = \"ev\"' still produces {'d[k]': 'ev'} (no regression)"
+    verify: "test::tests/unit/test_ast_symbol_table_edge.py"
+    status: done
+
+  - id: R002
+    requirement: "build_symbol_table must track multi-statement list-index assembly patterns, storing each indexed slot as a separate composite key."
+    category: functional
+    source: "DEBT-018-T2-LIST-INDEX"
+    contract:
+      given: "Source: 'items = [None]*3; items[0] = \"ex\"; items[1] = \"ec\"'"
+      when: "build_symbol_table(tree) is called"
+      then: "Result contains 'items[0]': 'ex' and 'items[1]': 'ec'"
+    acceptance:
+      - "Both composite keys present in returned dict"
+    verify: "test::tests/unit/test_ast_symbol_table_edge.py"
+    status: done
+
+  - id: R003
+    requirement: "build_symbol_table must parse 'global x' declarations in function bodies and route subsequent writes to 'x' within that function to module scope."
+    category: functional
+    source: "DEBT-018-T3-GLOBAL-NONLOCAL"
+    contract:
+      given: "Source: 'x = \"eval\"; def f():\\n  global x\\n  x = \"exec\"'"
+      when: "build_symbol_table(tree) is called"
+      then: "Module-level key 'x' has value 'exec'; function-scoped key 'f.x' is absent"
+    acceptance:
+      - "'x' == 'exec' in returned dict"
+      - "'f.x' not in returned dict"
+    verify: "test::tests/unit/test_ast_symbol_table_edge.py"
+    status: done
+
+  - id: R004
+    requirement: "build_symbol_table must parse 'nonlocal x' declarations and route subsequent writes to the enclosing function's scope entry."
+    category: functional
+    source: "DEBT-018-T3-GLOBAL-NONLOCAL"
+    contract:
+      given: "Source: 'def outer():\\n  x=\"eval\"\\n  def inner():\\n    nonlocal x\\n    x=\"exec\"'"
+      when: "build_symbol_table(tree) is called"
+      then: "Key 'outer.x' has value 'exec'; 'inner.x' is absent"
+    acceptance:
+      - "'outer.x' == 'exec'"
+      - "'inner.x' not in returned dict"
+    verify: "test::tests/unit/test_ast_symbol_table_edge.py"
+    status: done
+
+  - id: R005
+    requirement: "Global writes must update module scope with last-write-wins semantics."
+    category: functional
+    source: "DEBT-018-T3-GLOBAL-NONLOCAL"
+    contract:
+      given: "Source: 'x = \"a\"; def f(): global x; x = \"b\"; def g(): global x; x = \"c\"'"
+      when: "build_symbol_table(tree) is called"
+      then: "Module-level key 'x' has value 'c' (last function's write wins)"
+    acceptance:
+      - "'x' == 'c' in returned dict"
+    verify: "test::tests/unit/test_ast_symbol_table_edge.py"
+    status: done
+
+  - id: R006
+    requirement: "Nonlocal writes must update the enclosing function scope, not module scope."
+    category: functional
+    source: "DEBT-018-T3-GLOBAL-NONLOCAL"
+    contract:
+      given: "Source with nonlocal inside nested function"
+      when: "build_symbol_table(tree) is called"
+      then: "Enclosing function-prefixed key updated; module-level key unchanged"
+    acceptance:
+      - "Enclosing scope key updated to nonlocal-written value"
+      - "Module scope not affected by nonlocal write"
+    verify: "test::tests/unit/test_ast_symbol_table_edge.py"
+    status: done
+
+  - id: R007
+    requirement: "Self-attribute writes in different methods of the same class must resolve to the same symbol-table key."
+    category: functional
+    source: "DEBT-018-T3-CLASS-SCOPE"
+    contract:
+      given: "Source: 'class E:\\n  def build(self): self.x=\"ev\"\\n  def run(self): eval(self.x)'"
+      when: "build_symbol_table(tree) is called"
+      then: "Result contains 'E.x': 'ev' regardless of which method wrote it"
+    acceptance:
+      - "'E.x' present in returned dict"
+      - "No 'build.x' or 'run.x' keys exist"
+    verify: "test::tests/unit/test_ast_symbol_table_edge.py"
+    status: done
+
+  - id: R008
+    requirement: "build_symbol_table must walk ast.ClassDef nodes at module level and recurse into their method bodies."
+    category: functional
+    source: "DEBT-018-T3-CLASS-SCOPE"
+    contract:
+      given: "An ast.Module with a top-level ast.ClassDef containing FunctionDef methods"
+      when: "build_symbol_table(tree) is called"
+      then: "ClassDef body is walked; class-level and method-level assignments tracked"
+    acceptance:
+      - "ClassDef nodes not silently skipped"
+      - "At least one key per class attribute present in result"
+    verify: "test::tests/unit/test_ast_symbol_table_edge.py"
+    status: done
+
+  - id: R009
+    requirement: "Split detector _resolve_subscript_lookup must accept integer-constant slice values to match list-index composite keys."
+    category: functional
+    source: "DEBT-018-T2-LIST-INDEX"
+    contract:
+      given: "Symbol table contains {'parts[0]': 'ev', 'parts[1]': 'al'}; AST has eval(parts[0] + parts[1])"
+      when: "detect_split_evasion is called"
+      then: "EXEC-002 finding emitted for assembled name 'eval'"
+    acceptance:
+      - "detect_split_evasion emits EXEC-002 for list-index concatenation"
+    verify: "test::tests/unit/test_ast_split_detector_join.py"
+    status: done
+
+  - id: R010
+    requirement: "Split detector must resolve ast.Attribute access (self.attr) to class-qualified symbol table key 'ClassName.attr'."
+    category: functional
+    source: "DEBT-018-T3-CLASS-SCOPE"
+    contract:
+      given: "Symbol table contains {'E.cmd': 'eval'}; AST has eval(self.cmd) inside class E"
+      when: "detect_split_evasion is called"
+      then: "self.cmd resolves to 'eval' and EXEC-002 finding emitted"
+    acceptance:
+      - "detect_split_evasion emits finding for self.cmd access"
+    verify: "test::tests/unit/test_ast_split_detector_join.py"
+    status: done
+
+  # --- Implicit: Reliability / Functional ---
+
+  - id: R-IMP001
+    requirement: "Extending _handle_subscript_assign to integer keys must not regress existing string-key dict subscript tracking."
+    category: reliability
+    source: implicit
+    rationale: "d['key'] = 'val' -> 'varname[key]' must remain unchanged."
+    acceptance:
+      - "All existing dict subscript tests pass"
+    verify: "test::tests/unit/test_ast_symbol_table_helpers.py"
+    status: done
+
+  - id: R-IMP002
+    requirement: "Integer and string composite keys use the same bracket format by design (documented collision edge case)."
+    category: reliability
+    source: implicit
+    rationale: "'parts[0]' (int index 0) and a hypothetical dict with string key '0' produce the same composite key. Documented, not guarded."
+    acceptance:
+      - "Code comment or test documents the collision edge case"
+    verify: manual
+    status: done
+
+  - id: R-IMP003
+    requirement: "build_symbol_table must not raise on nested classes or nested functions inside class methods."
+    category: reliability
+    source: implicit
+    acceptance:
+      - "build_symbol_table on deeply nested class/function structures returns dict without raising"
+    verify: "test::tests/unit/test_ast_symbol_table_edge.py"
+    status: done
+
+  - id: R-IMP004
+    requirement: "Self-attribute keys scoped to class name, not method name."
+    category: functional
+    source: implicit
+    rationale: "self.x set in __init__ and read in run must both use key 'ClassName.x'."
+    acceptance:
+      - "build_symbol_table on class with two methods writing self.x produces exactly one 'ClassName.x' key"
+    verify: "test::tests/unit/test_ast_symbol_table_edge.py"
+    status: done
+
+  - id: R-IMP005
+    requirement: "All source files remain under 300 lines; all test files remain under 250 lines."
+    category: reliability
+    source: implicit
+    acceptance:
+      - "wc -l on all modified files shows compliance"
+    verify: "grep::line count check"
+    status: done
+
+  - id: R-IMP006
+    requirement: "Global writes must not create duplicate function-scoped key alongside module-scope key."
+    category: reliability
+    source: implicit
+    rationale: "'global x; x = val' must produce only 'x' at module level, not also 'f.x'."
+    acceptance:
+      - "'f.x' absent from returned dict when f declares global x"
+    verify: "test::tests/unit/test_ast_symbol_table_edge.py"
+    status: done
+
+  - id: R-IMP007
+    requirement: "Global/nonlocal declarations scoped per function -- no cross-function contamination."
+    category: reliability
+    source: implicit
+    acceptance:
+      - "Two sibling functions with different global declarations each correctly update only specified variable"
+    verify: "test::tests/unit/test_ast_symbol_table_edge.py"
+    status: done
+
+  - id: R-IMP008
+    requirement: "_build_scope_map must walk class method bodies for correct scope attribution in findings."
+    category: functional
+    source: implicit
+    acceptance:
+      - "Findings from class method payloads correctly attribute source lines"
+    verify: "test::tests/unit/test_ast_split_detector_join.py"
+    status: done
+
+  # --- Effectiveness ---
+
+  - id: R-EFF001
+    requirement: "pos_list_index_concat.py triggers EXEC-002."
+    category: effectiveness
+    source: "DEBT-018-T2-LIST-INDEX:example-1"
+    attack_class: "list-index subscript evasion"
+    verify: "corpus::tests/fixtures/split_evasion/pos_list_index_concat.py::0"
+    status: done
+
+  - id: R-EFF002
+    requirement: "pos_list_index_mutate.py triggers EXEC-002."
+    category: effectiveness
+    source: "DEBT-018-T2-LIST-INDEX:example-2"
+    attack_class: "list-index mutation evasion"
+    verify: "corpus::tests/fixtures/split_evasion/pos_list_index_mutate.py::0"
+    status: done
+
+  - id: R-EFF003
+    requirement: "pos_global_overwrite.py triggers finding."
+    category: effectiveness
+    source: "DEBT-018-T3-GLOBAL-NONLOCAL:example-1"
+    attack_class: "global scope overwrite evasion"
+    verify: "corpus::tests/fixtures/split_evasion/pos_global_overwrite.py::0"
+    status: done
+
+  - id: R-EFF004
+    requirement: "pos_nonlocal_overwrite.py triggers finding."
+    category: effectiveness
+    source: "DEBT-018-T3-GLOBAL-NONLOCAL:example-2"
+    attack_class: "nonlocal scope overwrite evasion"
+    verify: "corpus::tests/fixtures/split_evasion/pos_nonlocal_overwrite.py::0"
+    status: done
+
+  - id: R-EFF005
+    requirement: "pos_class_self_attr.py triggers EXEC-002."
+    category: effectiveness
+    source: "DEBT-018-T3-CLASS-SCOPE:example-1"
+    attack_class: "self-attribute method evasion"
+    verify: "corpus::tests/fixtures/split_evasion/pos_class_self_attr.py::0"
+    status: done
+
+  - id: R-EFF006
+    requirement: "pos_class_level_attr.py triggers EXEC-002."
+    category: effectiveness
+    source: "DEBT-018-T3-CLASS-SCOPE:example-2"
+    attack_class: "class-level attribute evasion"
+    verify: "corpus::tests/fixtures/split_evasion/pos_class_level_attr.py::0"
+    status: done
+
+  - id: R-EFF007
+    requirement: "pos_class_cross_method.py triggers EXEC-002."
+    category: effectiveness
+    source: "DEBT-018-T3-CLASS-SCOPE:example-3"
+    attack_class: "cross-method attribute assembly evasion"
+    verify: "corpus::tests/fixtures/split_evasion/pos_class_cross_method.py::0"
+    status: done
+
+  - id: R-ADV001
+    requirement: "All 7 evasion examples detected with zero misses."
+    category: effectiveness
+    source: implicit
+    attack_class: "all three debt item classes"
+    acceptance:
+      - "R-EFF001 through R-EFF007 all pass"
+    verify: "corpus::tests/fixtures/split_evasion/::0"
+    status: done

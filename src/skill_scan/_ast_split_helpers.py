@@ -1,11 +1,7 @@
 """AST split helpers -- str.format() and %-format resolution.
 
-Resolves string assembly via ``'template'.format(a, b)`` and
-``'%s%s' % (a, b)`` patterns. Used by _ast_split_detector to detect
-dangerous names assembled via format-string evasion.
-
-Both resolvers gate on string-constant receivers/LHS to avoid false
-positives on variable.format() and integer modulo.
+Resolves ``'template'.format(a, b)`` and ``'%s%s' % (a, b)`` patterns.
+Gates on string-constant receivers/LHS to avoid false positives.
 """
 
 from __future__ import annotations
@@ -69,21 +65,40 @@ def _resolve_expr_list(
     """Resolve a list of AST expressions to strings via symbol table or constants."""
     result: list[str] = []
     for expr in exprs:
-        if isinstance(expr, ast.Name):
-            val = _scoped_lookup(expr.id, symbol_table, scope)
-            if val is None:
-                return None
-            result.append(val)
-        elif isinstance(expr, ast.Constant) and isinstance(expr.value, str):
-            result.append(expr.value)
-        elif isinstance(expr, ast.Subscript):
-            val = _resolve_subscript_expr(expr, symbol_table, scope)
-            if val is None:
-                return None
-            result.append(val)
-        else:
+        val = _resolve_single_expr(expr, symbol_table, scope)
+        if val is None:
             return None
+        result.append(val)
     return result
+
+
+def _resolve_single_expr(expr: ast.expr, symbol_table: dict[str, str], scope: str) -> str | None:
+    """Resolve one expression node to a string value."""
+    if isinstance(expr, ast.Name):
+        return _scoped_lookup(expr.id, symbol_table, scope)
+    if isinstance(expr, ast.Constant) and isinstance(expr.value, str):
+        return expr.value
+    if isinstance(expr, ast.Attribute) and isinstance(expr.value, ast.Name):
+        base, attr = expr.value.id, expr.attr
+        # Only resolve self/cls.attr or ClassName.attr (not arbitrary obj.attr)
+        key = f"{base}.{attr}"
+        if key in symbol_table:
+            return symbol_table[key]
+        if scope and base in ("self", "cls"):
+            return symbol_table.get(f"{scope}.{attr}")
+        return None
+    if isinstance(expr, ast.Subscript):
+        return _resolve_subscript_expr(expr, symbol_table, scope)
+    return None
+
+
+def _resolve_subscript_key(slice_val: object) -> str | None:
+    """Convert subscript slice (str key or non-negative int) to composite key suffix."""
+    if isinstance(slice_val, str):
+        return slice_val
+    if isinstance(slice_val, int) and slice_val >= 0:
+        return str(slice_val)
+    return None
 
 
 def _resolve_subscript_expr(
@@ -94,10 +109,12 @@ def _resolve_subscript_expr(
     """Resolve ast.Subscript to string via composite key lookup."""
     if not isinstance(node.value, ast.Name):
         return None
-    if not isinstance(node.slice, ast.Constant) or not isinstance(node.slice.value, str):
+    if not isinstance(node.slice, ast.Constant):
         return None
-    composite_key = f"{node.value.id}[{node.slice.value}]"
-    return _scoped_lookup(composite_key, symbol_table, scope)
+    key = _resolve_subscript_key(node.slice.value)
+    if key is None:
+        return None
+    return _scoped_lookup(f"{node.value.id}[{key}]", symbol_table, scope)
 
 
 def _substitute_format(template: str, args: list[str]) -> str | None:
@@ -187,15 +204,10 @@ def _resolve_single_percent(
     scope: str,
 ) -> str | None:
     """Resolve single-arg %-format: ``'%s' % varname``."""
-    if isinstance(rhs, ast.Name):
-        val = _scoped_lookup(rhs.id, symbol_table, scope)
-        if val is None:
-            return None
-        return _PERCENT_SPEC_RE.sub(lambda _: val, template, count=1)
-    if isinstance(rhs, ast.Constant) and isinstance(rhs.value, str):
-        literal: str = rhs.value
-        return _PERCENT_SPEC_RE.sub(lambda _: literal, template, count=1)
-    return None
+    val = _resolve_single_expr(rhs, symbol_table, scope)
+    if val is None:
+        return None
+    return _PERCENT_SPEC_RE.sub(lambda _: val, template, count=1)
 
 
 def _substitute_percent(template: str, values: list[str]) -> str | None:

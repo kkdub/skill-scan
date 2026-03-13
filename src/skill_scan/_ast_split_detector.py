@@ -12,8 +12,8 @@ from skill_scan._ast_split_helpers import (
     _resolve_join_elements,
     _resolve_map_join,
     _resolve_percent_format,
-    _scoped_lookup,
 )
+from skill_scan._ast_split_resolve import resolve_binop_chain, resolve_fstring
 from skill_scan.decoder import decode_payload, extract_encoded_strings
 from skill_scan.models import Finding, Severity
 
@@ -28,8 +28,6 @@ _NAME_RULE: dict[str, tuple[str, Severity, str]] = {
     **{n: ("EXEC-002", Severity.CRITICAL, "String splitting evasion") for n in _EXEC_NAMES},
     **{n: ("EXEC-006", Severity.HIGH, "Dynamic import evasion") for n in _DYNAMIC_IMPORT_NAMES},
 }
-
-_MAX_BINOP_DEPTH = 50
 
 
 def detect_split_evasion(
@@ -55,12 +53,20 @@ def detect_split_evasion(
 
 
 def _build_scope_map(tree: ast.Module) -> dict[int, str]:
-    """Map node id -> enclosing function name for top-level function bodies."""
+    """Map node id -> scope name (function name or class name for methods)."""
     result: dict[int, str] = {}
+    # Collect (subtree_root, scope_name) pairs for functions and class methods
+    pairs: list[tuple[ast.AST, str]] = []
     for node in tree.body:
         if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
-            for child in ast.walk(node):
-                result[id(child)] = node.name
+            pairs.append((node, node.name))
+        elif isinstance(node, ast.ClassDef):
+            for stmt in node.body:
+                if isinstance(stmt, ast.FunctionDef | ast.AsyncFunctionDef):
+                    pairs.append((stmt, node.name))
+    for root, scope_name in pairs:
+        for child in ast.walk(root):
+            result[id(child)] = scope_name
     return result
 
 
@@ -73,106 +79,17 @@ def _try_resolve_split(
     """Try to resolve a node to a string via BinOp(Add/Mod), f-string, join, or format."""
     if isinstance(node, ast.BinOp):
         if isinstance(node.op, ast.Add):
-            return _resolve_binop_chain(node, symbol_table, scope)
+            return resolve_binop_chain(node, symbol_table, scope)
         if isinstance(node.op, ast.Mod):
             return _resolve_percent_format(node, symbol_table, scope)
     if isinstance(node, ast.JoinedStr):
-        return _resolve_fstring(node, symbol_table, scope)
+        return resolve_fstring(node, symbol_table, scope)
     if isinstance(node, ast.Call):
         am = alias_map or {}
         return _resolve_join_call(node, symbol_table, scope, am) or _resolve_format_call(
             node, symbol_table, scope
         )
     return None
-
-
-def _resolve_binop_chain(
-    node: ast.BinOp,
-    symbol_table: dict[str, str],
-    scope: str,
-    *,
-    _depth: int = 0,
-) -> str | None:
-    """Recursively resolve BinOp(Add) chains: a + b + c."""
-    if _depth > _MAX_BINOP_DEPTH:
-        return None
-    left = _resolve_operand(node.left, symbol_table, scope, _depth=_depth + 1)
-    if left is None:
-        return None
-    right = _resolve_operand(node.right, symbol_table, scope, _depth=_depth + 1)
-    if right is None:
-        return None
-    return left + right
-
-
-def _resolve_operand(
-    node: ast.expr,
-    symbol_table: dict[str, str],
-    scope: str,
-    *,
-    _depth: int = 0,
-) -> str | None:
-    """Resolve a single BinOp operand: nested BinOp, Name/Subscript lookup, or Constant."""
-    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
-        return _resolve_binop_chain(node, symbol_table, scope, _depth=_depth + 1)
-    if isinstance(node, ast.Name):
-        return _scoped_lookup(node.id, symbol_table, scope)
-    if isinstance(node, ast.Constant) and isinstance(node.value, str):
-        return node.value
-    return _resolve_subscript_lookup(node, symbol_table, scope)
-
-
-def _resolve_fstring(
-    node: ast.JoinedStr,
-    symbol_table: dict[str, str],
-    scope: str,
-) -> str | None:
-    """Resolve an f-string where all interpolated values are tracked variables.
-
-    F-string values are either ast.Constant (static text) or
-    ast.FormattedValue (interpolated expressions). Only simple Name
-    references in FormattedValue are resolved.
-    """
-    parts: list[str] = []
-    for value in node.values:
-        if isinstance(value, ast.Constant) and isinstance(value.value, str):
-            parts.append(value.value)
-        elif isinstance(value, ast.FormattedValue):
-            resolved = _resolve_formatted_value(value, symbol_table, scope)
-            if resolved is None:
-                return None
-            parts.append(resolved)
-        else:
-            return None
-    return "".join(parts)
-
-
-def _resolve_formatted_value(
-    node: ast.FormattedValue,
-    symbol_table: dict[str, str],
-    scope: str,
-) -> str | None:
-    """Resolve a FormattedValue: simple Name or Subscript reference.
-
-    Returns raw value regardless of conversion/format_spec so evasion is detected.
-    """
-    if isinstance(node.value, ast.Name):
-        return _scoped_lookup(node.value.id, symbol_table, scope)
-    return _resolve_subscript_lookup(node.value, symbol_table, scope)
-
-
-def _resolve_subscript_lookup(
-    node: ast.expr,
-    symbol_table: dict[str, str],
-    scope: str,
-) -> str | None:
-    """Resolve ast.Subscript to a string via composite key lookup in symbol table."""
-    if not isinstance(node, ast.Subscript) or not isinstance(node.value, ast.Name):
-        return None
-    if not isinstance(node.slice, ast.Constant) or not isinstance(node.slice.value, str):
-        return None
-    composite_key = f"{node.value.id}[{node.slice.value}]"
-    return _scoped_lookup(composite_key, symbol_table, scope)
 
 
 def _resolve_join_call(
@@ -208,11 +125,7 @@ def _is_str_join_call(node: ast.Call) -> bool:
     )
 
 
-def _check_dangerous(
-    resolved: str,
-    file_path: str,
-    node: ast.AST,
-) -> Finding | None:
+def _check_dangerous(resolved: str, file_path: str, node: ast.AST) -> Finding | None:
     """Return a Finding for a dangerous assembled name, or None if safe."""
     entry = _NAME_RULE.get(resolved)
     if entry is None:
@@ -229,7 +142,7 @@ def _check_dangerous(
 
 
 def _check_encoded(resolved: str, file_path: str, node: ast.AST) -> Finding | None:
-    """Check if resolved string contains an encoded dangerous payload."""
+    """Bridge to decoder module for base64/hex/url encoded dangerous payloads."""
     for payload in extract_encoded_strings(resolved):
         decoded = decode_payload(payload)
         if decoded is None:

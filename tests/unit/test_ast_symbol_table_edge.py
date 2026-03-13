@@ -41,11 +41,11 @@ class TestEdgeCases:
         result = build_symbol_table(_PARSE("import os\nfrom sys import argv"))
         assert result == {}
 
-    def test_class_body_not_tracked(self) -> None:
-        """Class-level assignments are not in module scope or function scope."""
+    def test_class_body_tracked_with_prefix(self) -> None:
+        """Class-level assignments are stored as 'ClassName.attr'."""
         code = "class C:\n    x = 'class_val'"
         result = build_symbol_table(_PARSE(code))
-        assert result == {}
+        assert result["C.x"] == "class_val"
 
     def test_reassignment_takes_last_value(self) -> None:
         code = "x = 'first'\nx = 'second'"
@@ -128,10 +128,11 @@ class TestDictSubscriptAssign:
         result = build_symbol_table(_PARSE(code))
         assert result["f.d[x]"] == "hello"
 
-    def test_non_string_key_ignored(self) -> None:
+    def test_integer_key_tracked(self) -> None:
+        """Non-negative integer indices are tracked as composite keys (R001)."""
         code = "d = {}\nd[0] = 'val'"
         result = build_symbol_table(_PARSE(code))
-        assert "d[0]" not in result
+        assert result["d[0]"] == "val"
 
     def test_non_string_value_ignored(self) -> None:
         code = "d = {}\nd['k'] = 42"
@@ -182,3 +183,55 @@ class TestDictLiteralTracking:
         code = "other = {}\nd = {'a': 'ok', **other}"
         result = build_symbol_table(_PARSE(code))
         assert result["d[a]"] == "ok"
+
+
+# -- R001/R002: List-index composite keys -----------------------------------
+
+
+class TestListIndexSubscriptAssign:
+    """build_symbol_table records parts[0] = 'ev' as composite key 'parts[0]' (R001)."""
+
+    def test_basic_int_index_assign(self) -> None:
+        code = "parts = [None, None]\nparts[0] = 'ev'"
+        result = build_symbol_table(_PARSE(code))
+        assert result["parts[0]"] == "ev"
+
+    def test_multi_index_assembly(self) -> None:
+        """Multi-statement list-index assembly (R002)."""
+        code = "items = [None]*3\nitems[0] = 'ex'\nitems[1] = 'ec'"
+        result = build_symbol_table(_PARSE(code))
+        assert result["items[0]"] == "ex"
+        assert result["items[1]"] == "ec"
+
+    def test_string_key_still_works(self) -> None:
+        """String-key dict subscript tracking unchanged (R-IMP001 regression)."""
+        code = "d = {}\nd['k'] = 'ev'"
+        result = build_symbol_table(_PARSE(code))
+        assert result["d[k]"] == "ev"
+
+    def test_negative_index_ignored(self) -> None:
+        code = "parts = [None]\nparts[-1] = 'val'"
+        result = build_symbol_table(_PARSE(code))
+        assert "parts[-1]" not in result
+
+    def test_float_index_ignored(self) -> None:
+        code = "parts = [None]\nparts[1.5] = 'val'"
+        result = build_symbol_table(_PARSE(code))
+        assert "parts[1.5]" not in result
+
+    def test_int_string_key_collision_documented(self) -> None:
+        """Integer 0 and string '0' produce same composite key (R-IMP002 documented)."""
+        code = "d = {}\nd[0] = 'int_val'\nd['0'] = 'str_val'"
+        result = build_symbol_table(_PARSE(code))
+        # Last assignment wins -- both map to 'd[0]'
+        assert result["d[0]"] == "str_val"
+
+    def test_int_index_in_function_scope(self) -> None:
+        code = "def f():\n    parts = [None]\n    parts[0] = 'hello'"
+        result = build_symbol_table(_PARSE(code))
+        assert result["f.parts[0]"] == "hello"
+
+    def test_non_string_value_ignored(self) -> None:
+        code = "parts = [None]\nparts[0] = 42"
+        result = build_symbol_table(_PARSE(code))
+        assert "parts[0]" not in result
