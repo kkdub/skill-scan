@@ -150,12 +150,7 @@ def print_results(
     print("\nLegend: [!!!] = critical, [!] = warning, [~] = info (glue layer)")
 
 
-def parse_args() -> argparse.Namespace:
-    """Parse command-line arguments."""
-    parser = argparse.ArgumentParser(
-        description="Find functions with mixed decision logic and infrastructure I/O.",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
+_EPILOG = """\
 Examples:
   %(prog)s                        Scan entire repo (all severities)
   %(prog)s --severity critical    Only critical-severity smells
@@ -167,48 +162,33 @@ Severity levels:
   critical (!!!): Core domain code - mixing here is a serious problem
   warning (!):    Service/data layer - mixing should be reviewed
   info (~):       Infrastructure/glue - mixing is often acceptable
-        """,
-    )
-    parser.add_argument(
-        "--limit",
-        type=int,
-        default=20,
-        help="Maximum functions to report (default: 20)",
-    )
-    parser.add_argument(
-        "--diff",
-        action="store_true",
-        help="Only scan files changed in git diff",
-    )
+"""
+
+
+def _add_arguments(parser: argparse.ArgumentParser) -> None:
+    """Add all CLI arguments to the parser."""
+    parser.add_argument("--limit", type=int, default=20, help="Maximum functions to report")
+    parser.add_argument("--diff", action="store_true", help="Only scan changed files")
     parser.add_argument(
         "--severity",
         choices=["critical", "warning", "info"],
         default=None,
-        help="Minimum severity to include (default: all). "
-        "'critical' = only critical, 'warning' = warning+critical, 'info' = all",
+        help="Minimum severity to include (default: all)",
     )
-    parser.add_argument(
-        "--verbose",
-        "-v",
-        action="store_true",
-        help="Show detailed signal information",
+    parser.add_argument("--verbose", "-v", action="store_true", help="Show matched I/O calls")
+    parser.add_argument("--strict", action="store_true", help="Exit 1 if any mixed functions found")
+    parser.add_argument("--strict-critical", action="store_true", help="Exit 1 on critical only")
+    parser.add_argument("--include-glue", action="store_true", help="(Legacy) Same as --severity info")
+
+
+def parse_args() -> argparse.Namespace:
+    """Parse command-line arguments."""
+    parser = argparse.ArgumentParser(
+        description="Find functions with mixed decision logic and infrastructure I/O.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=_EPILOG,
     )
-    parser.add_argument(
-        "--strict",
-        action="store_true",
-        help="Exit with code 1 if any mixed functions found (for CI/pre-commit)",
-    )
-    parser.add_argument(
-        "--strict-critical",
-        action="store_true",
-        help="Exit with code 1 only if critical-severity functions found",
-    )
-    # Legacy flag for backward compatibility
-    parser.add_argument(
-        "--include-glue",
-        action="store_true",
-        help="(Legacy) Include all severity levels (same as --severity info)",
-    )
+    _add_arguments(parser)
     return parser.parse_args()
 
 

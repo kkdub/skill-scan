@@ -16,10 +16,10 @@ class Severity(IntEnum):
     Lower values = more critical (sorted first).
     """
 
-    CRITICAL = 1  # MI < 25, CC > 20
-    HIGH = 2  # 25 <= MI < 35, CC 15-20, file > 500 lines
-    MEDIUM = 3  # 35 <= MI < 40, CC 10-15, function > 100 lines
-    LOW = 4  # 40 <= MI < 50, warnings
+    CRITICAL = 1
+    HIGH = 2
+    MEDIUM = 3
+    LOW = 4
 
 
 ViolationType = Literal[
@@ -32,21 +32,17 @@ ViolationType = Literal[
 
 @dataclass(frozen=True, order=True)
 class Violation:
-    """A single code quality violation.
-
-    Ordered by (severity, file_path, line) for consistent sorting.
-    """
+    """A single code quality violation."""
 
     severity: Severity
     file_path: str
     violation_type: ViolationType = field(compare=False)
     message: str = field(compare=False)
     line: int | None = field(default=None, compare=False)
-    # Additional context (not used in ordering)
     function_name: str | None = field(default=None, compare=False)
     value: float | None = field(default=None, compare=False)
     threshold: float | None = field(default=None, compare=False)
-    grade: str | None = field(default=None, compare=False)  # For CC grades (A-F)
+    grade: str | None = field(default=None, compare=False)
 
     def to_dict(self) -> dict[str, object]:
         """Convert to dictionary for JSON serialization."""
@@ -77,7 +73,6 @@ class FileMetrics:
     lines: int = 0
     maintainability_index: float | None = None
     functions: list[dict[str, object]] = field(default_factory=list)
-    # Function dict contains: name, line, length, complexity, grade
 
 
 @dataclass
@@ -100,7 +95,7 @@ class AnalysisResult:
         return sorted(self.violations)
 
     def get_violations_by_file(self) -> dict[str, list[Violation]]:
-        """Group violations by file path, maintaining severity order within each file."""
+        """Group violations by file path."""
         by_file: dict[str, list[Violation]] = {}
         for v in self.get_sorted_violations():
             if v.file_path not in by_file:

@@ -1,7 +1,7 @@
 id: "PLAN-018"
 title: "String-Splitting Evasion Detection (AST-level payload reconstruction)"
 type: implementation
-status: Approved
+status: Done
 created: 2026-03-10
 
 linked_spec: null

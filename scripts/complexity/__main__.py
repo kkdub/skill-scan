@@ -1,8 +1,8 @@
 """Unified CLI entry point for complexity analysis.
 
 Used by both pre-commit hooks and CI. Checks:
-- File length > 500 lines (HIGH severity)
-- Function length > 100 lines (MEDIUM severity)
+- File length > 300 lines (HIGH severity)
+- Function length > 50 lines (MEDIUM severity)
 - Cyclomatic complexity > 10 (MEDIUM), > 15 (HIGH), > 20 (CRITICAL)
 - Maintainability Index < 40 (MEDIUM), < 35 (HIGH), < 25 (CRITICAL)
 
@@ -12,7 +12,6 @@ Usage:
     python -m scripts.complexity --json                       # JSON output
     python -m scripts.complexity --min-severity medium        # Filter
 
-Based on CLAUDE.md: Files <500 lines, functions <50 lines (max 100)
 See also: .agent/standards/CODE-PATTERNS.md SIZE-001, SIZE-002
 """
 
@@ -93,8 +92,8 @@ def _print_violations_by_file(result: AnalysisResult, min_severity: Severity) ->
 def _print_guidelines_footer(radon_available: bool) -> None:
     """Print guidelines footer with standards reference."""
     print("Guidelines (see .agent/standards/CODE-PATTERNS.md):", file=sys.stderr)
-    print("  - SIZE-001: Files should be under 500 lines", file=sys.stderr)
-    print("  - SIZE-002: Functions should be under 100 lines", file=sys.stderr)
+    print("  - SIZE-001: Files should be under 300 lines", file=sys.stderr)
+    print("  - SIZE-002: Functions should be under 50 lines", file=sys.stderr)
     if radon_available:
         print(
             "  - Cyclomatic complexity should be <= 10 (fewer branches)",

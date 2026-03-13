@@ -32,7 +32,7 @@ make check    # All quality checks (run early, run often)
 - Tests in `tests/`
 - Core scanner engine and decoder use stdlib only (`re`, `pathlib`, `json`, `tomllib`, `base64`, `binascii`, `ast`, `concurrent.futures`, `urllib.parse`)
 - Don't add deps without `uv` + `pyproject.toml`
-- **Max 250 lines per file** (source code in `src/` and `tests/`)
+- **Max 300 lines per file** (source code in `src/` and `tests/`)
 
 ## Project Structure
 

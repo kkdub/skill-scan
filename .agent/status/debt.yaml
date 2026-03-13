@@ -1,8 +1,9 @@
 # .agent/status/debt.yaml
 # Entries are removed when resolved. Git history tracks removals.
-# Last updated: 2026-03-12 (PLAN-020 resolved 5 items + narrowed CONTAINERS to list-index-only)
+# Last updated: 2026-03-12
 # Resolved by PLAN-019: lone surrogates, null bytes, OBFS-001 catalog, str.format/%-format evasion
 # Resolved by PLAN-020: FSTRING-CONV, GENERATOR-JOIN, STRING-MULT, PERCENT-OVERPROVISIONED, PERCENT-MIXED-SPECIFIERS, CONTAINERS (dict-only; list indices remain)
+# Resolved by PR-034 review: DEBT-020-RESUB-BACKSLASH (lambda replacement), DEBT-020-UNBOUNDED-MULT (_MAX_REPEAT=1000 cap)
 
 # --- PLAN-018 Red-Team Debt (Tier 2-4) ---
 
@@ -60,24 +61,20 @@
   resolution: "Plan a comprehensive string-building resolution module that handles slice, reverse, chr(), comprehension, and bytes patterns."
   evasions: 13
 
-# --- PLAN-020 Security Review Debt ---
+# --- Structural / Maintenance Debt ---
 
-- id: DEBT-020-RESUB-BACKSLASH
-  description: "_substitute_percent uses re.sub with user-controlled replacement string — backslash sequences interpreted as group references"
-  type: security
+- id: DEBT-TYPE-IGNORE-CONFIG
+  description: "# type: ignore[arg-type] on ScanConfig(**kwargs) in config.py:106 — pyright cannot verify dynamic kwargs dict"
+  type: code-quality
   severity: low
-  plan: PLAN-020
   files:
-    - src/skill_scan/_ast_split_helpers.py
-  blocker: "Requires crafted input containing backslash in assembled payload to trigger; other rules would catch such payloads"
-  resolution: "Change _substitute_percent to use lambda replacement: _PERCENT_SPEC_RE.sub(lambda _: val, template, count=1)"
+    - src/skill_scan/config.py
+  resolution: "Restructure from_toml_dict() to pass explicit keyword arguments instead of building a kwargs dict, or use TypedDict for the intermediate dict."
 
-- id: DEBT-020-UNBOUNDED-MULT
-  description: "_resolve_binop_mult has no upper bound on repeat count — 'x' * 10_000_000 causes multi-MB symbol table entry"
-  type: security
+- id: DEBT-MATCH-STMT
+  description: "3-elif isinstance chain in _recurse_control_flow could use match statement (info-level lint)"
+  type: code-quality
   severity: low
-  plan: PLAN-020
   files:
     - src/skill_scan/_ast_symbol_table_helpers.py
-  blocker: "DoS requires attacker-controlled skill file with extreme multiplication; scanner already has file-size limits at intake"
-  resolution: "Add guard: if int_val > 1000: return None"
+  resolution: "Refactor if/elif chain at line 35 to Python 3.10+ match statement."
