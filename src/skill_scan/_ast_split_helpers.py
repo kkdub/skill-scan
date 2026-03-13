@@ -191,9 +191,10 @@ def _resolve_single_percent(
         val = _scoped_lookup(rhs.id, symbol_table, scope)
         if val is None:
             return None
-        return _PERCENT_SPEC_RE.sub(val, template, count=1)
+        return _PERCENT_SPEC_RE.sub(lambda _: val, template, count=1)
     if isinstance(rhs, ast.Constant) and isinstance(rhs.value, str):
-        return _PERCENT_SPEC_RE.sub(rhs.value, template, count=1)
+        literal: str = rhs.value
+        return _PERCENT_SPEC_RE.sub(lambda _: literal, template, count=1)
     return None
 
 
@@ -201,15 +202,20 @@ def _substitute_percent(template: str, values: list[str]) -> str | None:
     """Substitute %-specifier placeholders with values in order.
 
     Returns None when len(values) > placeholder count (over-provisioning defense).
+    Uses manual match iteration to avoid re.sub backslash interpretation.
     """
-    placeholders = _PERCENT_SPEC_RE.findall(template)
+    placeholders = list(_PERCENT_SPEC_RE.finditer(template))
     if len(values) > len(placeholders):
         return None  # over-provisioned: more args than placeholders
 
-    result = template
-    for val in values:
-        result = _PERCENT_SPEC_RE.sub(val, result, count=1)
-    return result
+    parts: list[str] = []
+    last_end = 0
+    for i, match in enumerate(placeholders):
+        parts.append(template[last_end : match.start()])
+        parts.append(values[i] if i < len(values) else match.group())
+        last_end = match.end()
+    parts.append(template[last_end:])
+    return "".join(parts)
 
 
 def _resolve_join_elements(

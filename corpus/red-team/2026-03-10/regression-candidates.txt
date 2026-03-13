@@ -1,78 +1,38 @@
-# Regression Candidates from Red-Team Run 2026-03-10
-# Target: _ast_split_detector.py + _ast_symbol_table.py
-# Overall evasion rate: 69.9% (51/73 positive cases evaded)
-#
-# Severity labels:
-#   MUST-FIX  = evasion technique has >50% success and is commonly used
-#   SHOULD-FIX = evasion technique has >50% success but is less common
-#   DESIGN-GAP = known architectural limitation (documented in plan)
-#   DEFERRED  = low-priority or requires significant redesign
-
-# === MUST-FIX: Symbol table blind spots (simple extensions to existing logic) ===
-# These use standard Python assignment forms that _collect_assignments() does not handle.
-
-MUST-FIX [tuple_unpacking] tuple_unpack_concat: a, b = 'ev', 'al'; a + b
-MUST-FIX [tuple_unpacking] list_unpack_concat: [a, b] = ['ex', 'ec']; a + b
-MUST-FIX [tuple_unpacking] triple_unpack_concat: a, b, c = 'po', 'pe', 'n'; a+b+c
-MUST-FIX [tuple_unpacking] star_unpack_concat: a, *rest = ['e', 'v', 'a', 'l']
-MUST-FIX [augmented_assign] aug_assign_eval: name = 'ev'; name += 'al'
-MUST-FIX [augmented_assign] aug_assign_three_step: name = 'ex'; name += 'e'; name += 'c'
-MUST-FIX [augmented_assign] aug_assign_system: cmd = 'sys'; cmd += 'tem'
-MUST-FIX [conditional_assign] if_else_assign_concat: if/else branches assigning fragments
-MUST-FIX [scope_leak] for_loop_assignment: for a in ['ev']: pass; b = 'al'; a + b
-MUST-FIX [scope_leak] except_var: try/except block variable persists
-
-# === MUST-FIX: Split detector blind spots (detection side gaps) ===
-
-MUST-FIX [format_method] format_concat_eval: '{}{}'.format(a, b) -- str.format() not handled
-MUST-FIX [format_method] format_named_args: '{x}{y}'.format(x=a, y=b)
-MUST-FIX [percent_format] percent_format_eval: '%s%s' % (a, b)
-MUST-FIX [format_spec_fstring] fstring_with_conversion: f'{a!s}{b!s}' -- conversion blocks resolution
-MUST-FIX [format_spec_fstring] fstring_with_format_spec: f'{a:>2}{b:>2}' -- format spec blocks resolution
-
-# === SHOULD-FIX: Container-based storage (requires deeper AST analysis) ===
-
-SHOULD-FIX [dict_storage] dict_concat_eval: d['a'] = 'ev'; d['b'] = 'al'; d['a'] + d['b']
-SHOULD-FIX [dict_storage] dict_literal_concat: parts = {'a': 'ex', 'b': 'ec'}; parts['a'] + parts['b']
-SHOULD-FIX [dict_storage] dict_get_concat: d.get('x') + d.get('y')
-SHOULD-FIX [list_storage] list_index_concat: parts[0] + parts[1]
-SHOULD-FIX [list_storage] list_join_variable: ''.join(parts) where parts is a variable
-SHOULD-FIX [list_storage] list_pop_concat: parts.pop(0) + parts.pop(0)
-SHOULD-FIX [string_multiply] multiply_then_concat: 'e' * 1 as RHS
-SHOULD-FIX [string_multiply] multiply_to_pad: 'eval' * 1
-
-# === SHOULD-FIX: Control flow and dynamic dispatch ===
-
-SHOULD-FIX [walrus_operator] walrus_in_if: (a := 'ev') walrus assignment not tracked
-SHOULD-FIX [walrus_operator] walrus_in_while: walrus in while-condition
-SHOULD-FIX [generator_join] genexpr_join_eval: ''.join(p for p in parts) -- genexpr not resolved
-SHOULD-FIX [generator_join] genexpr_join_chr: ''.join(chr(c) for c in codes)
-SHOULD-FIX [map_join] map_chr_join_var: ''.join(map(chr, codes)) where codes is variable
-SHOULD-FIX [encoded_split] hex_string_split: plain hex digits misidentified as base64 by decoder
-
-# === DESIGN-GAP: Known architectural limitations ===
-
-DESIGN-GAP [class_scope] class_attr_concat: class body scope not tracked (documented)
-DESIGN-GAP [class_scope] class_method_concat: self.attr access not tracked (documented)
-DESIGN-GAP [class_scope] class_init_concat: instance attribute assignment not tracked (documented)
-DESIGN-GAP [nested_function] nested_func_concat: closure variable access not tracked
-DESIGN-GAP [nested_function] nested_func_fstring: nested function scope not cross-referenced
-DESIGN-GAP [global_nonlocal] global_var_concat: global keyword not resolved to module scope
-DESIGN-GAP [global_nonlocal] nonlocal_var_concat: nonlocal keyword not resolved to enclosing scope
-DESIGN-GAP [cross_function] func_return_concat: function return value not tracked
-DESIGN-GAP [cross_function] func_arg_concat: function argument passing not tracked
-
-# === DEFERRED: Complex or rare evasion techniques ===
-
-DEFERRED [slice_build] slice_from_safe_string: string slicing to extract 'eval' from 'evaluation'
-DEFERRED [slice_build] slice_concat: slices from different positions concatenated
-DEFERRED [reverse_build] reverse_dangerous: rev[::-1] to reverse 'lave' to 'eval'
-DEFERRED [reverse_build] reversed_join: ''.join(reversed(rev))
-DEFERRED [lambda_build] lambda_concat: lambda returning fragments
-DEFERRED [comprehension_build] listcomp_chr_join: [chr(c) for c in codes] where codes is variable
-DEFERRED [comprehension_build] dictcomp_fragments: dict comprehension producing fragments
-DEFERRED [starargs_build] starargs_format: '{}{}'.format(*parts)
-DEFERRED [encode_decode] hex_decode_concat: bytes.fromhex().decode() not tracked as string RHS
-DEFERRED [bytes_concat] bytes_add_decode: bytes concat then decode
-DEFERRED [attribute_chain] namedtuple_attrs: named tuple attribute access
-DEFERRED [scope_leak] with_statement_as: with-as variable scope
+[dict_storage] dict_get_concat: Dict .get() method for fragments
+[list_storage] list_index_concat: List index access then concatenation
+[list_storage] list_join_variable: Join on a list variable (not literal list in join call)
+[list_storage] list_pop_concat: List pop() to extract fragments
+[tuple_unpacking] star_unpack_concat: Star unpacking then join of remainder
+[walrus_operator] walrus_in_while: Walrus operator in while-loop header
+[augmented_assign] aug_assign_eval: Augmented assignment (+=) to build 'eval'
+[augmented_assign] aug_assign_three_step: Three-step augmented assignment to build 'exec'
+[augmented_assign] aug_assign_system: Augmented assignment to build 'system'
+[string_multiply] multiply_to_pad: Multiply dangerous name by 1 (identity but different AST node)
+[class_scope] class_attr_concat: Class attributes concatenated within class body
+[class_scope] class_method_concat: Class attributes concatenated via self in method
+[class_scope] class_init_concat: Instance attributes set in __init__ then concatenated
+[nested_function] nested_func_concat: Closure: outer var + inner var concatenated
+[nested_function] nested_func_fstring: Closure with f-string interpolation
+[global_nonlocal] nonlocal_var_concat: Nonlocal variable modified and concatenated
+[conditional_assign] ternary_assign_concat: Ternary assignment, dangerous on true branch
+[conditional_assign] if_else_assign_concat: If/else branch assignment then concatenation
+[cross_function] func_return_concat: Function return values concatenated at module level
+[cross_function] func_arg_concat: Function called with dangerous fragments as arguments
+[generator_join] genexpr_join_eval: Generator expression in join over list variable
+[generator_join] genexpr_join_chr: Generator expression with chr() in join
+[map_join] map_chr_join_var: map(chr, list_var) in join -- list is a variable not literal
+[format_method] format_named_args: str.format() with named args from tracked variables
+[slice_build] slice_from_safe_string: Slice from innocent-looking string to extract 'eval'
+[slice_build] slice_concat: Slices from different positions concatenated
+[reverse_build] reverse_dangerous: Reversed string sliced to get 'eval'
+[reverse_build] reversed_join: reversed() built-in with join to get 'exec'
+[lambda_build] lambda_concat: Lambda functions returning fragments
+[comprehension_build] listcomp_chr_join: List comprehension with chr() -- codes in variable not literal
+[comprehension_build] dictcomp_fragments: Dict comprehension producing fragments then concatenated
+[starargs_build] starargs_format: Star-unpacking into format()
+[encode_decode] hex_decode_concat: Hex-decoded bytes to string then concatenation
+[bytes_concat] bytes_add_decode: Bytes concatenation then .decode()
+[attribute_chain] namedtuple_attrs: Named tuple attribute access for fragments
+[encoded_split] hex_string_split: Hex-encoded payload split across 4 variables
+[scope_leak] for_loop_assignment: For-loop variable leak (Python loop vars persist)
+[scope_leak] with_statement_as: with-as variable persists after block

@@ -127,26 +127,40 @@ def _track_name_assign(var_name: str, value_node: ast.expr, table: dict[str, str
         table[var_name] = _Ref(value_node.id)
 
 
+_MAX_REPEAT = 1000  # cap repetition to prevent DoS via huge strings
+
+
 def _resolve_binop_mult(node: ast.expr) -> str | None:
     """Resolve string * positive-int (or int * string) to repeated string.
 
-    Only resolves when the integer operand is >= 1. Returns None for
-    zero, negative, float, or non-constant operands.
+    Only resolves when the integer operand is in [1, _MAX_REPEAT]. Returns
+    None for zero, negative, float, non-constant, or oversized operands.
     """
     if not isinstance(node, ast.BinOp) or not isinstance(node.op, ast.Mult):
         return None
 
-    # Try str * int first, then int * str
-    str_val = try_resolve_string(node.left)
-    int_val = _resolve_int_expr(node.right) if str_val is not None else None
-    if str_val is None or int_val is None:
-        str_val = try_resolve_string(node.right)
-        int_val = _resolve_int_expr(node.left) if str_val is not None else None
-    if str_val is None or int_val is None:
+    pair = _extract_str_int_pair(node)
+    if pair is None:
         return None
-    if int_val < 1:
+    str_val, int_val = pair
+    if not 1 <= int_val <= _MAX_REPEAT:
         return None
     return str_val * int_val
+
+
+def _extract_str_int_pair(node: ast.BinOp) -> tuple[str, int] | None:
+    """Extract (string, int) from either operand order of a BinOp."""
+    str_val = try_resolve_string(node.left)
+    if str_val is not None:
+        int_val = _resolve_int_expr(node.right)
+        if int_val is not None:
+            return str_val, int_val
+    str_val = try_resolve_string(node.right)
+    if str_val is not None:
+        int_val = _resolve_int_expr(node.left)
+        if int_val is not None:
+            return str_val, int_val
+    return None
 
 
 def _handle_subscript_assign(

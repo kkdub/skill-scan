@@ -2,20 +2,20 @@
   "summary": {
     "total_inputs": 80,
     "positive_total": 73,
-    "positive_detected": 22,
-    "positive_evaded": 51,
+    "positive_detected": 35,
+    "positive_evaded": 38,
     "negative_total": 7,
     "false_positives": 0,
-    "detection_rate": 0.3014,
-    "evasion_rate": 0.6986,
+    "detection_rate": 0.4795,
+    "evasion_rate": 0.5205,
     "false_positive_rate": 0.0
   },
   "category_stats": {
     "dict_storage": {
       "total": 3,
       "positive_total": 3,
-      "positive_detected": 0,
-      "positive_evaded": 3,
+      "positive_detected": 2,
+      "positive_evaded": 1,
       "negative_total": 0,
       "false_positives": 0,
       "true_negatives": 0
@@ -32,8 +32,8 @@
     "tuple_unpacking": {
       "total": 4,
       "positive_total": 4,
-      "positive_detected": 0,
-      "positive_evaded": 4,
+      "positive_detected": 3,
+      "positive_evaded": 1,
       "negative_total": 0,
       "false_positives": 0,
       "true_negatives": 0
@@ -41,8 +41,8 @@
     "walrus_operator": {
       "total": 2,
       "positive_total": 2,
-      "positive_detected": 0,
-      "positive_evaded": 2,
+      "positive_detected": 1,
+      "positive_evaded": 1,
       "negative_total": 0,
       "false_positives": 0,
       "true_negatives": 0
@@ -59,8 +59,8 @@
     "string_multiply": {
       "total": 2,
       "positive_total": 2,
-      "positive_detected": 0,
-      "positive_evaded": 2,
+      "positive_detected": 1,
+      "positive_evaded": 1,
       "negative_total": 0,
       "false_positives": 0,
       "true_negatives": 0
@@ -95,8 +95,8 @@
     "global_nonlocal": {
       "total": 2,
       "positive_total": 2,
-      "positive_detected": 0,
-      "positive_evaded": 2,
+      "positive_detected": 1,
+      "positive_evaded": 1,
       "negative_total": 0,
       "false_positives": 0,
       "true_negatives": 0
@@ -149,8 +149,8 @@
     "format_method": {
       "total": 2,
       "positive_total": 2,
-      "positive_detected": 0,
-      "positive_evaded": 2,
+      "positive_detected": 1,
+      "positive_evaded": 1,
       "negative_total": 0,
       "false_positives": 0,
       "true_negatives": 0
@@ -158,8 +158,8 @@
     "percent_format": {
       "total": 1,
       "positive_total": 1,
-      "positive_detected": 0,
-      "positive_evaded": 1,
+      "positive_detected": 1,
+      "positive_evaded": 0,
       "negative_total": 0,
       "false_positives": 0,
       "true_negatives": 0
@@ -302,8 +302,8 @@
     "format_spec_fstring": {
       "total": 2,
       "positive_total": 2,
-      "positive_detected": 0,
-      "positive_evaded": 2,
+      "positive_detected": 2,
+      "positive_evaded": 0,
       "negative_total": 0,
       "false_positives": 0,
       "true_negatives": 0
@@ -338,8 +338,8 @@
     "scope_leak": {
       "total": 3,
       "positive_total": 3,
-      "positive_detected": 0,
-      "positive_evaded": 3,
+      "positive_detected": 1,
+      "positive_evaded": 2,
       "negative_total": 0,
       "false_positives": 0,
       "true_negatives": 0
@@ -351,20 +351,34 @@
       "id": "dict_concat_eval",
       "description": "Dict subscript assignment then concatenation",
       "should_detect": true,
-      "detected": false,
-      "status": "EVADED",
-      "finding_count": 0,
-      "finding_details": []
+      "detected": true,
+      "status": "DETECTED",
+      "finding_count": 1,
+      "finding_details": [
+        {
+          "rule_id": "EXEC-002",
+          "severity": "critical",
+          "matched_text": "split variable evasion building 'eval'",
+          "line": 4
+        }
+      ]
     },
     {
       "category": "dict_storage",
       "id": "dict_literal_concat",
       "description": "Dict literal values concatenated",
       "should_detect": true,
-      "detected": false,
-      "status": "EVADED",
-      "finding_count": 0,
-      "finding_details": []
+      "detected": true,
+      "status": "DETECTED",
+      "finding_count": 1,
+      "finding_details": [
+        {
+          "rule_id": "EXEC-002",
+          "severity": "critical",
+          "matched_text": "split variable evasion building 'exec'",
+          "line": 2
+        }
+      ]
     },
     {
       "category": "dict_storage",
@@ -411,20 +425,34 @@
       "id": "tuple_unpack_concat",
       "description": "Tuple unpacking assignment then concatenation",
       "should_detect": true,
-      "detected": false,
-      "status": "EVADED",
-      "finding_count": 0,
-      "finding_details": []
+      "detected": true,
+      "status": "DETECTED",
+      "finding_count": 1,
+      "finding_details": [
+        {
+          "rule_id": "EXEC-002",
+          "severity": "critical",
+          "matched_text": "split variable evasion building 'eval'",
+          "line": 2
+        }
+      ]
     },
     {
       "category": "tuple_unpacking",
       "id": "list_unpack_concat",
       "description": "List unpacking assignment then concatenation",
       "should_detect": true,
-      "detected": false,
-      "status": "EVADED",
-      "finding_count": 0,
-      "finding_details": []
+      "detected": true,
+      "status": "DETECTED",
+      "finding_count": 1,
+      "finding_details": [
+        {
+          "rule_id": "EXEC-002",
+          "severity": "critical",
+          "matched_text": "split variable evasion building 'exec'",
+          "line": 2
+        }
+      ]
     },
     {
       "category": "tuple_unpacking",
@@ -441,20 +469,34 @@
       "id": "triple_unpack_concat",
       "description": "Three-way tuple unpacking for 'popen'",
       "should_detect": true,
-      "detected": false,
-      "status": "EVADED",
-      "finding_count": 0,
-      "finding_details": []
+      "detected": true,
+      "status": "DETECTED",
+      "finding_count": 1,
+      "finding_details": [
+        {
+          "rule_id": "EXEC-002",
+          "severity": "critical",
+          "matched_text": "split variable evasion building 'popen'",
+          "line": 2
+        }
+      ]
     },
     {
       "category": "walrus_operator",
       "id": "walrus_in_if",
       "description": "Walrus operator in if-condition",
       "should_detect": true,
-      "detected": false,
-      "status": "EVADED",
-      "finding_count": 0,
-      "finding_details": []
+      "detected": true,
+      "status": "DETECTED",
+      "finding_count": 1,
+      "finding_details": [
+        {
+          "rule_id": "EXEC-002",
+          "severity": "critical",
+          "matched_text": "split variable evasion building 'eval'",
+          "line": 2
+        }
+      ]
     },
     {
       "category": "walrus_operator",
@@ -501,10 +543,17 @@
       "id": "multiply_then_concat",
       "description": "String multiply (* 1) then concatenation",
       "should_detect": true,
-      "detected": false,
-      "status": "EVADED",
-      "finding_count": 0,
-      "finding_details": []
+      "detected": true,
+      "status": "DETECTED",
+      "finding_count": 1,
+      "finding_details": [
+        {
+          "rule_id": "EXEC-002",
+          "severity": "critical",
+          "matched_text": "split variable evasion building 'eval'",
+          "line": 3
+        }
+      ]
     },
     {
       "category": "string_multiply",
@@ -622,10 +671,17 @@
       "id": "global_var_concat",
       "description": "Global variable read in function then concatenated",
       "should_detect": true,
-      "detected": false,
-      "status": "EVADED",
-      "finding_count": 0,
-      "finding_details": []
+      "detected": true,
+      "status": "DETECTED",
+      "finding_count": 1,
+      "finding_details": [
+        {
+          "rule_id": "EXEC-002",
+          "severity": "critical",
+          "matched_text": "split variable evasion building 'eval'",
+          "line": 5
+        }
+      ]
     },
     {
       "category": "global_nonlocal",
@@ -739,10 +795,17 @@
       "id": "format_concat_eval",
       "description": "str.format() with tracked variables",
       "should_detect": true,
-      "detected": false,
-      "status": "EVADED",
-      "finding_count": 0,
-      "finding_details": []
+      "detected": true,
+      "status": "DETECTED",
+      "finding_count": 1,
+      "finding_details": [
+        {
+          "rule_id": "EXEC-002",
+          "severity": "critical",
+          "matched_text": "split variable evasion building 'eval'",
+          "line": 3
+        }
+      ]
     },
     {
       "category": "format_method",
@@ -759,10 +822,17 @@
       "id": "percent_format_eval",
       "description": "%-formatting with tracked variables",
       "should_detect": true,
-      "detected": false,
-      "status": "EVADED",
-      "finding_count": 0,
-      "finding_details": []
+      "detected": true,
+      "status": "DETECTED",
+      "finding_count": 1,
+      "finding_details": [
+        {
+          "rule_id": "EXEC-002",
+          "severity": "critical",
+          "matched_text": "split variable evasion building 'eval'",
+          "line": 3
+        }
+      ]
     },
     {
       "category": "slice_build",
@@ -1143,20 +1213,34 @@
       "id": "fstring_with_conversion",
       "description": "F-string with !s conversion",
       "should_detect": true,
-      "detected": false,
-      "status": "EVADED",
-      "finding_count": 0,
-      "finding_details": []
+      "detected": true,
+      "status": "DETECTED",
+      "finding_count": 1,
+      "finding_details": [
+        {
+          "rule_id": "EXEC-002",
+          "severity": "critical",
+          "matched_text": "split variable evasion building 'eval'",
+          "line": 3
+        }
+      ]
     },
     {
       "category": "format_spec_fstring",
       "id": "fstring_with_format_spec",
       "description": "F-string with format spec (:>2)",
       "should_detect": true,
-      "detected": false,
-      "status": "EVADED",
-      "finding_count": 0,
-      "finding_details": []
+      "detected": true,
+      "status": "DETECTED",
+      "finding_count": 1,
+      "finding_details": [
+        {
+          "rule_id": "EXEC-002",
+          "severity": "critical",
+          "matched_text": "split variable evasion building 'eval'",
+          "line": 3
+        }
+      ]
     },
     {
       "category": "encoded_split",
@@ -1295,10 +1379,17 @@
       "id": "except_var",
       "description": "Variable assigned in except block persists",
       "should_detect": true,
-      "detected": false,
-      "status": "EVADED",
-      "finding_count": 0,
-      "finding_details": []
+      "detected": true,
+      "status": "DETECTED",
+      "finding_count": 1,
+      "finding_details": [
+        {
+          "rule_id": "EXEC-002",
+          "severity": "critical",
+          "matched_text": "split variable evasion building 'eval'",
+          "line": 6
+        }
+      ]
     }
   ]
 }
