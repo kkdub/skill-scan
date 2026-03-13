@@ -79,7 +79,14 @@ def _resolve_single_expr(expr: ast.expr, symbol_table: dict[str, str], scope: st
     if isinstance(expr, ast.Constant) and isinstance(expr.value, str):
         return expr.value
     if isinstance(expr, ast.Attribute) and isinstance(expr.value, ast.Name):
-        return _scoped_lookup(expr.attr, symbol_table, scope)
+        base, attr = expr.value.id, expr.attr
+        # Only resolve self/cls.attr or ClassName.attr (not arbitrary obj.attr)
+        key = f"{base}.{attr}"
+        if key in symbol_table:
+            return symbol_table[key]
+        if scope and base in ("self", "cls"):
+            return symbol_table.get(f"{scope}.{attr}")
+        return None
     if isinstance(expr, ast.Subscript):
         return _resolve_subscript_expr(expr, symbol_table, scope)
     return None

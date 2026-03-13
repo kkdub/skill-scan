@@ -69,7 +69,14 @@ def resolve_expr(node: ast.expr, symbol_table: dict[str, str], scope: str) -> st
     if isinstance(node, ast.Name):
         return _scoped_lookup(node.id, symbol_table, scope)
     if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name):
-        return _scoped_lookup(node.attr, symbol_table, scope)
+        base, attr = node.value.id, node.attr
+        # Only resolve self/cls.attr or ClassName.attr (not arbitrary obj.attr)
+        key = f"{base}.{attr}"
+        if key in symbol_table:
+            return symbol_table[key]
+        if scope and base in ("self", "cls"):
+            return symbol_table.get(f"{scope}.{attr}")
+        return None
     return _resolve_subscript_lookup(node, symbol_table, scope)
 
 

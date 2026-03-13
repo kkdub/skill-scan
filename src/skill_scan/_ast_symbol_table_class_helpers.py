@@ -53,11 +53,11 @@ def _sub_bodies(stmt: ast.stmt) -> list[list[ast.stmt]]:
     if isinstance(stmt, ast.If):
         return [stmt.body, stmt.orelse]
     if isinstance(stmt, ast.For | ast.While):
-        return [stmt.body]
+        return [stmt.body, stmt.orelse]
     if isinstance(stmt, ast.With):
         return [stmt.body]
     if isinstance(stmt, ast.Try):
-        subs: list[list[ast.stmt]] = [stmt.body, stmt.finalbody]
+        subs: list[list[ast.stmt]] = [stmt.body, stmt.orelse, stmt.finalbody]
         for handler in stmt.handlers:
             subs.append(handler.body)
         return subs

@@ -230,11 +230,12 @@ class TestClassSelfAttrResolution:
 
 class TestPlanAcceptance:
     def test_list_index_evasion_e2e(self) -> None:
-        code = "parts=['ev','al']\neval(parts[0]+parts[1])"
+        """List-index subscript resolution produces EXEC-002 via split detector (not direct call)."""
+        code = "parts = {}\nparts[0] = 'ev'\nparts[1] = 'al'\nresult = parts[0] + parts[1]"
         findings = analyze_python(code, _FILE)
         exec002 = [f for f in findings if f.rule_id == "EXEC-002"]
         assert len(exec002) >= 1
-        assert any("eval" in f.matched_text for f in exec002)
+        assert any("split" in f.matched_text for f in exec002)
 
     def test_global_overwrite_evasion_e2e(self) -> None:
         code = "x='safe'\ndef f():\n  global x\n  x='exec'\nf()\nexec(x)"

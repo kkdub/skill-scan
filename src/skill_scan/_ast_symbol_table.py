@@ -53,7 +53,7 @@ def build_symbol_table(tree: ast.Module) -> dict[str, str]:
             func_scope = _collect_assignments(node.body)
             _resolve_indirections(func_scope, parent_scope=module_scope)
             global_names, _ = _collect_scope_declarations(node.body)
-            _route_globals(func_scope, global_names, result)
+            _route_globals(func_scope, global_names, result, module_scope)
             _process_nested(node.body, func_scope, result)
             for var_name, value in func_scope.items():
                 if isinstance(value, str):
@@ -68,13 +68,20 @@ def _route_globals(
     func_scope: dict[str, str | _Ref],
     global_names: set[str],
     result: dict[str, str],
+    module_scope: dict[str, str | _Ref] | None = None,
 ) -> None:
-    """Move global-declared writes from function scope to module result."""
+    """Move global-declared writes from function scope to module result.
+
+    Also updates module_scope so subsequent function scopes resolving
+    against it see the routed value (avoids stale parent lookups).
+    """
     for name in global_names:
         if name in func_scope:
             value = func_scope.pop(name)
             if isinstance(value, str):
                 result[name] = value
+                if module_scope is not None:
+                    module_scope[name] = value
 
 
 def _process_nested(
@@ -90,7 +97,13 @@ def _process_nested(
             continue
         inner_scope = _collect_assignments(node.body)
         _resolve_indirections(inner_scope, parent_scope=parent_scope)
-        _, nonlocal_names = _collect_scope_declarations(node.body)
+        global_names, nonlocal_names = _collect_scope_declarations(node.body)
+        # Route global-declared writes to module scope
+        for name in global_names:
+            if name in inner_scope:
+                value = inner_scope.pop(name)
+                if isinstance(value, str):
+                    result[name] = value
         for name in nonlocal_names:
             if name in inner_scope:
                 value = inner_scope.pop(name)
