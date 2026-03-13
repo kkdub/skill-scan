@@ -1,48 +1,19 @@
 # .agent/status/debt.yaml
 # Entries are removed when resolved. Git history tracks removals.
-# Last updated: 2026-03-12 (PLAN-019 resolved items 1-3 + DEBT-018-T2-FORMAT)
+# Last updated: 2026-03-12 (PLAN-020 resolved 5 items + narrowed CONTAINERS to list-index-only)
 # Resolved by PLAN-019: lone surrogates, null bytes, OBFS-001 catalog, str.format/%-format evasion
+# Resolved by PLAN-020: FSTRING-CONV, GENERATOR-JOIN, STRING-MULT, PERCENT-OVERPROVISIONED, PERCENT-MIXED-SPECIFIERS, CONTAINERS (dict-only; list indices remain)
 
 # --- PLAN-018 Red-Team Debt (Tier 2-4) ---
 
-- id: DEBT-018-T2-FSTRING-CONV
-  description: "F-strings with conversion (!s, !r) or format specs (:>2) are not resolved"
+- id: DEBT-018-T2-LIST-INDEX
+  description: "List index subscript assignments (parts[0]='ev') evade symbol table — only dict string-key subscripts tracked"
   type: effectiveness
   severity: medium
-  plan: PLAN-018
-  files:
-    - src/skill_scan/_ast_split_detector.py
-  resolution: "Remove conversion/format_spec bail-outs in f-string resolution — the base variable value is still trackable."
-  evasions: 2
-
-- id: DEBT-018-T2-CONTAINERS
-  description: "Variables stored in dicts (d['key']='ev') or lists (parts[0]='ev') evade symbol table"
-  type: effectiveness
-  severity: medium
-  plan: PLAN-018
+  plan: PLAN-020
   files:
     - src/skill_scan/_ast_symbol_table.py
-  resolution: "Track subscript assignments (ast.Subscript targets) with composite keys in the symbol table."
-  evasions: 6
-
-- id: DEBT-018-T2-GENERATOR-JOIN
-  description: "Generator expressions and map() calls in join() arguments not resolved"
-  type: effectiveness
-  severity: low
-  plan: PLAN-018
-  files:
-    - src/skill_scan/_ast_split_detector.py
-  resolution: "Resolve generator expressions and map() iterables when elements are trackable."
-  evasions: 3
-
-- id: DEBT-018-T2-STRING-MULT
-  description: "String multiplication (ast.BinOp with Mult) not tracked in symbol table"
-  type: effectiveness
-  severity: low
-  plan: PLAN-018
-  files:
-    - src/skill_scan/_ast_symbol_table.py
-  resolution: "Resolve BinOp(Mult) where one operand is a string constant and the other is an int constant."
+  resolution: "Track ast.Subscript targets with integer-constant slices using composite key 'varname[0]' format."
   evasions: 2
 
 - id: DEBT-018-T3-CLASS-SCOPE
@@ -89,24 +60,24 @@
   resolution: "Plan a comprehensive string-building resolution module that handles slice, reverse, chr(), comprehension, and bytes patterns."
   evasions: 13
 
-# --- PLAN-019 Security Review Debt ---
+# --- PLAN-020 Security Review Debt ---
 
-- id: DEBT-019-PERCENT-OVERPROVISIONED
-  description: "_substitute_percent() does not detect over-provisioned value lists (more values than %s placeholders)"
+- id: DEBT-020-RESUB-BACKSLASH
+  description: "_substitute_percent uses re.sub with user-controlled replacement string — backslash sequences interpreted as group references"
   type: security
   severity: low
-  plan: PLAN-019
+  plan: PLAN-020
   files:
-    - src/skill_scan/_ast_split_helpers.py:137-168
-  blocker: "_resolve_percent_format() already guards with count == element count check; the inner _substitute_percent() is defense-in-depth only"
-  resolution: "Add len(values) == placeholder_count assertion in _substitute_percent() for defense-in-depth"
+    - src/skill_scan/_ast_split_helpers.py
+  blocker: "Requires crafted input containing backslash in assembled payload to trigger; other rules would catch such payloads"
+  resolution: "Change _substitute_percent to use lambda replacement: _PERCENT_SPEC_RE.sub(lambda _: val, template, count=1)"
 
-- id: DEBT-019-PERCENT-MIXED-SPECIFIERS
-  description: "%-format resolver only matches %s; templates mixing %d/%r with %s evade detection"
+- id: DEBT-020-UNBOUNDED-MULT
+  description: "_resolve_binop_mult has no upper bound on repeat count — 'x' * 10_000_000 causes multi-MB symbol table entry"
   type: security
   severity: low
-  plan: PLAN-019
+  plan: PLAN-020
   files:
-    - src/skill_scan/_ast_split_helpers.py:137-168
-  blocker: "Conservative design — %s-only matching produces zero false positives; enumerating all specifiers requires careful handling of %% literals and width/precision modifiers"
-  resolution: "Enumerate all %-specifiers (%s, %d, %r, %f, etc.) in _PERCENT_S_RE or document as known blind spot in threat model"
+    - src/skill_scan/_ast_symbol_table_helpers.py
+  blocker: "DoS requires attacker-controlled skill file with extreme multiplication; scanner already has file-size limits at intake"
+  resolution: "Add guard: if int_val > 1000: return None"

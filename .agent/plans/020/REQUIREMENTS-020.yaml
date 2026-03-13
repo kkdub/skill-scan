@@ -1,0 +1,239 @@
+plan: PLAN-020
+
+requirements:
+
+  # ============================================================
+  # EXPLICIT — F-string conversion/format-spec (DEBT-018-T2-FSTRING-CONV)
+  # ============================================================
+
+  - id: R001
+    requirement: "_resolve_formatted_value() must not return None when node.conversion is !s or !r; must return the base variable value."
+    category: functional
+    source: "DEBT-018-T2-FSTRING-CONV"
+    contract:
+      given: "symbol_table = {'a': 'ev'}; FormattedValue for `a` with conversion=115 (!s)"
+      when: "_resolve_formatted_value(node, symbol_table, scope='')"
+      then: "returns 'ev' (not None)"
+    verify: "test::tests/unit/test_ast_split_detector.py"
+    status: done
+
+  - id: R002
+    requirement: "_resolve_formatted_value() must not return None when node.format_spec is present; must return the base variable value."
+    category: functional
+    source: "DEBT-018-T2-FSTRING-CONV"
+    contract:
+      given: "symbol_table = {'a': 'ev'}; FormattedValue for `a` with format_spec=':.2f'"
+      when: "_resolve_formatted_value(node, symbol_table, scope='')"
+      then: "returns 'ev' (not None)"
+    verify: "test::tests/unit/test_ast_split_detector.py"
+    status: done
+
+  # ============================================================
+  # EXPLICIT — Dict/list container tracking (DEBT-018-T2-CONTAINERS)
+  # ============================================================
+
+  - id: R003
+    requirement: "build_symbol_table() must track ast.Subscript targets in assignments under composite keys ('varname[key]')."
+    category: functional
+    source: "DEBT-018-T2-CONTAINERS"
+    contract:
+      given: "AST for: d = {}; d['a'] = 'ev'"
+      when: "build_symbol_table(tree)"
+      then: "returns dict containing 'd[a]' -> 'ev'"
+    verify: "test::tests/unit/test_ast_symbol_table_edge.py"
+    status: done
+
+  - id: R004
+    requirement: "build_symbol_table() must track dict literal initial values under composite keys."
+    category: functional
+    source: "DEBT-018-T2-CONTAINERS"
+    contract:
+      given: "AST for: parts = {'a': 'ex', 'b': 'ec'}"
+      when: "build_symbol_table(tree)"
+      then: "returns entries for parts[a] = 'ex' and parts[b] = 'ec'"
+    verify: "test::tests/unit/test_ast_symbol_table_edge.py"
+    status: done
+
+  # ============================================================
+  # EXPLICIT — Generator/map join (DEBT-018-T2-GENERATOR-JOIN)
+  # ============================================================
+
+  - id: R005
+    requirement: "_resolve_join_call() must resolve generator expressions as join arguments when iterating over trackable list elements."
+    category: functional
+    source: "DEBT-018-T2-GENERATOR-JOIN"
+    contract:
+      given: "AST for: ''.join(p for p in ['ev', 'al'])"
+      when: "_resolve_join_call(node, symbol_table, scope='')"
+      then: "returns 'eval'"
+    verify: "test::tests/unit/test_ast_split_detector.py"
+    status: done
+
+  - id: R006
+    requirement: "_resolve_join_call() must resolve map(chr/str, iterable) as join arguments."
+    category: functional
+    source: "DEBT-018-T2-GENERATOR-JOIN"
+    contract:
+      given: "AST for: ''.join(map(chr, [101, 118, 97, 108]))"
+      when: "_resolve_join_call(node, symbol_table, scope='')"
+      then: "returns 'eval'"
+    verify: "test::tests/unit/test_ast_split_detector.py"
+    status: done
+
+  # ============================================================
+  # EXPLICIT — String multiplication (DEBT-018-T2-STRING-MULT)
+  # ============================================================
+
+  - id: R007
+    requirement: "build_symbol_table() must resolve BinOp(Mult) where one operand is a string constant and the other is a positive int constant."
+    category: functional
+    source: "DEBT-018-T2-STRING-MULT"
+    contract:
+      given: "AST for: a = 'ev' * 2"
+      when: "build_symbol_table(tree)"
+      then: "returns {'a': 'evev'}"
+    verify: "test::tests/unit/test_ast_symbol_table_edge.py"
+    status: done
+
+  # ============================================================
+  # EXPLICIT — Percent-format defense (DEBT-019)
+  # ============================================================
+
+  - id: R008
+    requirement: "_substitute_percent() must return None when len(values) exceeds placeholder count."
+    category: security
+    source: "DEBT-019-PERCENT-OVERPROVISIONED"
+    contract:
+      given: "template = '%s%s', values = ['ev', 'al', 'EXTRA']"
+      when: "_substitute_percent(template, values)"
+      then: "returns None"
+    verify: "test::tests/unit/test_ast_split_helpers.py"
+    status: done
+
+  - id: R009
+    requirement: "_resolve_percent_format() must count/substitute all standard %-specifiers (%s, %d, %r, %f, etc.), not just %s."
+    category: functional
+    source: "DEBT-019-PERCENT-MIXED-SPECIFIERS"
+    contract:
+      given: "template = '%s%d', values = ['ev', '97']"
+      when: "resolution via _resolve_percent_format()"
+      then: "returns 'ev97'"
+    verify: "test::tests/unit/test_ast_split_helpers.py"
+    status: done
+
+  # ============================================================
+  # IMPLICIT
+  # ============================================================
+
+  - id: R-IMP001
+    requirement: "F-string conversion/format_spec resolution returns raw string value, not Python-formatted version."
+    category: reliability
+    source: implicit
+    rationale: "f'{a!r}' with a='eval' must resolve to 'eval', not \"'eval'\" — scanner matches against _DANGEROUS_NAMES."
+    verify: "test::tests/unit/test_ast_split_detector.py"
+    status: done
+
+  - id: R-IMP002
+    requirement: "Composite symbol-table keys (bracket format) must not collide with plain variable names."
+    category: reliability
+    source: implicit
+    rationale: "'varname[key]' uses brackets which are not valid Python identifier syntax, preventing aliasing."
+    verify: "test::tests/unit/test_ast_symbol_table_edge.py"
+    status: done
+
+  - id: R-IMP003
+    requirement: "BinOp(Mult) resolution only fires when integer operand >= 1."
+    category: reliability
+    source: implicit
+    rationale: "Multiplier 0 produces empty string; negative is not meaningful. Skip both."
+    verify: "test::tests/unit/test_ast_symbol_table_edge.py"
+    status: done
+
+  - id: R-IMP004
+    requirement: "_substitute_percent() defense must not alter behavior for correctly provisioned calls."
+    category: reliability
+    source: implicit
+    rationale: "Defense-in-depth must be additive — existing correct calls must keep working."
+    verify: "test::tests/unit/test_ast_split_helpers.py"
+    status: done
+
+  - id: R-IMP005
+    requirement: "Mixed %-specifier regex must exclude %% literals (carry forward negative lookbehind)."
+    category: reliability
+    source: implicit
+    rationale: "Existing (?<!%)%s guard must extend to all specifiers."
+    verify: "test::tests/unit/test_ast_split_helpers.py"
+    status: done
+
+  - id: R-IMP006
+    requirement: "No regression on %s-only template detection after mixed-specifier change."
+    category: reliability
+    source: implicit
+    rationale: "pos_percent_eval.py and pos_percent_exec.py fixtures must still produce EXEC-002."
+    verify: "test::tests/unit/test_evasion_corpus.py"
+    status: done
+
+  - id: R-IMP007
+    requirement: "All modified source files remain within 250-line limit."
+    category: structural
+    source: implicit
+    rationale: "CLAUDE.md enforces hard max of 250 lines per file in src/ and tests/."
+    verify: "grep::line count"
+    status: done
+
+  # ============================================================
+  # EFFECTIVENESS
+  # ============================================================
+
+  - id: R-EFF001
+    requirement: "F-string conversion evasion fixtures produce EXEC-002 findings."
+    category: effectiveness
+    source: "DEBT-018-T2-FSTRING-CONV"
+    verify: "test::fixture detection"
+    status: done
+
+  - id: R-EFF002
+    requirement: "Dict/list subscript evasion fixtures produce EXEC-002 findings."
+    category: effectiveness
+    source: "DEBT-018-T2-CONTAINERS"
+    verify: "test::fixture detection"
+    status: done
+
+  - id: R-EFF003
+    requirement: "Generator-expression join evasion fixtures produce EXEC-002 findings."
+    category: effectiveness
+    source: "DEBT-018-T2-GENERATOR-JOIN"
+    verify: "test::fixture detection"
+    status: done
+
+  - id: R-EFF004
+    requirement: "map() join evasion fixtures produce EXEC-002 findings."
+    category: effectiveness
+    source: "DEBT-018-T2-GENERATOR-JOIN"
+    verify: "test::fixture detection"
+    status: done
+
+  - id: R-EFF005
+    requirement: "String-multiplication evasion fixtures produce EXEC-002 findings."
+    category: effectiveness
+    source: "DEBT-018-T2-STRING-MULT"
+    verify: "test::fixture detection"
+    status: done
+
+  # ============================================================
+  # ADVERSARIAL
+  # ============================================================
+
+  - id: R-ADV001
+    requirement: "Over-provisioned %-format must not silently produce substituted output."
+    category: effectiveness
+    source: "DEBT-019-PERCENT-OVERPROVISIONED"
+    verify: "test::tests/unit/test_ast_split_helpers.py"
+    status: done
+
+  - id: R-ADV002
+    requirement: "Mixed %-specifiers must not evade detection when assembled string contains dangerous name."
+    category: effectiveness
+    source: "DEBT-019-PERCENT-MIXED-SPECIFIERS"
+    verify: "test::tests/unit/test_ast_split_helpers.py"
+    status: done

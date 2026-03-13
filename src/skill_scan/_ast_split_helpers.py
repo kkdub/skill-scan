@@ -26,8 +26,8 @@ def _scoped_lookup(name: str, symbol_table: dict[str, str], scope: str) -> str |
 # Matches {} or {0}, {1}, etc. (simple positional placeholders only)
 _FORMAT_PLACEHOLDER_RE = re.compile(r"\{(\d*)\}")
 
-# Matches %s placeholders (negative lookbehind excludes escaped %% sequences)
-_PERCENT_S_RE = re.compile(r"(?<!%)%s")
+# Matches standard %-specifiers (negative lookbehind excludes escaped %% sequences)
+_PERCENT_SPEC_RE = re.compile(r"(?<!%)%[sdfrxoegcai]")
 
 
 def _resolve_format_call(
@@ -76,9 +76,28 @@ def _resolve_expr_list(
             result.append(val)
         elif isinstance(expr, ast.Constant) and isinstance(expr.value, str):
             result.append(expr.value)
+        elif isinstance(expr, ast.Subscript):
+            val = _resolve_subscript_expr(expr, symbol_table, scope)
+            if val is None:
+                return None
+            result.append(val)
         else:
             return None
     return result
+
+
+def _resolve_subscript_expr(
+    node: ast.Subscript,
+    symbol_table: dict[str, str],
+    scope: str,
+) -> str | None:
+    """Resolve ast.Subscript to string via composite key lookup."""
+    if not isinstance(node.value, ast.Name):
+        return None
+    if not isinstance(node.slice, ast.Constant) or not isinstance(node.slice.value, str):
+        return None
+    composite_key = f"{node.value.id}[{node.slice.value}]"
+    return _scoped_lookup(composite_key, symbol_table, scope)
 
 
 def _substitute_format(template: str, args: list[str]) -> str | None:
@@ -140,7 +159,7 @@ def _resolve_percent_format(
         return None
 
     template = node.left.value
-    percent_placeholders = _PERCENT_S_RE.findall(template)
+    percent_placeholders = _PERCENT_SPEC_RE.findall(template)
     if not percent_placeholders:
         return None
 
@@ -172,18 +191,31 @@ def _resolve_single_percent(
         val = _scoped_lookup(rhs.id, symbol_table, scope)
         if val is None:
             return None
-        return template.replace("%s", val, 1)
+        return _PERCENT_SPEC_RE.sub(lambda _: val, template, count=1)
     if isinstance(rhs, ast.Constant) and isinstance(rhs.value, str):
-        return template.replace("%s", rhs.value, 1)
+        literal: str = rhs.value
+        return _PERCENT_SPEC_RE.sub(lambda _: literal, template, count=1)
     return None
 
 
 def _substitute_percent(template: str, values: list[str]) -> str | None:
-    """Substitute %s placeholders with values in order."""
-    result = template
-    for val in values:
-        result = result.replace("%s", val, 1)
-    return result
+    """Substitute %-specifier placeholders with values in order.
+
+    Returns None when len(values) > placeholder count (over-provisioning defense).
+    Uses manual match iteration to avoid re.sub backslash interpretation.
+    """
+    placeholders = list(_PERCENT_SPEC_RE.finditer(template))
+    if len(values) > len(placeholders):
+        return None  # over-provisioned: more args than placeholders
+
+    parts: list[str] = []
+    last_end = 0
+    for i, match in enumerate(placeholders):
+        parts.append(template[last_end : match.start()])
+        parts.append(values[i] if i < len(values) else match.group())
+        last_end = match.end()
+    parts.append(template[last_end:])
+    return "".join(parts)
 
 
 def _resolve_join_elements(
@@ -197,3 +229,10 @@ def _resolve_join_elements(
     if parts is None:
         return None
     return sep.join(parts)
+
+
+# re-exports at BOTTOM -- backward-compat (Facade Re-export Pattern)
+from skill_scan._ast_split_join_helpers import (  # noqa: E402
+    _resolve_generator_join as _resolve_generator_join,
+    _resolve_map_join as _resolve_map_join,
+)

@@ -1,0 +1,38 @@
+[dict_storage] dict_get_concat: Dict .get() method for fragments
+[list_storage] list_index_concat: List index access then concatenation
+[list_storage] list_join_variable: Join on a list variable (not literal list in join call)
+[list_storage] list_pop_concat: List pop() to extract fragments
+[tuple_unpacking] star_unpack_concat: Star unpacking then join of remainder
+[walrus_operator] walrus_in_while: Walrus operator in while-loop header
+[augmented_assign] aug_assign_eval: Augmented assignment (+=) to build 'eval'
+[augmented_assign] aug_assign_three_step: Three-step augmented assignment to build 'exec'
+[augmented_assign] aug_assign_system: Augmented assignment to build 'system'
+[string_multiply] multiply_to_pad: Multiply dangerous name by 1 (identity but different AST node)
+[class_scope] class_attr_concat: Class attributes concatenated within class body
+[class_scope] class_method_concat: Class attributes concatenated via self in method
+[class_scope] class_init_concat: Instance attributes set in __init__ then concatenated
+[nested_function] nested_func_concat: Closure: outer var + inner var concatenated
+[nested_function] nested_func_fstring: Closure with f-string interpolation
+[global_nonlocal] nonlocal_var_concat: Nonlocal variable modified and concatenated
+[conditional_assign] ternary_assign_concat: Ternary assignment, dangerous on true branch
+[conditional_assign] if_else_assign_concat: If/else branch assignment then concatenation
+[cross_function] func_return_concat: Function return values concatenated at module level
+[cross_function] func_arg_concat: Function called with dangerous fragments as arguments
+[generator_join] genexpr_join_eval: Generator expression in join over list variable
+[generator_join] genexpr_join_chr: Generator expression with chr() in join
+[map_join] map_chr_join_var: map(chr, list_var) in join -- list is a variable not literal
+[format_method] format_named_args: str.format() with named args from tracked variables
+[slice_build] slice_from_safe_string: Slice from innocent-looking string to extract 'eval'
+[slice_build] slice_concat: Slices from different positions concatenated
+[reverse_build] reverse_dangerous: Reversed string sliced to get 'eval'
+[reverse_build] reversed_join: reversed() built-in with join to get 'exec'
+[lambda_build] lambda_concat: Lambda functions returning fragments
+[comprehension_build] listcomp_chr_join: List comprehension with chr() -- codes in variable not literal
+[comprehension_build] dictcomp_fragments: Dict comprehension producing fragments then concatenated
+[starargs_build] starargs_format: Star-unpacking into format()
+[encode_decode] hex_decode_concat: Hex-decoded bytes to string then concatenation
+[bytes_concat] bytes_add_decode: Bytes concatenation then .decode()
+[attribute_chain] namedtuple_attrs: Named tuple attribute access for fragments
+[encoded_split] hex_string_split: Hex-encoded payload split across 4 variables
+[scope_leak] for_loop_assignment: For-loop variable leak (Python loop vars persist)
+[scope_leak] with_statement_as: with-as variable persists after block
