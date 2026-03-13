@@ -533,6 +533,41 @@ def _resolve_percent_format(node: ast.BinOp, ...) -> str | None:
 
 > Trap: checking only `isinstance(node.func.value, ast.Constant)` without the `isinstance(..., str)` check admits numeric receivers like `(42).format(...)`.
 
+## Composite Key Format for Subscript Tracking
+
+When tracking dict subscript assignments in a flat symbol table, use a `'varname[key]'` bracket format as the composite key. Brackets cannot appear in plain Python identifiers, so this prevents collision between a subscript entry `d[x]` and a hypothetical variable named `d[x]`.
+
+```python
+# _ast_symbol_table_helpers.py — recording subscript assignment d['key'] = 'val'
+base = target.value.id   # 'parts'
+key = target.slice.value # 'cmd'
+table[f"{base}[{key}]"] = resolved  # 'parts[cmd]' -> 'eval'
+
+# _ast_split_detector.py — resolving d['cmd'] at use site
+composite_key = f"{node.value.id}[{node.slice.value}]"  # 'parts[cmd]'
+return _scoped_lookup(composite_key, symbol_table, scope)
+```
+
+> Trap: only track subscripts where both the base name and the slice are statically resolvable; skip integer-index subscripts (those are a separate debt item).
+
+## Deferred Local Import for Circular-Import Breaking
+
+When two sibling modules need each other (A imports from B, B imports from A), break the cycle by moving one of the imports inside a function body rather than at module level. This avoids converting the package structure.
+
+```python
+# _ast_symbol_table.py (facade) — _Ref is defined here; helpers need it
+def _collect_assignments(body):
+    from skill_scan._ast_symbol_table_helpers import _walk_body  # deferred import
+    table: dict[str, str | _Ref] = {}
+    _walk_body(body, table)
+    return table
+
+# _ast_symbol_table_helpers.py (helpers) — imports _Ref at module level
+from skill_scan._ast_symbol_table import _Ref  # safe: facade already loaded
+```
+
+> Trap: deferred imports incur a minor per-call cost; only use when the circular dependency cannot be resolved by restructuring (e.g. moving the shared type to a third module).
+
 ## Facade Re-export Pattern
 
 When splitting a large module into sibling files, keep the original file as a facade: it retains the orchestrator/entry-point functions and types, then re-exports all names from sibling files at the BOTTOM. This preserves every existing import path and mock.patch target.

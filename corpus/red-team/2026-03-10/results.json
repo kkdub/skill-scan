@@ -1,0 +1,1304 @@
+{
+  "summary": {
+    "total_inputs": 80,
+    "positive_total": 73,
+    "positive_detected": 22,
+    "positive_evaded": 51,
+    "negative_total": 7,
+    "false_positives": 0,
+    "detection_rate": 0.3014,
+    "evasion_rate": 0.6986,
+    "false_positive_rate": 0.0
+  },
+  "category_stats": {
+    "dict_storage": {
+      "total": 3,
+      "positive_total": 3,
+      "positive_detected": 0,
+      "positive_evaded": 3,
+      "negative_total": 0,
+      "false_positives": 0,
+      "true_negatives": 0
+    },
+    "list_storage": {
+      "total": 3,
+      "positive_total": 3,
+      "positive_detected": 0,
+      "positive_evaded": 3,
+      "negative_total": 0,
+      "false_positives": 0,
+      "true_negatives": 0
+    },
+    "tuple_unpacking": {
+      "total": 4,
+      "positive_total": 4,
+      "positive_detected": 0,
+      "positive_evaded": 4,
+      "negative_total": 0,
+      "false_positives": 0,
+      "true_negatives": 0
+    },
+    "walrus_operator": {
+      "total": 2,
+      "positive_total": 2,
+      "positive_detected": 0,
+      "positive_evaded": 2,
+      "negative_total": 0,
+      "false_positives": 0,
+      "true_negatives": 0
+    },
+    "augmented_assign": {
+      "total": 3,
+      "positive_total": 3,
+      "positive_detected": 0,
+      "positive_evaded": 3,
+      "negative_total": 0,
+      "false_positives": 0,
+      "true_negatives": 0
+    },
+    "string_multiply": {
+      "total": 2,
+      "positive_total": 2,
+      "positive_detected": 0,
+      "positive_evaded": 2,
+      "negative_total": 0,
+      "false_positives": 0,
+      "true_negatives": 0
+    },
+    "chr_building": {
+      "total": 3,
+      "positive_total": 3,
+      "positive_detected": 3,
+      "positive_evaded": 0,
+      "negative_total": 0,
+      "false_positives": 0,
+      "true_negatives": 0
+    },
+    "class_scope": {
+      "total": 3,
+      "positive_total": 3,
+      "positive_detected": 0,
+      "positive_evaded": 3,
+      "negative_total": 0,
+      "false_positives": 0,
+      "true_negatives": 0
+    },
+    "nested_function": {
+      "total": 2,
+      "positive_total": 2,
+      "positive_detected": 0,
+      "positive_evaded": 2,
+      "negative_total": 0,
+      "false_positives": 0,
+      "true_negatives": 0
+    },
+    "global_nonlocal": {
+      "total": 2,
+      "positive_total": 2,
+      "positive_detected": 0,
+      "positive_evaded": 2,
+      "negative_total": 0,
+      "false_positives": 0,
+      "true_negatives": 0
+    },
+    "conditional_assign": {
+      "total": 2,
+      "positive_total": 2,
+      "positive_detected": 0,
+      "positive_evaded": 2,
+      "negative_total": 0,
+      "false_positives": 0,
+      "true_negatives": 0
+    },
+    "reassignment": {
+      "total": 2,
+      "positive_total": 1,
+      "positive_detected": 1,
+      "positive_evaded": 0,
+      "negative_total": 1,
+      "false_positives": 0,
+      "true_negatives": 1
+    },
+    "cross_function": {
+      "total": 2,
+      "positive_total": 2,
+      "positive_detected": 0,
+      "positive_evaded": 2,
+      "negative_total": 0,
+      "false_positives": 0,
+      "true_negatives": 0
+    },
+    "generator_join": {
+      "total": 2,
+      "positive_total": 2,
+      "positive_detected": 0,
+      "positive_evaded": 2,
+      "negative_total": 0,
+      "false_positives": 0,
+      "true_negatives": 0
+    },
+    "map_join": {
+      "total": 1,
+      "positive_total": 1,
+      "positive_detected": 0,
+      "positive_evaded": 1,
+      "negative_total": 0,
+      "false_positives": 0,
+      "true_negatives": 0
+    },
+    "format_method": {
+      "total": 2,
+      "positive_total": 2,
+      "positive_detected": 0,
+      "positive_evaded": 2,
+      "negative_total": 0,
+      "false_positives": 0,
+      "true_negatives": 0
+    },
+    "percent_format": {
+      "total": 1,
+      "positive_total": 1,
+      "positive_detected": 0,
+      "positive_evaded": 1,
+      "negative_total": 0,
+      "false_positives": 0,
+      "true_negatives": 0
+    },
+    "slice_build": {
+      "total": 2,
+      "positive_total": 2,
+      "positive_detected": 0,
+      "positive_evaded": 2,
+      "negative_total": 0,
+      "false_positives": 0,
+      "true_negatives": 0
+    },
+    "reverse_build": {
+      "total": 2,
+      "positive_total": 2,
+      "positive_detected": 0,
+      "positive_evaded": 2,
+      "negative_total": 0,
+      "false_positives": 0,
+      "true_negatives": 0
+    },
+    "lambda_build": {
+      "total": 1,
+      "positive_total": 1,
+      "positive_detected": 0,
+      "positive_evaded": 1,
+      "negative_total": 0,
+      "false_positives": 0,
+      "true_negatives": 0
+    },
+    "comprehension_build": {
+      "total": 2,
+      "positive_total": 2,
+      "positive_detected": 0,
+      "positive_evaded": 2,
+      "negative_total": 0,
+      "false_positives": 0,
+      "true_negatives": 0
+    },
+    "starargs_build": {
+      "total": 1,
+      "positive_total": 1,
+      "positive_detected": 0,
+      "positive_evaded": 1,
+      "negative_total": 0,
+      "false_positives": 0,
+      "true_negatives": 0
+    },
+    "encode_decode": {
+      "total": 2,
+      "positive_total": 2,
+      "positive_detected": 1,
+      "positive_evaded": 1,
+      "negative_total": 0,
+      "false_positives": 0,
+      "true_negatives": 0
+    },
+    "multiline_string": {
+      "total": 1,
+      "positive_total": 1,
+      "positive_detected": 1,
+      "positive_evaded": 0,
+      "negative_total": 0,
+      "false_positives": 0,
+      "true_negatives": 0
+    },
+    "bytes_concat": {
+      "total": 1,
+      "positive_total": 1,
+      "positive_detected": 0,
+      "positive_evaded": 1,
+      "negative_total": 0,
+      "false_positives": 0,
+      "true_negatives": 0
+    },
+    "unicode_names": {
+      "total": 2,
+      "positive_total": 2,
+      "positive_detected": 2,
+      "positive_evaded": 0,
+      "negative_total": 0,
+      "false_positives": 0,
+      "true_negatives": 0
+    },
+    "attribute_chain": {
+      "total": 1,
+      "positive_total": 1,
+      "positive_detected": 0,
+      "positive_evaded": 1,
+      "negative_total": 0,
+      "false_positives": 0,
+      "true_negatives": 0
+    },
+    "importlib_split": {
+      "total": 1,
+      "positive_total": 1,
+      "positive_detected": 1,
+      "positive_evaded": 0,
+      "negative_total": 0,
+      "false_positives": 0,
+      "true_negatives": 0
+    },
+    "indirect_call": {
+      "total": 2,
+      "positive_total": 2,
+      "positive_detected": 2,
+      "positive_evaded": 0,
+      "negative_total": 0,
+      "false_positives": 0,
+      "true_negatives": 0
+    },
+    "multi_indirection": {
+      "total": 2,
+      "positive_total": 2,
+      "positive_detected": 2,
+      "positive_evaded": 0,
+      "negative_total": 0,
+      "false_positives": 0,
+      "true_negatives": 0
+    },
+    "mixed_methods": {
+      "total": 3,
+      "positive_total": 3,
+      "positive_detected": 3,
+      "positive_evaded": 0,
+      "negative_total": 0,
+      "false_positives": 0,
+      "true_negatives": 0
+    },
+    "false_positive": {
+      "total": 6,
+      "positive_total": 0,
+      "positive_detected": 0,
+      "positive_evaded": 0,
+      "negative_total": 6,
+      "false_positives": 0,
+      "true_negatives": 6
+    },
+    "format_spec_fstring": {
+      "total": 2,
+      "positive_total": 2,
+      "positive_detected": 0,
+      "positive_evaded": 2,
+      "negative_total": 0,
+      "false_positives": 0,
+      "true_negatives": 0
+    },
+    "encoded_split": {
+      "total": 1,
+      "positive_total": 1,
+      "positive_detected": 0,
+      "positive_evaded": 1,
+      "negative_total": 0,
+      "false_positives": 0,
+      "true_negatives": 0
+    },
+    "deferred_eval": {
+      "total": 3,
+      "positive_total": 3,
+      "positive_detected": 3,
+      "positive_evaded": 0,
+      "negative_total": 0,
+      "false_positives": 0,
+      "true_negatives": 0
+    },
+    "obfuscated_indirection": {
+      "total": 3,
+      "positive_total": 3,
+      "positive_detected": 3,
+      "positive_evaded": 0,
+      "negative_total": 0,
+      "false_positives": 0,
+      "true_negatives": 0
+    },
+    "scope_leak": {
+      "total": 3,
+      "positive_total": 3,
+      "positive_detected": 0,
+      "positive_evaded": 3,
+      "negative_total": 0,
+      "false_positives": 0,
+      "true_negatives": 0
+    }
+  },
+  "results": [
+    {
+      "category": "dict_storage",
+      "id": "dict_concat_eval",
+      "description": "Dict subscript assignment then concatenation",
+      "should_detect": true,
+      "detected": false,
+      "status": "EVADED",
+      "finding_count": 0,
+      "finding_details": []
+    },
+    {
+      "category": "dict_storage",
+      "id": "dict_literal_concat",
+      "description": "Dict literal values concatenated",
+      "should_detect": true,
+      "detected": false,
+      "status": "EVADED",
+      "finding_count": 0,
+      "finding_details": []
+    },
+    {
+      "category": "dict_storage",
+      "id": "dict_get_concat",
+      "description": "Dict .get() method for fragments",
+      "should_detect": true,
+      "detected": false,
+      "status": "EVADED",
+      "finding_count": 0,
+      "finding_details": []
+    },
+    {
+      "category": "list_storage",
+      "id": "list_index_concat",
+      "description": "List index access then concatenation",
+      "should_detect": true,
+      "detected": false,
+      "status": "EVADED",
+      "finding_count": 0,
+      "finding_details": []
+    },
+    {
+      "category": "list_storage",
+      "id": "list_join_variable",
+      "description": "Join on a list variable (not literal list in join call)",
+      "should_detect": true,
+      "detected": false,
+      "status": "EVADED",
+      "finding_count": 0,
+      "finding_details": []
+    },
+    {
+      "category": "list_storage",
+      "id": "list_pop_concat",
+      "description": "List pop() to extract fragments",
+      "should_detect": true,
+      "detected": false,
+      "status": "EVADED",
+      "finding_count": 0,
+      "finding_details": []
+    },
+    {
+      "category": "tuple_unpacking",
+      "id": "tuple_unpack_concat",
+      "description": "Tuple unpacking assignment then concatenation",
+      "should_detect": true,
+      "detected": false,
+      "status": "EVADED",
+      "finding_count": 0,
+      "finding_details": []
+    },
+    {
+      "category": "tuple_unpacking",
+      "id": "list_unpack_concat",
+      "description": "List unpacking assignment then concatenation",
+      "should_detect": true,
+      "detected": false,
+      "status": "EVADED",
+      "finding_count": 0,
+      "finding_details": []
+    },
+    {
+      "category": "tuple_unpacking",
+      "id": "star_unpack_concat",
+      "description": "Star unpacking then join of remainder",
+      "should_detect": true,
+      "detected": false,
+      "status": "EVADED",
+      "finding_count": 0,
+      "finding_details": []
+    },
+    {
+      "category": "tuple_unpacking",
+      "id": "triple_unpack_concat",
+      "description": "Three-way tuple unpacking for 'popen'",
+      "should_detect": true,
+      "detected": false,
+      "status": "EVADED",
+      "finding_count": 0,
+      "finding_details": []
+    },
+    {
+      "category": "walrus_operator",
+      "id": "walrus_in_if",
+      "description": "Walrus operator in if-condition",
+      "should_detect": true,
+      "detected": false,
+      "status": "EVADED",
+      "finding_count": 0,
+      "finding_details": []
+    },
+    {
+      "category": "walrus_operator",
+      "id": "walrus_in_while",
+      "description": "Walrus operator in while-loop header",
+      "should_detect": true,
+      "detected": false,
+      "status": "EVADED",
+      "finding_count": 0,
+      "finding_details": []
+    },
+    {
+      "category": "augmented_assign",
+      "id": "aug_assign_eval",
+      "description": "Augmented assignment (+=) to build 'eval'",
+      "should_detect": true,
+      "detected": false,
+      "status": "EVADED",
+      "finding_count": 0,
+      "finding_details": []
+    },
+    {
+      "category": "augmented_assign",
+      "id": "aug_assign_three_step",
+      "description": "Three-step augmented assignment to build 'exec'",
+      "should_detect": true,
+      "detected": false,
+      "status": "EVADED",
+      "finding_count": 0,
+      "finding_details": []
+    },
+    {
+      "category": "augmented_assign",
+      "id": "aug_assign_system",
+      "description": "Augmented assignment to build 'system'",
+      "should_detect": true,
+      "detected": false,
+      "status": "EVADED",
+      "finding_count": 0,
+      "finding_details": []
+    },
+    {
+      "category": "string_multiply",
+      "id": "multiply_then_concat",
+      "description": "String multiply (* 1) then concatenation",
+      "should_detect": true,
+      "detected": false,
+      "status": "EVADED",
+      "finding_count": 0,
+      "finding_details": []
+    },
+    {
+      "category": "string_multiply",
+      "id": "multiply_to_pad",
+      "description": "Multiply dangerous name by 1 (identity but different AST node)",
+      "should_detect": true,
+      "detected": false,
+      "status": "EVADED",
+      "finding_count": 0,
+      "finding_details": []
+    },
+    {
+      "category": "chr_building",
+      "id": "chr_vars_concat",
+      "description": "chr() per character stored in vars then concatenated",
+      "should_detect": true,
+      "detected": true,
+      "status": "DETECTED",
+      "finding_count": 1,
+      "finding_details": [
+        {
+          "rule_id": "EXEC-002",
+          "severity": "critical",
+          "matched_text": "split variable evasion building 'eval'",
+          "line": 5
+        }
+      ]
+    },
+    {
+      "category": "chr_building",
+      "id": "chr_vars_join",
+      "description": "chr() per character stored in vars then joined",
+      "should_detect": true,
+      "detected": true,
+      "status": "DETECTED",
+      "finding_count": 1,
+      "finding_details": [
+        {
+          "rule_id": "EXEC-002",
+          "severity": "critical",
+          "matched_text": "split variable evasion building 'eval'",
+          "line": 5
+        }
+      ]
+    },
+    {
+      "category": "chr_building",
+      "id": "chr_vars_fstring",
+      "description": "chr() chars in vars then f-string interpolation for 'exec'",
+      "should_detect": true,
+      "detected": true,
+      "status": "DETECTED",
+      "finding_count": 1,
+      "finding_details": [
+        {
+          "rule_id": "EXEC-002",
+          "severity": "critical",
+          "matched_text": "split variable evasion building 'exec'",
+          "line": 5
+        }
+      ]
+    },
+    {
+      "category": "class_scope",
+      "id": "class_attr_concat",
+      "description": "Class attributes concatenated within class body",
+      "should_detect": true,
+      "detected": false,
+      "status": "EVADED",
+      "finding_count": 0,
+      "finding_details": []
+    },
+    {
+      "category": "class_scope",
+      "id": "class_method_concat",
+      "description": "Class attributes concatenated via self in method",
+      "should_detect": true,
+      "detected": false,
+      "status": "EVADED",
+      "finding_count": 0,
+      "finding_details": []
+    },
+    {
+      "category": "class_scope",
+      "id": "class_init_concat",
+      "description": "Instance attributes set in __init__ then concatenated",
+      "should_detect": true,
+      "detected": false,
+      "status": "EVADED",
+      "finding_count": 0,
+      "finding_details": []
+    },
+    {
+      "category": "nested_function",
+      "id": "nested_func_concat",
+      "description": "Closure: outer var + inner var concatenated",
+      "should_detect": true,
+      "detected": false,
+      "status": "EVADED",
+      "finding_count": 0,
+      "finding_details": []
+    },
+    {
+      "category": "nested_function",
+      "id": "nested_func_fstring",
+      "description": "Closure with f-string interpolation",
+      "should_detect": true,
+      "detected": false,
+      "status": "EVADED",
+      "finding_count": 0,
+      "finding_details": []
+    },
+    {
+      "category": "global_nonlocal",
+      "id": "global_var_concat",
+      "description": "Global variable read in function then concatenated",
+      "should_detect": true,
+      "detected": false,
+      "status": "EVADED",
+      "finding_count": 0,
+      "finding_details": []
+    },
+    {
+      "category": "global_nonlocal",
+      "id": "nonlocal_var_concat",
+      "description": "Nonlocal variable modified and concatenated",
+      "should_detect": true,
+      "detected": false,
+      "status": "EVADED",
+      "finding_count": 0,
+      "finding_details": []
+    },
+    {
+      "category": "conditional_assign",
+      "id": "ternary_assign_concat",
+      "description": "Ternary assignment, dangerous on true branch",
+      "should_detect": true,
+      "detected": false,
+      "status": "EVADED",
+      "finding_count": 0,
+      "finding_details": []
+    },
+    {
+      "category": "conditional_assign",
+      "id": "if_else_assign_concat",
+      "description": "If/else branch assignment then concatenation",
+      "should_detect": true,
+      "detected": false,
+      "status": "EVADED",
+      "finding_count": 0,
+      "finding_details": []
+    },
+    {
+      "category": "reassignment",
+      "id": "reassign_to_dangerous",
+      "description": "Variables reassigned from safe to dangerous",
+      "should_detect": true,
+      "detected": true,
+      "status": "DETECTED",
+      "finding_count": 1,
+      "finding_details": [
+        {
+          "rule_id": "EXEC-002",
+          "severity": "critical",
+          "matched_text": "split variable evasion building 'eval'",
+          "line": 5
+        }
+      ]
+    },
+    {
+      "category": "reassignment",
+      "id": "reassign_from_dangerous",
+      "description": "Variables reassigned from dangerous to safe -- should NOT trigger",
+      "should_detect": false,
+      "detected": false,
+      "status": "TRUE_NEGATIVE",
+      "finding_count": 0,
+      "finding_details": []
+    },
+    {
+      "category": "cross_function",
+      "id": "func_return_concat",
+      "description": "Function return values concatenated at module level",
+      "should_detect": true,
+      "detected": false,
+      "status": "EVADED",
+      "finding_count": 0,
+      "finding_details": []
+    },
+    {
+      "category": "cross_function",
+      "id": "func_arg_concat",
+      "description": "Function called with dangerous fragments as arguments",
+      "should_detect": true,
+      "detected": false,
+      "status": "EVADED",
+      "finding_count": 0,
+      "finding_details": []
+    },
+    {
+      "category": "generator_join",
+      "id": "genexpr_join_eval",
+      "description": "Generator expression in join over list variable",
+      "should_detect": true,
+      "detected": false,
+      "status": "EVADED",
+      "finding_count": 0,
+      "finding_details": []
+    },
+    {
+      "category": "generator_join",
+      "id": "genexpr_join_chr",
+      "description": "Generator expression with chr() in join",
+      "should_detect": true,
+      "detected": false,
+      "status": "EVADED",
+      "finding_count": 0,
+      "finding_details": []
+    },
+    {
+      "category": "map_join",
+      "id": "map_chr_join_var",
+      "description": "map(chr, list_var) in join -- list is a variable not literal",
+      "should_detect": true,
+      "detected": false,
+      "status": "EVADED",
+      "finding_count": 0,
+      "finding_details": []
+    },
+    {
+      "category": "format_method",
+      "id": "format_concat_eval",
+      "description": "str.format() with tracked variables",
+      "should_detect": true,
+      "detected": false,
+      "status": "EVADED",
+      "finding_count": 0,
+      "finding_details": []
+    },
+    {
+      "category": "format_method",
+      "id": "format_named_args",
+      "description": "str.format() with named args from tracked variables",
+      "should_detect": true,
+      "detected": false,
+      "status": "EVADED",
+      "finding_count": 0,
+      "finding_details": []
+    },
+    {
+      "category": "percent_format",
+      "id": "percent_format_eval",
+      "description": "%-formatting with tracked variables",
+      "should_detect": true,
+      "detected": false,
+      "status": "EVADED",
+      "finding_count": 0,
+      "finding_details": []
+    },
+    {
+      "category": "slice_build",
+      "id": "slice_from_safe_string",
+      "description": "Slice from innocent-looking string to extract 'eval'",
+      "should_detect": true,
+      "detected": false,
+      "status": "EVADED",
+      "finding_count": 0,
+      "finding_details": []
+    },
+    {
+      "category": "slice_build",
+      "id": "slice_concat",
+      "description": "Slices from different positions concatenated",
+      "should_detect": true,
+      "detected": false,
+      "status": "EVADED",
+      "finding_count": 0,
+      "finding_details": []
+    },
+    {
+      "category": "reverse_build",
+      "id": "reverse_dangerous",
+      "description": "Reversed string sliced to get 'eval'",
+      "should_detect": true,
+      "detected": false,
+      "status": "EVADED",
+      "finding_count": 0,
+      "finding_details": []
+    },
+    {
+      "category": "reverse_build",
+      "id": "reversed_join",
+      "description": "reversed() built-in with join to get 'exec'",
+      "should_detect": true,
+      "detected": false,
+      "status": "EVADED",
+      "finding_count": 0,
+      "finding_details": []
+    },
+    {
+      "category": "lambda_build",
+      "id": "lambda_concat",
+      "description": "Lambda functions returning fragments",
+      "should_detect": true,
+      "detected": false,
+      "status": "EVADED",
+      "finding_count": 0,
+      "finding_details": []
+    },
+    {
+      "category": "comprehension_build",
+      "id": "listcomp_chr_join",
+      "description": "List comprehension with chr() -- codes in variable not literal",
+      "should_detect": true,
+      "detected": false,
+      "status": "EVADED",
+      "finding_count": 0,
+      "finding_details": []
+    },
+    {
+      "category": "comprehension_build",
+      "id": "dictcomp_fragments",
+      "description": "Dict comprehension producing fragments then concatenated",
+      "should_detect": true,
+      "detected": false,
+      "status": "EVADED",
+      "finding_count": 0,
+      "finding_details": []
+    },
+    {
+      "category": "starargs_build",
+      "id": "starargs_format",
+      "description": "Star-unpacking into format()",
+      "should_detect": true,
+      "detected": false,
+      "status": "EVADED",
+      "finding_count": 0,
+      "finding_details": []
+    },
+    {
+      "category": "encode_decode",
+      "id": "encode_decode_roundtrip",
+      "description": "Bytes decode to string then concatenation",
+      "should_detect": true,
+      "detected": true,
+      "status": "DETECTED",
+      "finding_count": 1,
+      "finding_details": [
+        {
+          "rule_id": "EXEC-002",
+          "severity": "critical",
+          "matched_text": "split variable evasion building 'eval'",
+          "line": 3
+        }
+      ]
+    },
+    {
+      "category": "encode_decode",
+      "id": "hex_decode_concat",
+      "description": "Hex-decoded bytes to string then concatenation",
+      "should_detect": true,
+      "detected": false,
+      "status": "EVADED",
+      "finding_count": 0,
+      "finding_details": []
+    },
+    {
+      "category": "multiline_string",
+      "id": "triple_quote_concat",
+      "description": "Triple-quoted string fragments concatenated",
+      "should_detect": true,
+      "detected": true,
+      "status": "DETECTED",
+      "finding_count": 1,
+      "finding_details": [
+        {
+          "rule_id": "EXEC-002",
+          "severity": "critical",
+          "matched_text": "split variable evasion building 'eval'",
+          "line": 3
+        }
+      ]
+    },
+    {
+      "category": "bytes_concat",
+      "id": "bytes_add_decode",
+      "description": "Bytes concatenation then .decode()",
+      "should_detect": true,
+      "detected": false,
+      "status": "EVADED",
+      "finding_count": 0,
+      "finding_details": []
+    },
+    {
+      "category": "unicode_names",
+      "id": "unicode_escape_concat",
+      "description": "Hex escape sequences in string values that form 'eval'",
+      "should_detect": true,
+      "detected": true,
+      "status": "DETECTED",
+      "finding_count": 1,
+      "finding_details": [
+        {
+          "rule_id": "EXEC-002",
+          "severity": "critical",
+          "matched_text": "split variable evasion building 'eval'",
+          "line": 3
+        }
+      ]
+    },
+    {
+      "category": "unicode_names",
+      "id": "unicode_name_escape",
+      "description": "Unicode name escapes that resolve to 'eval'",
+      "should_detect": true,
+      "detected": true,
+      "status": "DETECTED",
+      "finding_count": 1,
+      "finding_details": [
+        {
+          "rule_id": "EXEC-002",
+          "severity": "critical",
+          "matched_text": "split variable evasion building 'eval'",
+          "line": 3
+        }
+      ]
+    },
+    {
+      "category": "attribute_chain",
+      "id": "namedtuple_attrs",
+      "description": "Named tuple attribute access for fragments",
+      "should_detect": true,
+      "detected": false,
+      "status": "EVADED",
+      "finding_count": 0,
+      "finding_details": []
+    },
+    {
+      "category": "importlib_split",
+      "id": "importlib_split_name",
+      "description": "importlib.import_module with split module name",
+      "should_detect": true,
+      "detected": true,
+      "status": "DETECTED",
+      "finding_count": 1,
+      "finding_details": [
+        {
+          "rule_id": "EXEC-006",
+          "severity": "high",
+          "matched_text": "importlib.import_module(",
+          "line": 4
+        }
+      ]
+    },
+    {
+      "category": "indirect_call",
+      "id": "eval_from_vars",
+      "description": "Assembled name used via globals() to call eval",
+      "should_detect": true,
+      "detected": true,
+      "status": "DETECTED",
+      "finding_count": 1,
+      "finding_details": [
+        {
+          "rule_id": "EXEC-002",
+          "severity": "critical",
+          "matched_text": "split variable evasion building 'eval'",
+          "line": 3
+        }
+      ]
+    },
+    {
+      "category": "indirect_call",
+      "id": "getattr_from_vars",
+      "description": "getattr(builtins, assembled_name)",
+      "should_detect": true,
+      "detected": true,
+      "status": "DETECTED",
+      "finding_count": 1,
+      "finding_details": [
+        {
+          "rule_id": "EXEC-002",
+          "severity": "critical",
+          "matched_text": "split variable evasion building 'eval'",
+          "line": 4
+        }
+      ]
+    },
+    {
+      "category": "multi_indirection",
+      "id": "four_level_chain",
+      "description": "Four-level indirection chain before concatenation",
+      "should_detect": true,
+      "detected": true,
+      "status": "DETECTED",
+      "finding_count": 1,
+      "finding_details": [
+        {
+          "rule_id": "EXEC-002",
+          "severity": "critical",
+          "matched_text": "split variable evasion building 'eval'",
+          "line": 6
+        }
+      ]
+    },
+    {
+      "category": "multi_indirection",
+      "id": "cross_assign_chain",
+      "description": "Cross-assignment indirection for both operands",
+      "should_detect": true,
+      "detected": true,
+      "status": "DETECTED",
+      "finding_count": 1,
+      "finding_details": [
+        {
+          "rule_id": "EXEC-002",
+          "severity": "critical",
+          "matched_text": "split variable evasion building 'eval'",
+          "line": 5
+        }
+      ]
+    },
+    {
+      "category": "mixed_methods",
+      "id": "chr_plus_literal_concat",
+      "description": "chr() resolved to string, then variable concat with literal",
+      "should_detect": true,
+      "detected": true,
+      "status": "DETECTED",
+      "finding_count": 1,
+      "finding_details": [
+        {
+          "rule_id": "EXEC-002",
+          "severity": "critical",
+          "matched_text": "split variable evasion building 'eval'",
+          "line": 3
+        }
+      ]
+    },
+    {
+      "category": "mixed_methods",
+      "id": "indirection_then_fstring",
+      "description": "Indirection chain then f-string interpolation",
+      "should_detect": true,
+      "detected": true,
+      "status": "DETECTED",
+      "finding_count": 1,
+      "finding_details": [
+        {
+          "rule_id": "EXEC-002",
+          "severity": "critical",
+          "matched_text": "split variable evasion building 'system'",
+          "line": 4
+        }
+      ]
+    },
+    {
+      "category": "mixed_methods",
+      "id": "join_with_indirection",
+      "description": "Indirection then join",
+      "should_detect": true,
+      "detected": true,
+      "status": "DETECTED",
+      "finding_count": 1,
+      "finding_details": [
+        {
+          "rule_id": "EXEC-002",
+          "severity": "critical",
+          "matched_text": "split variable evasion building 'popen'",
+          "line": 4
+        }
+      ]
+    },
+    {
+      "category": "false_positive",
+      "id": "safe_path_concat",
+      "description": "Path concatenation -- safe",
+      "should_detect": false,
+      "detected": false,
+      "status": "TRUE_NEGATIVE",
+      "finding_count": 0,
+      "finding_details": []
+    },
+    {
+      "category": "false_positive",
+      "id": "safe_url_concat",
+      "description": "URL construction -- safe",
+      "should_detect": false,
+      "detected": false,
+      "status": "TRUE_NEGATIVE",
+      "finding_count": 0,
+      "finding_details": []
+    },
+    {
+      "category": "false_positive",
+      "id": "safe_log_fstring",
+      "description": "Log message f-string -- safe",
+      "should_detect": false,
+      "detected": false,
+      "status": "TRUE_NEGATIVE",
+      "finding_count": 0,
+      "finding_details": []
+    },
+    {
+      "category": "false_positive",
+      "id": "safe_config_join",
+      "description": "Config join -- safe",
+      "should_detect": false,
+      "detected": false,
+      "status": "TRUE_NEGATIVE",
+      "finding_count": 0,
+      "finding_details": []
+    },
+    {
+      "category": "false_positive",
+      "id": "safe_html_concat",
+      "description": "HTML concatenation -- safe",
+      "should_detect": false,
+      "detected": false,
+      "status": "TRUE_NEGATIVE",
+      "finding_count": 0,
+      "finding_details": []
+    },
+    {
+      "category": "false_positive",
+      "id": "safe_multivar_concat",
+      "description": "Three-variable safe concatenation -- safe",
+      "should_detect": false,
+      "detected": false,
+      "status": "TRUE_NEGATIVE",
+      "finding_count": 0,
+      "finding_details": []
+    },
+    {
+      "category": "format_spec_fstring",
+      "id": "fstring_with_conversion",
+      "description": "F-string with !s conversion",
+      "should_detect": true,
+      "detected": false,
+      "status": "EVADED",
+      "finding_count": 0,
+      "finding_details": []
+    },
+    {
+      "category": "format_spec_fstring",
+      "id": "fstring_with_format_spec",
+      "description": "F-string with format spec (:>2)",
+      "should_detect": true,
+      "detected": false,
+      "status": "EVADED",
+      "finding_count": 0,
+      "finding_details": []
+    },
+    {
+      "category": "encoded_split",
+      "id": "hex_string_split",
+      "description": "Hex-encoded payload split across 4 variables",
+      "should_detect": true,
+      "detected": false,
+      "status": "EVADED",
+      "finding_count": 0,
+      "finding_details": []
+    },
+    {
+      "category": "deferred_eval",
+      "id": "stored_in_dict",
+      "description": "Dangerous name assembled and stored in dict -- still has the BinOp",
+      "should_detect": true,
+      "detected": true,
+      "status": "DETECTED",
+      "finding_count": 1,
+      "finding_details": [
+        {
+          "rule_id": "EXEC-002",
+          "severity": "critical",
+          "matched_text": "split variable evasion building 'eval'",
+          "line": 3
+        }
+      ]
+    },
+    {
+      "category": "deferred_eval",
+      "id": "passed_to_function",
+      "description": "Dangerous name assembled and passed as function argument",
+      "should_detect": true,
+      "detected": true,
+      "status": "DETECTED",
+      "finding_count": 1,
+      "finding_details": [
+        {
+          "rule_id": "EXEC-002",
+          "severity": "critical",
+          "matched_text": "split variable evasion building 'eval'",
+          "line": 3
+        }
+      ]
+    },
+    {
+      "category": "deferred_eval",
+      "id": "returned_from_function",
+      "description": "Dangerous name assembled in return statement of function",
+      "should_detect": true,
+      "detected": true,
+      "status": "DETECTED",
+      "finding_count": 1,
+      "finding_details": [
+        {
+          "rule_id": "EXEC-002",
+          "severity": "critical",
+          "matched_text": "split variable evasion building 'eval'",
+          "line": 4
+        }
+      ]
+    },
+    {
+      "category": "obfuscated_indirection",
+      "id": "var_name_misleading",
+      "description": "Misleading variable names to hide intent",
+      "should_detect": true,
+      "detected": true,
+      "status": "DETECTED",
+      "finding_count": 1,
+      "finding_details": [
+        {
+          "rule_id": "EXEC-002",
+          "severity": "critical",
+          "matched_text": "split variable evasion building 'eval'",
+          "line": 3
+        }
+      ]
+    },
+    {
+      "category": "obfuscated_indirection",
+      "id": "many_safe_vars_with_one_dangerous",
+      "description": "Many safe concatenations with one dangerous buried in the middle",
+      "should_detect": true,
+      "detected": true,
+      "status": "DETECTED",
+      "finding_count": 1,
+      "finding_details": [
+        {
+          "rule_id": "EXEC-002",
+          "severity": "critical",
+          "matched_text": "split variable evasion building 'eval'",
+          "line": 7
+        }
+      ]
+    },
+    {
+      "category": "obfuscated_indirection",
+      "id": "long_chain_of_assignments",
+      "description": "Long indirection chain (3 levels) per character",
+      "should_detect": true,
+      "detected": true,
+      "status": "DETECTED",
+      "finding_count": 1,
+      "finding_details": [
+        {
+          "rule_id": "EXEC-002",
+          "severity": "critical",
+          "matched_text": "split variable evasion building 'eval'",
+          "line": 13
+        }
+      ]
+    },
+    {
+      "category": "scope_leak",
+      "id": "for_loop_assignment",
+      "description": "For-loop variable leak (Python loop vars persist)",
+      "should_detect": true,
+      "detected": false,
+      "status": "EVADED",
+      "finding_count": 0,
+      "finding_details": []
+    },
+    {
+      "category": "scope_leak",
+      "id": "with_statement_as",
+      "description": "with-as variable persists after block",
+      "should_detect": true,
+      "detected": false,
+      "status": "EVADED",
+      "finding_count": 0,
+      "finding_details": []
+    },
+    {
+      "category": "scope_leak",
+      "id": "except_var",
+      "description": "Variable assigned in except block persists",
+      "should_detect": true,
+      "detected": false,
+      "status": "EVADED",
+      "finding_count": 0,
+      "finding_details": []
+    }
+  ]
+}

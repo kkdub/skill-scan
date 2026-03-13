@@ -2,7 +2,7 @@
 
 Split from test_ast_symbol_table.py to stay under the 250-line file limit.
 Covers: empty/import-only modules, class bodies, reassignment, complex RHS,
-and the file-size guard for _ast_symbol_table.py itself.
+file-size guard, dict subscript assignments, and dict literal tracking.
 """
 
 from __future__ import annotations
@@ -63,3 +63,122 @@ class TestEdgeCases:
     def test_complex_rhs_resolved(self, code: str, expected_key: str, expected_val: str) -> None:
         result = build_symbol_table(_PARSE(code))
         assert result[expected_key] == expected_val
+
+
+# -- BinOp(Mult) string repetition ------------------------------------------
+
+
+class TestStringMultiply:
+    """build_symbol_table resolves string * positive-int assignments (R007)."""
+
+    def test_string_times_one(self) -> None:
+        result = build_symbol_table(_PARSE("x = 'ev' * 1"))
+        assert result["x"] == "ev"
+
+    def test_string_times_two(self) -> None:
+        result = build_symbol_table(_PARSE("x = 'ev' * 2"))
+        assert result["x"] == "evev"
+
+    def test_reversed_operand_order(self) -> None:
+        result = build_symbol_table(_PARSE("x = 2 * 'ev'"))
+        assert result["x"] == "evev"
+
+    def test_zero_not_tracked(self) -> None:
+        result = build_symbol_table(_PARSE("x = 'ev' * 0"))
+        assert "x" not in result
+
+    def test_negative_not_tracked(self) -> None:
+        result = build_symbol_table(_PARSE("x = 'ev' * -1"))
+        assert "x" not in result
+
+    def test_float_not_tracked(self) -> None:
+        result = build_symbol_table(_PARSE("x = 'ev' * 2.0"))
+        assert "x" not in result
+
+    def test_multiply_in_function_scope(self) -> None:
+        code = "def f():\n    x = 'ab' * 3"
+        result = build_symbol_table(_PARSE(code))
+        assert result["f.x"] == "ababab"
+
+    def test_multiply_feeds_concat(self) -> None:
+        """String multiply + variable concat builds dangerous name (R-EFF005)."""
+        code = "a = 'ev' * 1\nb = 'al' * 1\nc = a + b"
+        result = build_symbol_table(_PARSE(code))
+        assert result["a"] == "ev"
+        assert result["b"] == "al"
+        # c is BinOp(Add) with Name operands -- not resolved in symbol table
+        # (the split detector handles this at detection time)
+        assert "c" not in result
+
+
+# -- R003/R004: Dict subscript and literal tracking -------------------------
+
+
+class TestDictSubscriptAssign:
+    """build_symbol_table records d['key'] = 'val' as composite key 'd[key]' (R003)."""
+
+    def test_basic_subscript_assign(self) -> None:
+        code = "d = {}\nd['a'] = 'ev'\nd['b'] = 'al'"
+        result = build_symbol_table(_PARSE(code))
+        assert result["d[a]"] == "ev"
+        assert result["d[b]"] == "al"
+
+    def test_subscript_assign_in_function(self) -> None:
+        code = "def f():\n    d = {}\n    d['x'] = 'hello'"
+        result = build_symbol_table(_PARSE(code))
+        assert result["f.d[x]"] == "hello"
+
+    def test_non_string_key_ignored(self) -> None:
+        code = "d = {}\nd[0] = 'val'"
+        result = build_symbol_table(_PARSE(code))
+        assert "d[0]" not in result
+
+    def test_non_string_value_ignored(self) -> None:
+        code = "d = {}\nd['k'] = 42"
+        result = build_symbol_table(_PARSE(code))
+        assert "d[k]" not in result
+
+    def test_no_collision_with_plain_name(self) -> None:
+        """Bracket format prevents collision with plain variable names (R-IMP002)."""
+        code = "x = 'plain'\nd = {}\nd['x'] = 'subscript'"
+        result = build_symbol_table(_PARSE(code))
+        assert result["x"] == "plain"
+        assert result["d[x]"] == "subscript"
+
+
+class TestDictLiteralTracking:
+    """build_symbol_table records dict literal values as composite keys (R004)."""
+
+    def test_basic_dict_literal(self) -> None:
+        code = "parts = {'a': 'ev', 'b': 'al'}"
+        result = build_symbol_table(_PARSE(code))
+        assert result["parts[a]"] == "ev"
+        assert result["parts[b]"] == "al"
+
+    def test_dict_literal_in_function(self) -> None:
+        code = "def f():\n    d = {'k': 'val'}"
+        result = build_symbol_table(_PARSE(code))
+        assert result["f.d[k]"] == "val"
+
+    def test_non_string_key_in_literal_ignored(self) -> None:
+        code = "d = {1: 'val', 'k': 'ok'}"
+        result = build_symbol_table(_PARSE(code))
+        assert "d[1]" not in result
+        assert result["d[k]"] == "ok"
+
+    def test_non_string_value_in_literal_ignored(self) -> None:
+        code = "d = {'a': 42, 'b': 'ok'}"
+        result = build_symbol_table(_PARSE(code))
+        assert "d[a]" not in result
+        assert result["d[b]"] == "ok"
+
+    def test_dict_literal_reassignment_overwrites(self) -> None:
+        code = "d = {'a': 'first'}\nd['a'] = 'second'"
+        result = build_symbol_table(_PARSE(code))
+        assert result["d[a]"] == "second"
+
+    def test_dict_with_splat_skips_none_keys(self) -> None:
+        """Dict with **kwargs: None keys are skipped safely."""
+        code = "other = {}\nd = {'a': 'ok', **other}"
+        result = build_symbol_table(_PARSE(code))
+        assert result["d[a]"] == "ok"

@@ -71,6 +71,12 @@ class TestFString:
         assert len(findings) >= 1
         assert findings[0].rule_id == "EXEC-002"
 
+    @pytest.mark.parametrize("fmt", ["f'{a!s}{b!s}'", "f'{a!r}{b!r}'", "f'{a:>2}{b:<2}'"])
+    def test_fstring_conversion_and_format_spec(self, fmt: str) -> None:
+        findings = _detect(f"a = 'ev'\nb = 'al'\nc = {fmt}")
+        assert len(findings) >= 1
+        assert findings[0].rule_id == "EXEC-002"
+
     def test_fstring_unresolvable_no_finding(self) -> None:
         assert len(_detect("a = 'ev'\nc = f'{a}{unknown}'")) == 0
 

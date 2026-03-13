@@ -1,0 +1,514 @@
+id: "PLAN-020"
+title: "T2 detection hardening: f-string conversions, containers, generator/map join, string multiply, percent-format defense"
+type: implementation
+status: Done
+created: 2026-03-12
+
+linked_spec: null
+
+description: |
+  Address 6 debt items (4 from PLAN-018 Tier 2, 2 from PLAN-019) that represent
+  detection gaps in the AST split-evasion detector and symbol table. Closes 13
+  known evasion patterns plus 2 security defense-in-depth gaps.
+
+  Debt items resolved:
+    - DEBT-018-T2-FSTRING-CONV: f-strings with !s/!r conversions bail out
+    - DEBT-018-T2-CONTAINERS (partial): dict subscript storage evades symbol table (list indices deferred to DEBT-018-T2-LIST-INDEX)
+    - DEBT-018-T2-GENERATOR-JOIN: generator/map() in join() not resolved
+    - DEBT-018-T2-STRING-MULT: string multiplication not tracked
+    - DEBT-019-PERCENT-OVERPROVISIONED: _substitute_percent() missing defense-in-depth
+    - DEBT-019-PERCENT-MIXED-SPECIFIERS: %-format only matches %s
+
+requirements:
+  file: REQUIREMENTS-020.yaml
+  ids:
+    - R001    # f-string !s/!r bail-out removal
+    - R002    # f-string format_spec bail-out removal
+    - R003    # dict subscript tracking
+    - R004    # dict literal tracking
+    - R005    # generator expression join
+    - R006    # map(chr/str) join
+    - R007    # string * int tracking
+    - R008    # _substitute_percent over-provisioning defense
+    - R009    # mixed %-specifier support
+    - R-IMP001  # raw value (not Python-formatted)
+    - R-IMP002  # composite key collision safety
+    - R-IMP003  # multiply int >= 1 guard
+    - R-IMP004  # percent defense backward compat
+    - R-IMP005  # %% lookbehind on mixed specifiers
+    - R-IMP006  # no %s-only regression
+    - R-IMP007  # 250-line file limit
+    - R-EFF001  # f-string conversion fixtures detected
+    - R-EFF002  # container fixtures detected
+    - R-EFF003  # generator join fixtures detected
+    - R-EFF004  # map join fixtures detected
+    - R-EFF005  # string-multiply fixtures detected
+    - R-ADV001  # over-provisioned defense
+    - R-ADV002  # mixed-specifier evasion prevention
+  uncovered: []
+
+utilities_audit:
+  status: complete
+  search_performed:
+    - query: "File line counts for target modules"
+      found: "_ast_symbol_table.py: 244/250 (CRITICAL), _ast_split_detector.py: 226/250, _ast_split_helpers.py: 199/250"
+    - query: "Reusable helpers in _ast_split_helpers.py"
+      found: "_resolve_expr_list, _scoped_lookup, _resolve_join_elements all available for reuse"
+    - query: "Test file capacity"
+      found: "test_ast_symbol_table_edge.py: 65/250 (best overflow), test_ast_symbol_table_extended.py: 222/250, test_ast_split_detector.py: 236/250 (tight)"
+  categories:
+    error_handling:
+      needed: true
+      exists: "src/skill_scan/_ast_detectors.py"
+      gaps: []
+      action: use
+    validation:
+      needed: true
+      exists: "src/skill_scan/_ast_split_helpers.py"
+      gaps: []
+      action: use
+    logging:
+      needed: false
+    types:
+      needed: true
+      exists: "src/skill_scan/models.py"
+      gaps: []
+      action: use
+    configuration:
+      needed: false
+    http_client:
+      needed: false
+  infrastructure_parts: []
+
+environment:
+  status: assessed
+  build:
+    tool: "pyproject.toml (hatchling) + Makefile"
+    install_cmd: "uv sync --group dev"
+    check_cmd: "make check"
+    prerequisites: ["Python 3.13", "uv"]
+  runtime_services: []
+  changes:
+    new_dependencies: []
+    env_vars: []
+    schema_changes: []
+    ci_changes: []
+    build_changes: []
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PARTS
+# ─────────────────────────────────────────────────────────────────────────────
+# Skeleton: skip (brownfield single-layer, all changes extend existing modules)
+#
+# Dependency graph:
+#   a ──► d           (symbol table: split → containers)
+#   a ──► e           (symbol table: split → multiply)
+#   b ──► f           (detector: f-string fix → generator/map join)
+#   c                 (helpers: percent-format, independent)
+#
+# Verify group: symtable-expand (parts d, e)
+
+parts:
+
+  - id: a
+    title: "Extract symbol table helpers to _ast_symbol_table_helpers.py"
+    status: Done
+    depends_on: []
+    requirements_covered: [R-IMP007]
+    approach:
+      - step: "Create _ast_symbol_table_helpers.py and migrate internal helper functions from _ast_symbol_table.py"
+        files:
+          - src/skill_scan/_ast_symbol_table_helpers.py
+          - src/skill_scan/_ast_symbol_table.py
+        notes: >
+          Move _track_name_assign, _handle_assign, and sub-helpers until
+          _ast_symbol_table.py falls to <=200 lines, leaving >=50 lines
+          headroom for Parts (d) and (e). Keep _Ref sentinel and
+          build_symbol_table() public interface in the main module.
+      - step: "Re-import migrated helpers and verify facade re-exports"
+        files:
+          - src/skill_scan/_ast_symbol_table.py
+          - src/skill_scan/ast_analyzer.py
+        notes: >
+          build_symbol_table must still be importable from ast_analyzer.
+          The new helpers file is a private sibling, not re-exported from facade.
+      - step: "Run make check to confirm no regressions"
+        files: []
+        notes: "Purely structural refactor — no behavioral change."
+    criteria:
+      - "_ast_symbol_table_helpers.py exists with migrated helper functions"
+      - "_ast_symbol_table.py is <=200 lines (>=50 lines headroom)"
+      - "build_symbol_table() importable from ast_analyzer (facade intact)"
+      - "_Ref sentinel remains in _ast_symbol_table.py"
+      - "make check passes with no new failures"
+
+  - id: b
+    title: "Fix f-string conversion bail-outs in _resolve_formatted_value()"
+    status: Done
+    depends_on: []
+    requirements_covered: [R001, R002, R-IMP001, R-EFF001]
+    approach:
+      - step: "Remove early-return guards that bail when FormattedValue.conversion or format_spec is set"
+        files:
+          - src/skill_scan/_ast_split_detector.py
+        notes: >
+          Return the raw base variable value in both cases — do not emulate
+          Python conversion semantics. This closes evasion via f'{x!r}'.
+      - step: "Add positive fixture files for f-string conversion evasion"
+        files:
+          - tests/fixtures/split_evasion/pos_fstring_conversion_s.py
+          - tests/fixtures/split_evasion/pos_fstring_conversion_r.py
+          - tests/fixtures/split_evasion/pos_fstring_format_spec.py
+        notes: >
+          Each fixture assembles a dangerous name via f-string with !s, !r,
+          or format_spec. Parametrized test suite auto-discovers pos_*.py files.
+    criteria:
+      - "_resolve_formatted_value() does not return None for !s or !r conversion"
+      - "_resolve_formatted_value() does not return None for non-None format_spec"
+      - "Both cases return the resolved base variable string value (raw)"
+      - "pos_fstring_conversion_s.py detected as EXEC-002"
+      - "pos_fstring_conversion_r.py detected as EXEC-002"
+      - "pos_fstring_format_spec.py detected as EXEC-002"
+      - "make check passes"
+
+  - id: c
+    title: "Harden percent-format: mixed specifiers and over-provisioning defense"
+    status: Done
+    depends_on: []
+    requirements_covered: [R008, R009, R-IMP004, R-IMP005, R-IMP006, R-ADV001, R-ADV002]
+    approach:
+      - step: "Expand %-specifier regex to match all standard specifiers with %% lookbehind"
+        files:
+          - src/skill_scan/_ast_split_helpers.py
+        notes: >
+          Replace _PERCENT_S_RE with a regex matching %s, %d, %f, %x, %o,
+          %e, %g, %c, %r, %a, %i using (?<!%)%[sdfrxoegcai]. Carry forward
+          the existing negative lookbehind for %% literals (R-IMP005).
+      - step: "Add over-provisioning defense to _substitute_percent()"
+        files:
+          - src/skill_scan/_ast_split_helpers.py
+        notes: >
+          Return None when len(values) > placeholder count. Must not alter
+          behavior for correctly-provisioned calls (R-IMP004).
+      - step: "Update _substitute_percent() to replace all specifiers, not just %s"
+        files:
+          - src/skill_scan/_ast_split_helpers.py
+        notes: >
+          Replace the current `.replace("%s", val, 1)` loop with regex-based
+          substitution that handles all matched specifiers (%s, %d, %f, etc.)
+          in order. Use the same expanded regex from step 1 to find the next
+          placeholder and substitute the corresponding value. This ensures
+          mixed-specifier templates like '%s%d' actually resolve.
+      - step: "Add unit tests for mixed specifiers, over-provisioning, %% exclusion, and %s regression"
+        files:
+          - tests/unit/test_ast_split_helpers.py
+        notes: >
+          17 lines headroom. If tests overflow 250 lines, create
+          tests/unit/test_ast_split_helpers_percent.py as overflow file.
+    criteria:
+      - "_resolve_percent_format() matches %d, %f, %x, %o, %e, %g, %c in addition to %s"
+      - "%% literals excluded from placeholder count"
+      - "_substitute_percent() returns None when len(values) > placeholder count"
+      - "Correctly-provisioned calls unchanged (existing tests pass)"
+      - "%s-only template detection not regressed (pos_percent_eval/exec fixtures pass)"
+      - "make check passes"
+
+  - id: d
+    title: "Track dict subscript assignments and literals in build_symbol_table()"
+    status: Done
+    depends_on: [a]
+    verify_group: symtable-expand
+    requirements_covered: [R003, R004, R-IMP002, R-EFF002]
+    approach:
+      - step: "Add composite-key subscript assignment tracking to _collect_assignments()"
+        files:
+          - src/skill_scan/_ast_symbol_table.py
+          - src/skill_scan/_ast_symbol_table_helpers.py
+        notes: >
+          Key format is 'varname[key]' — brackets prevent collision with
+          plain names (R-IMP002). Only track when base name and slice are
+          statically resolvable strings. List index subscripts (int keys)
+          deferred to DEBT-018-T2-LIST-INDEX.
+      - step: "Add dict literal initial-value tracking"
+        files:
+          - src/skill_scan/_ast_symbol_table.py
+          - src/skill_scan/_ast_symbol_table_helpers.py
+        notes: >
+          Iterate ast.Dict keys/values, record 'varname[key]' -> value
+          for string-literal keys and string-literal values.
+      - step: "Add ast.Subscript lookup to _try_resolve_split()"
+        files:
+          - src/skill_scan/_ast_split_detector.py
+        notes: >
+          Build composite key from ast.Subscript (Name base + string slice)
+          and look up in symbol table. Only activate when base is ast.Name
+          and slice is ast.Constant(str).
+      - step: "Add positive fixtures and unit tests"
+        files:
+          - tests/fixtures/split_evasion/pos_dict_subscript_assign.py
+          - tests/fixtures/split_evasion/pos_dict_literal_subscript.py
+          - tests/unit/test_ast_symbol_table_edge.py
+        notes: >
+          test_ast_symbol_table_edge.py has 185 lines headroom — primary
+          overflow target for new symbol table tests.
+    criteria:
+      - "build_symbol_table() records 'varname[key]' for subscript assignments"
+      - "build_symbol_table() records 'varname[key]' for dict literal initializers"
+      - "Composite keys use bracket format (no collision with plain names)"
+      - "_try_resolve_split() resolves ast.Subscript via composite key lookup"
+      - "pos_dict_subscript_assign.py detected as EXEC-002"
+      - "pos_dict_literal_subscript.py detected as EXEC-002"
+      - "make check passes"
+
+  - id: e
+    title: "Track BinOp(Mult) string repetition in build_symbol_table()"
+    status: Done
+    depends_on: [a]
+    verify_group: symtable-expand
+    requirements_covered: [R007, R-IMP003, R-EFF005]
+    approach:
+      - step: "Add BinOp(Mult) resolution for string * positive-int assignments"
+        files:
+          - src/skill_scan/_ast_symbol_table.py
+          - src/skill_scan/_ast_symbol_table_helpers.py
+        notes: >
+          Handle both operand orders (str*int and int*str). Only resolve
+          when integer >= 1 (R-IMP003). Skip 0, negative, and float operands.
+      - step: "Add positive fixture and unit tests"
+        files:
+          - tests/fixtures/split_evasion/pos_string_multiply.py
+          - tests/unit/test_ast_symbol_table_edge.py
+        notes: >
+          Unit tests cover: int 1, int 2, int 0 (skip), negative (skip),
+          float (skip), reversed operand order.
+    criteria:
+      - "build_symbol_table() resolves string * positive-int to repeated string"
+      - "Reversed operand order (int * string) also resolves"
+      - "Integer 0 or negative is NOT tracked"
+      - "Float operand is NOT tracked"
+      - "pos_string_multiply.py detected as EXEC-002"
+      - "make check passes"
+
+  - id: f
+    title: "Resolve generator expressions and map(chr/str) in _resolve_join_call()"
+    status: Done
+    depends_on: [b]
+    requirements_covered: [R005, R006, R-EFF003, R-EFF004]
+    approach:
+      - step: "Add generator expression handling in _resolve_join_call()"
+        files:
+          - src/skill_scan/_ast_split_detector.py
+        notes: >
+          Handle ast.GeneratorExp as join argument. Only resolve single-variable
+          generators over list/tuple of string literals. Use _resolve_expr_list
+          from helpers for element resolution.
+      - step: "Thread alias_map into _resolve_join_call() and add map(chr/str) handling"
+        files:
+          - src/skill_scan/_ast_split_detector.py
+        notes: >
+          Add alias_map parameter to _resolve_join_call() signature (currently
+          only takes node, symbol_table, scope). Update all call sites to pass
+          alias_map through. Then add map(chr/str) support: use
+          get_call_name(node.func, alias_map) to resolve aliased chr/str calls.
+          For chr(), convert each int literal to character. For str(), passthrough.
+          Limit to chr and str only — other functions not resolved.
+      - step: "Add positive fixtures and unit tests"
+        files:
+          - tests/fixtures/split_evasion/pos_join_generator_expr.py
+          - tests/fixtures/split_evasion/pos_join_map_chr.py
+          - tests/fixtures/split_evasion/pos_join_map_str.py
+        notes: >
+          14 lines headroom in test_ast_split_detector.py. If overflow,
+          create test_ast_split_detector_join.py. Fixtures use standard
+          pos_ naming convention.
+    criteria:
+      - "_resolve_join_call() handles ast.GeneratorExp by resolving element fragments"
+      - "_resolve_join_call() handles map(chr, ints) by converting each int to char"
+      - "_resolve_join_call() handles map(str, strings) as passthrough"
+      - "map() limited to chr and str — other functions not resolved"
+      - "pos_join_generator_expr.py detected as EXEC-002"
+      - "pos_join_map_chr.py detected as EXEC-002"
+      - "pos_join_map_str.py detected as EXEC-002"
+      - "make check passes"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ACCEPTANCE SCENARIOS
+# ─────────────────────────────────────────────────────────────────────────────
+
+acceptance_scenarios:
+  - scenario: "F-string with conversion flag assembles dangerous name and triggers EXEC-002"
+    invoke: "analyze_python() on source: x = 'eval'; exec(f'{x!r}'.strip(\"'\"))"
+    expect: "At least one EXEC-002 finding from detect_split_evasion"
+    test_file: tests/unit/test_ast_split_detector_join.py
+    status: passing
+
+  - scenario: "Dict subscript evasion resolves through symbol table to EXEC-002"
+    invoke: "analyze_python() on source: d = {'cmd': 'eval'}; getattr(__builtins__, d['cmd'])('1+1')"
+    expect: "At least one EXEC-002 or EXEC-006 finding; subscript resolved via symbol table"
+    test_file: tests/unit/test_ast_split_detector_join.py
+    status: passing
+
+  - scenario: "map(chr, ...) join assembles dangerous payload via split reconstruction"
+    invoke: "analyze_python() on source: payload = ''.join(map(chr, [101,118,97,108]))"
+    expect: "EXEC-002 finding with description containing 'split' or 'reconstructed' (no exec() call to mask detection source)"
+    test_file: tests/unit/test_ast_split_detector_join.py
+    status: passing
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SCOPE & CONSTRAINTS
+# ─────────────────────────────────────────────────────────────────────────────
+
+allowed_files:
+  - "src/skill_scan/_ast_symbol_table.py"
+  - "src/skill_scan/_ast_symbol_table_helpers.py"
+  - "src/skill_scan/_ast_split_detector.py"
+  - "src/skill_scan/_ast_split_helpers.py"
+  - "src/skill_scan/ast_analyzer.py"
+  - "tests/fixtures/split_evasion/**"
+  - "tests/unit/test_ast_split_detector*.py"
+  - "tests/unit/test_ast_split_helpers*.py"
+  - "tests/unit/test_ast_symbol_table*.py"
+  - "tests/unit/rule_helpers.py"
+  - ".agent/status/debt.yaml"
+
+forbidden:
+  - "src/skill_scan/content_scanner.py"
+  - "src/skill_scan/rules/engine.py"
+  - ".env*"
+
+acceptance_criteria:
+  - "All 23 requirements have status: done"
+  - "All parts have status: Done"
+  - "All tests pass"
+  - "All acceptance scenarios have status: passing"
+  - "5 debt items fully closeable + DEBT-018-T2-CONTAINERS narrowed (dict-only; list indices filed as DEBT-018-T2-LIST-INDEX)"
+
+stop_condition: |
+  When all requirements are verified, all parts complete, all tests pass (make check),
+  all acceptance scenarios passing, and resolved debt items removed from debt.yaml.
+
+# ─────────────────────────────────────────────────────────────────────────────
+# COVERAGE REPORT
+# ─────────────────────────────────────────────────────────────────────────────
+
+coverage_report:
+  R001: b
+  R002: b
+  R003: d
+  R004: d
+  R005: f
+  R006: f
+  R007: e
+  R008: c
+  R009: c
+  R-IMP001: b
+  R-IMP002: d
+  R-IMP003: e
+  R-IMP004: c
+  R-IMP005: c
+  R-IMP006: c
+  R-IMP007: a
+  R-EFF001: b
+  R-EFF002: d
+  R-EFF003: f
+  R-EFF004: f
+  R-EFF005: e
+  R-ADV001: c
+  R-ADV002: c
+
+# ─────────────────────────────────────────────────────────────────────────────
+# EXECUTION TRACKING
+# ─────────────────────────────────────────────────────────────────────────────
+
+work_log:
+  - part: a
+    status: Done
+    summary: "Extracted 8 helpers to _ast_symbol_table_helpers.py; _ast_symbol_table.py 244→126 lines"
+  - part: b
+    status: Done
+    summary: "Removed conversion/format_spec bail-outs; 3 fixtures added"
+  - part: c
+    status: Done
+    summary: "Expanded regex to all %-specifiers; over-provisioning defense; 20 tests"
+  - part: d
+    status: Done
+    summary: "Dict subscript assign + literal tracking; composite key format; subscript lookup in detector"
+  - part: e
+    status: Done
+    summary: "BinOp(Mult) string repetition; both operand orders; guard >=1"
+  - part: f
+    status: Done
+    summary: "Generator expr + map(chr/str) in join; _ast_split_join_helpers.py extracted; 3 acceptance tests"
+  - part: docs
+    status: Done
+    summary: "CLAUDE.md updated: 2 new modules in project structure, 9 new architecture notes covering composite keys, BinOp(Mult), _resolve_join_call alias_map threading, f-string bail-out removal, subscript lookup, _ast_split_join_helpers, expanded _PERCENT_SPEC_RE, over-provisioning defense, updated fixture count to 30+4; plan evidence and handoff written"
+
+evidence:
+  - type: manual_verification
+    command: "git log --oneline -5"
+    result: "All 6 parts implemented; fixture count confirmed at 30 positive + 4 negative"
+  - type: manual_verification
+    command: "wc -l src/skill_scan/_ast_symbol_table.py"
+    result: "126 lines (was 244; headroom created for Parts d and e)"
+  - type: manual_verification
+    command: "wc -l src/skill_scan/_ast_symbol_table_helpers.py"
+    result: "198 lines (new file; under 250-line limit)"
+  - type: manual_verification
+    command: "wc -l src/skill_scan/_ast_split_join_helpers.py"
+    result: "78 lines (new file; under 250-line limit)"
+  - type: manual_verification
+    command: "wc -l src/skill_scan/_ast_split_helpers.py"
+    result: "232 lines (under 250-line limit)"
+  - type: manual_verification
+    command: "wc -l src/skill_scan/_ast_split_detector.py"
+    result: "247 lines (under 250-line limit)"
+
+handoff:
+  stopped_at: "All 6 parts complete; CLAUDE.md updated by documenter"
+  current_state: "Implementation done; documentation updated"
+  next_steps:
+    - "Run make check to confirm all gates green"
+    - "Remove resolved debt items from debt.yaml if not already done (FSTRING-CONV, GENERATOR-JOIN, STRING-MULT, PERCENT-OVERPROVISIONED, PERCENT-MIXED-SPECIFIERS, CONTAINERS dict-only)"
+    - "Open PR for plan/020 branch"
+  blockers: []
+  scope:
+    files:
+      - src/skill_scan/_ast_symbol_table.py
+      - src/skill_scan/_ast_symbol_table_helpers.py
+      - src/skill_scan/_ast_split_detector.py
+      - src/skill_scan/_ast_split_helpers.py
+      - src/skill_scan/_ast_split_join_helpers.py
+      - tests/unit/test_ast_symbol_table_helpers.py
+      - tests/unit/test_ast_split_detector_join.py
+      - tests/unit/test_ast_split_helpers_percent.py
+      - tests/fixtures/split_evasion/
+    functions: []
+    components:
+      - symbol table builder
+      - split evasion detector
+      - percent-format resolver
+      - join call resolver
+  decisions:
+    - "Composite key format 'varname[key]' (brackets prevent collision with plain names)"
+    - "map() support limited to chr() and str() only"
+    - "All %-specifiers substitute with symbol-table string value (no type coercion)"
+    - "BinOp(Mult) only resolves when integer >= 1"
+    - "_ast_symbol_table.py must be split to _ast_symbol_table_helpers.py first"
+    - "_collect_assignments() uses deferred local import of _ast_symbol_table_helpers to break circular import"
+    - "_ast_split_helpers.py re-exports _resolve_generator_join and _resolve_map_join from _ast_split_join_helpers.py (Facade Re-export Pattern)"
+    - "DEBT-018-T2-CONTAINERS narrowed to dict-only; list indices remain as DEBT-018-T2-LIST-INDEX"
+    - "Two new security debt items filed: DEBT-020-RESUB-BACKSLASH, DEBT-020-UNBOUNDED-MULT"
+  open_questions: []
+  cross_part_knowledge: []
+  active_signals: []
+
+errors:
+
+notes: |
+  Key dependency: Part (a) must complete before Parts (d) and (e) — the symbol
+  table file is at 244/250 lines and needs extraction to create headroom.
+  Parts (d) and (e) are independent of each other (both only need headroom from a).
+  Parts (b), (c), and (f) are independent of the symbol table split.
+  Parts (d) and (e) share verify_group: symtable-expand.
+  DEBT-018-T2-CONTAINERS partially closed — dict subscripts only; list indices
+  deferred to DEBT-018-T2-LIST-INDEX.
