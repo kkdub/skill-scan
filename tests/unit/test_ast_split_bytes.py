@@ -14,7 +14,7 @@ import textwrap
 
 
 from skill_scan._ast_split_detector import detect_split_evasion
-from skill_scan._ast_split_resolve import (
+from skill_scan._ast_split_bytes import (
     _resolve_bytearray_decode,
     _resolve_codecs_decode,
     _resolve_str_bytes,

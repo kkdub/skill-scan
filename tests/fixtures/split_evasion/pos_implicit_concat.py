@@ -1,15 +1,13 @@
-# Positive: string concatenation building dangerous names via symbol table
-# BinOp concat splits dangerous names across variables; the symbol table
-# tracks each variable's value and the split detector reconstructs the full name.
+# Positive: implicit string concatenation (adjacent literals) feeding split evasion
+# Python's parser joins adjacent string literals at parse time: 'ev' 'a' -> 'eva'
+# Combined with variable concatenation, the split detector reconstructs 'eval'.
 
-# Two-part BinOp concat building 'eval'
-prefix = "eva"
+# Implicit concat in variable assignment, then BinOp split
+prefix = "eva"  # parser merges to 'eva'
 suffix = "l"
-result = prefix + suffix
+result = prefix + suffix  # split detector: 'eva' + 'l' = 'eval'
 
-# Direct assignment of 'exec' (baseline: symbol table tracks it)
-cmd2 = "exec"
-
-# Three-part concat building 'system' (R-EFF003)
-part = "system"
-cmd = part + ""
+# Three-part implicit concat feeding BinOp split for 'popen'
+part1 = "po"  # originally adjacent literals: 'po' 'p' (parser merges)
+part2 = "pen"
+cmd = part1 + part2  # split detector: 'po' + 'pen' = 'popen'

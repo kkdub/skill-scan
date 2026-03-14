@@ -216,7 +216,10 @@ class TestPlanAcceptanceScenarios:
 
     def test_string_slicing_evasion_full_pipeline(self) -> None:
         """String slicing evasion detected through full analyze_python pipeline."""
-        source = 's = "xxeval"\nname = s[2:]\neval(name)'
+        source = textwrap.dedent("""\
+            s = "xxevalxx"
+            name = s[2:4] + s[4:6]
+        """)
         findings = analyze_python(source, "test.py")
         exec_findings = [f for f in findings if f.rule_id == "EXEC-002"]
         assert len(exec_findings) >= 1

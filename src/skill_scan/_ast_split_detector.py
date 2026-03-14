@@ -147,11 +147,11 @@ def _try_resolve_split(
     """Try to resolve a node to a string via BinOp(Add/Mod), f-string, join, or format."""
     if isinstance(node, ast.BinOp):
         if isinstance(node.op, ast.Add):
-            return resolve_binop_chain(node, symbol_table, scope)
+            return resolve_binop_chain(node, symbol_table, scope, alias_map=alias_map)
         if isinstance(node.op, ast.Mod):
             return _resolve_percent_format(node, symbol_table, scope)
     if isinstance(node, ast.JoinedStr):
-        return resolve_fstring(node, symbol_table, scope)
+        return resolve_fstring(node, symbol_table, scope, alias_map=alias_map)
     if isinstance(node, ast.Call):
         am = alias_map or {}
         result = _resolve_join_call(node, symbol_table, scope, am) or _resolve_format_call(

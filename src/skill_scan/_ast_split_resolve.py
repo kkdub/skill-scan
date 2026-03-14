@@ -21,14 +21,15 @@ def resolve_binop_chain(
     scope: str,
     *,
     _depth: int = 0,
+    alias_map: dict[str, str] | None = None,
 ) -> str | None:
     """Recursively resolve BinOp(Add) chains, bounded by _MAX_BINOP_DEPTH."""
     if _depth > _MAX_BINOP_DEPTH:
         return None
-    left = resolve_operand(node.left, symbol_table, scope, _depth=_depth + 1)
+    left = resolve_operand(node.left, symbol_table, scope, _depth=_depth + 1, alias_map=alias_map)
     if left is None:
         return None
-    right = resolve_operand(node.right, symbol_table, scope, _depth=_depth + 1)
+    right = resolve_operand(node.right, symbol_table, scope, _depth=_depth + 1, alias_map=alias_map)
     if right is None:
         return None
     return left + right
@@ -40,23 +41,29 @@ def resolve_operand(
     scope: str,
     *,
     _depth: int = 0,
+    alias_map: dict[str, str] | None = None,
 ) -> str | None:
     """Resolve a single BinOp operand: nested BinOp, expr lookup, or Constant."""
     if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
-        return resolve_binop_chain(node, symbol_table, scope, _depth=_depth + 1)
+        return resolve_binop_chain(node, symbol_table, scope, _depth=_depth + 1, alias_map=alias_map)
     if isinstance(node, ast.Constant) and isinstance(node.value, str):
         return node.value
-    return resolve_expr(node, symbol_table, scope)
+    return resolve_expr(node, symbol_table, scope, alias_map=alias_map)
 
 
-def resolve_fstring(node: ast.JoinedStr, symbol_table: dict[str, str], scope: str) -> str | None:
+def resolve_fstring(
+    node: ast.JoinedStr,
+    symbol_table: dict[str, str],
+    scope: str,
+    alias_map: dict[str, str] | None = None,
+) -> str | None:
     """Resolve an f-string where all interpolated values are tracked variables."""
     parts: list[str] = []
     for value in node.values:
         if isinstance(value, ast.Constant) and isinstance(value.value, str):
             parts.append(value.value)
         elif isinstance(value, ast.FormattedValue):
-            resolved = resolve_expr(value.value, symbol_table, scope)
+            resolved = resolve_expr(value.value, symbol_table, scope, alias_map=alias_map)
             if resolved is None:
                 return None
             parts.append(resolved)
@@ -94,7 +101,12 @@ def resolve_call_return(
     return None
 
 
-def resolve_expr(node: ast.expr, symbol_table: dict[str, str], scope: str) -> str | None:
+def resolve_expr(
+    node: ast.expr,
+    symbol_table: dict[str, str],
+    scope: str,
+    alias_map: dict[str, str] | None = None,
+) -> str | None:
     """Resolve a Name, Attribute, Subscript, or Call expression via symbol table."""
     if isinstance(node, ast.Name):
         return _scoped_lookup(node.id, symbol_table, scope)
@@ -111,7 +123,7 @@ def resolve_expr(node: ast.expr, symbol_table: dict[str, str], scope: str) -> st
         chr_result = _resolve_chr_call(node)
         if chr_result is not None:
             return chr_result
-        bytes_result = resolve_bytes_constructor(node)
+        bytes_result = resolve_bytes_constructor(node, alias_map)
         if bytes_result is not None:
             return bytes_result
         return resolve_call_return(node, symbol_table, scope)
@@ -194,92 +206,7 @@ def _resolve_subscript_lookup(node: ast.expr, symbol_table: dict[str, str], scop
     return _resolve_subscript_expr(node, symbol_table, scope)
 
 
-def resolve_bytes_constructor(
-    node: ast.Call,
-    alias_map: dict[str, str] | None = None,
-) -> str | None:
-    """Resolve bytes-constructor patterns to a decoded string.
-
-    Handles three patterns (R005):
-    1. bytearray(b'...').decode() -- Call to decode on bytearray with bytes literal
-    2. str(b'...', 'utf-8') -- str() with bytes literal and encoding arg
-    3. codecs.decode(b'...', 'utf-8') -- codecs.decode with bytes literal
-
-    Returns None for non-literal bytes arguments (R-IMP004).
-    """
-    result = _resolve_bytearray_decode(node)
-    if result is not None:
-        return result
-    result = _resolve_str_bytes(node)
-    if result is not None:
-        return result
-    return _resolve_codecs_decode(node, alias_map or {})
-
-
-def _resolve_bytearray_decode(node: ast.Call) -> str | None:
-    """Resolve bytearray(b'...').decode() to a string.
-
-    Pattern: the outer Call is .decode() on an inner Call to bytearray()
-    with a single bytes literal argument.
-    """
-    func = node.func
-    if not (isinstance(func, ast.Attribute) and func.attr == "decode"):
-        return None
-    inner = func.value
-    if not isinstance(inner, ast.Call):
-        return None
-    if not (isinstance(inner.func, ast.Name) and inner.func.id == "bytearray"):
-        return None
-    if len(inner.args) != 1 or inner.keywords:
-        return None
-    arg = inner.args[0]
-    if isinstance(arg, ast.Constant) and isinstance(arg.value, bytes):
-        return arg.value.decode("utf-8", errors="replace")
-    return None
-
-
-def _decode_bytes_encoding_args(node: ast.Call) -> str | None:
-    """Extract and decode (bytes_literal, encoding_str) from a two-arg Call.
-
-    Returns the decoded string if both args are literals (bytes + str),
-    or None otherwise (R-IMP004).
-    """
-    if len(node.args) != 2 or node.keywords:
-        return None
-    bytes_arg, enc_arg = node.args
-    if not (isinstance(bytes_arg, ast.Constant) and isinstance(bytes_arg.value, bytes)):
-        return None
-    if not (isinstance(enc_arg, ast.Constant) and isinstance(enc_arg.value, str)):
-        return None
-    try:
-        return bytes_arg.value.decode(enc_arg.value, errors="replace")
-    except (LookupError, ValueError):
-        return None
-
-
-def _resolve_str_bytes(node: ast.Call) -> str | None:
-    """Resolve str(b'...', 'utf-8') to a string.
-
-    Pattern: str() with two positional args where first is bytes literal
-    and second is an encoding string.
-    """
-    if not (isinstance(node.func, ast.Name) and node.func.id == "str"):
-        return None
-    return _decode_bytes_encoding_args(node)
-
-
-def _resolve_codecs_decode(node: ast.Call, alias_map: dict[str, str]) -> str | None:
-    """Resolve codecs.decode(b'...', 'utf-8') to a string.
-
-    Pattern: codecs.decode() with bytes literal and encoding string.
-    Supports alias_map for import aliasing (e.g., import codecs as c).
-    """
-    func = node.func
-    if not isinstance(func, ast.Attribute) or func.attr != "decode":
-        return None
-    if not isinstance(func.value, ast.Name):
-        return None
-    canonical = alias_map.get(func.value.id, func.value.id)
-    if canonical != "codecs":
-        return None
-    return _decode_bytes_encoding_args(node)
+# re-export at BOTTOM -- Facade Re-export Pattern
+from skill_scan._ast_split_bytes import (  # noqa: E402
+    resolve_bytes_constructor as resolve_bytes_constructor,
+)
