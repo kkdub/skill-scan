@@ -287,6 +287,33 @@ class TestCallReturn:
         assert len(_detect(code)) == 0
 
 
+# -- Join/format call-return resolution (PR #36 fix) --------------------------
+
+
+class TestJoinFormatCallReturn:
+    def test_join_with_call_return_args(self) -> None:
+        """''.join([get_a(), get_b()]) resolves call returns."""
+        code = "def a(): return 'ev'\ndef b(): return 'al'\nresult = ''.join([a(), b()])"
+        findings = _detect(code)
+        assert len(findings) >= 1
+        assert findings[0].rule_id == "EXEC-002"
+        assert "eval" in findings[0].description
+
+    def test_format_with_call_return_args(self) -> None:
+        """'{}{}'.format(get_a(), get_b()) resolves call returns."""
+        code = "def a(): return 'ev'\ndef b(): return 'al'\nresult = '{}{}'.format(a(), b())"
+        findings = _detect(code)
+        assert len(findings) >= 1
+        assert findings[0].rule_id == "EXEC-002"
+
+    def test_percent_format_with_call_return_args(self) -> None:
+        """'%s%s' % (get_a(), get_b()) resolves call returns."""
+        code = "def a(): return 'ev'\ndef b(): return 'al'\nresult = '%s%s' % (a(), b())"
+        findings = _detect(code)
+        assert len(findings) >= 1
+        assert findings[0].rule_id == "EXEC-002"
+
+
 # -- R-IMP003: File size constraint -------------------------------------------
 
 

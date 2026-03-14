@@ -58,15 +58,17 @@ def build_symbol_table(tree: ast.Module) -> dict[str, str]:
             func_scope = _collect_assignments(node.body)
             _resolve_indirections(func_scope, parent_scope=module_scope)
             global_names, _ = _collect_scope_declarations(node.body)
+            # Track return value BEFORE routing globals -- _route_globals
+            # pops global-declared names from func_scope, so return
+            # expressions referencing globals would fail to resolve after.
+            ret_val = _collect_return_value(node.body, func_scope)
+            if ret_val is not None:
+                result[f"{node.name}()"] = ret_val
             _route_globals(func_scope, global_names, result, module_scope)
             _process_nested(node.body, func_scope, result)
             for var_name, value in func_scope.items():
                 if isinstance(value, str):
                     result[f"{node.name}.{var_name}"] = value
-            # Track return value under 'funcname()' composite key
-            ret_val = _collect_return_value(node.body, func_scope)
-            if ret_val is not None:
-                result[f"{node.name}()"] = ret_val
         elif isinstance(node, ast.ClassDef):
             _process_class(node, module_scope, result)
 

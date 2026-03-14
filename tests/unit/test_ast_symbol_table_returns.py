@@ -206,6 +206,45 @@ class TestCallSiteAssignment:
         assert "x" not in build_symbol_table(_PARSE("x = unknown_func()\n"))
 
 
+# -- Global return resolution (PR #36 fix) ----------------------------------
+
+
+class TestGlobalReturnResolution:
+    def test_return_global_declared_variable(self) -> None:
+        """build_symbol_table tracks return value when function returns a global-declared var."""
+        code = "def f():\n    global x\n    x = 'eval'\n    return x\n"
+        assert build_symbol_table(_PARSE(code))["f()"] == "eval"
+
+
+# -- Match guard handling (PR #36 fix) --------------------------------------
+
+
+class TestMatchGuardHandling:
+    def test_guarded_wildcard_not_treated_as_exhaustive(self) -> None:
+        """A case _ with a guard can fail -- function has implicit fallthrough."""
+        code = (
+            "def f(x):\n"
+            "    match x:\n"
+            "        case 1:\n"
+            "            return 'val'\n"
+            "        case _ if x > 0:\n"
+            "            return 'val'\n"
+        )
+        assert "f()" not in build_symbol_table(_PARSE(code))
+
+    def test_unguarded_wildcard_still_exhaustive(self) -> None:
+        """An unguarded case _ still guarantees exhaustiveness."""
+        code = (
+            "def f(x):\n"
+            "    match x:\n"
+            "        case 1:\n"
+            "            return 'val'\n"
+            "        case _:\n"
+            "            return 'val'\n"
+        )
+        assert build_symbol_table(_PARSE(code))["f()"] == "val"
+
+
 # -- R-IMP005: File size constraint -----------------------------------------
 
 
