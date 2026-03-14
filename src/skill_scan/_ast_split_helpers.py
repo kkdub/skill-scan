@@ -73,34 +73,18 @@ def _resolve_expr_list(
 
 
 def _resolve_single_expr(expr: ast.expr, symbol_table: dict[str, str], scope: str) -> str | None:
-    """Resolve one expression node to a string value."""
-    if isinstance(expr, ast.Name):
-        return _scoped_lookup(expr.id, symbol_table, scope)
+    """Resolve one expression node to a string value.
+
+    Handles ast.Constant(str) directly; delegates Name, Attribute,
+    Subscript, and Call to resolve_expr() (deferred import to avoid
+    circular dependency since _ast_split_resolve imports from us).
+    """
     if isinstance(expr, ast.Constant) and isinstance(expr.value, str):
         return expr.value
-    if isinstance(expr, ast.Attribute):
-        return _resolve_attr_expr(expr, symbol_table, scope)
-    if isinstance(expr, ast.Subscript):
-        return _resolve_subscript_expr(expr, symbol_table, scope)
-    if isinstance(expr, ast.Call):
-        # Deferred import to avoid circular: _ast_split_resolve imports from us
-        from skill_scan._ast_split_resolve import resolve_call_return
+    # resolve_expr handles Name, Attribute, Subscript, and Call
+    from skill_scan._ast_split_resolve import resolve_expr
 
-        return resolve_call_return(expr, symbol_table, scope)
-    return None
-
-
-def _resolve_attr_expr(expr: ast.Attribute, symbol_table: dict[str, str], scope: str) -> str | None:
-    """Resolve ast.Attribute -- only self/cls.attr or ClassName.attr (not arbitrary obj.attr)."""
-    if not isinstance(expr.value, ast.Name):
-        return None
-    base, attr = expr.value.id, expr.attr
-    key = f"{base}.{attr}"
-    if key in symbol_table:
-        return symbol_table[key]
-    if scope and base in ("self", "cls"):
-        return symbol_table.get(f"{scope}.{attr}")
-    return None
+    return resolve_expr(expr, symbol_table, scope)
 
 
 def _resolve_subscript_key(slice_val: object) -> str | None:
