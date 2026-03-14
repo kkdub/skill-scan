@@ -251,7 +251,10 @@ def _decode_bytes_encoding_args(node: ast.Call) -> str | None:
         return None
     if not (isinstance(enc_arg, ast.Constant) and isinstance(enc_arg.value, str)):
         return None
-    return bytes_arg.value.decode(enc_arg.value, errors="replace")
+    try:
+        return bytes_arg.value.decode(enc_arg.value, errors="replace")
+    except (LookupError, ValueError):
+        return None
 
 
 def _resolve_str_bytes(node: ast.Call) -> str | None:
