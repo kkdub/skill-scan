@@ -209,3 +209,34 @@ class TestCallReturnAcceptance:
         exec_findings = [f for f in findings if f.rule_id == "EXEC-002"]
         assert len(exec_findings) >= 1
         assert any("eval" in f.description for f in exec_findings)
+
+
+class TestPlanAcceptanceScenarios:
+    """Plan-level acceptance scenarios exercising the full feature path."""
+
+    def test_string_slicing_evasion_full_pipeline(self) -> None:
+        """String slicing evasion detected through full analyze_python pipeline."""
+        source = textwrap.dedent("""\
+            s = "xxevalxx"
+            name = s[2:4] + s[4:6]
+        """)
+        findings = analyze_python(source, "test.py")
+        exec_findings = [f for f in findings if f.rule_id == "EXEC-002"]
+        assert len(exec_findings) >= 1
+        assert any("eval" in f.matched_text or "eval" in f.description for f in exec_findings)
+
+    def test_bytes_constructor_evasion_full_pipeline(self) -> None:
+        """Bytes constructor evasion detected through full analyze_python pipeline."""
+        source = 'import codecs\nname = codecs.decode(b"eval", "utf-8")'
+        findings = analyze_python(source, "test.py")
+        exec_findings = [f for f in findings if f.rule_id == "EXEC-002"]
+        assert len(exec_findings) >= 1
+        assert any("eval" in f.matched_text or "eval" in f.description for f in exec_findings)
+
+    def test_dynamic_dispatch_globals_subscript_full_pipeline(self) -> None:
+        """Dynamic dispatch via globals subscript detected through full analyze_python pipeline."""
+        source = 'globals()["eval"]("1+1")'
+        findings = analyze_python(source, "test.py")
+        exec_findings = [f for f in findings if f.rule_id == "EXEC-002"]
+        assert len(exec_findings) >= 1
+        assert any("eval" in f.matched_text or "eval" in f.description for f in exec_findings)

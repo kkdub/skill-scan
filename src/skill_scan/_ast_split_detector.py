@@ -12,9 +12,11 @@ from skill_scan._ast_split_helpers import (
     _resolve_join_elements,
     _resolve_map_join,
     _resolve_percent_format,
+    _scoped_lookup,
 )
 from skill_scan._ast_split_resolve import (
     resolve_binop_chain,
+    resolve_bytes_constructor,
     resolve_call_return,
     resolve_fstring,
 )
@@ -34,6 +36,9 @@ _NAME_RULE: dict[str, tuple[str, Severity, str]] = {
 }
 
 
+_INTROSPECTION_FUNCS = frozenset({"vars", "globals", "locals"})
+
+
 def detect_split_evasion(
     tree: ast.Module,
     file_path: str,
@@ -47,6 +52,11 @@ def detect_split_evasion(
     scope_map = _build_scope_map(tree)
     for node in _nodes if _nodes is not None else ast.walk(tree):
         scope = scope_map.get(id(node), "")
+        # Check for dynamic dispatch via introspection subscripts
+        dd = _check_dynamic_dispatch(node, symbol_table, scope, file_path)
+        if dd is not None:
+            findings.append(dd)
+            continue
         resolved = _try_resolve_split(node, symbol_table, scope, alias_map)
         if resolved is None:
             continue
@@ -74,6 +84,60 @@ def _build_scope_map(tree: ast.Module) -> dict[int, str]:
     return result
 
 
+def _check_dynamic_dispatch(
+    node: ast.AST,
+    symbol_table: dict[str, str],
+    scope: str,
+    file_path: str,
+) -> Finding | None:
+    """Detect dynamic dispatch via introspection subscript chains.
+
+    Patterns: globals()['eval'], vars(obj)['eval'], obj.__dict__['eval'],
+    and two-level: globals()['__builtins__']['eval'].
+    """
+    if not isinstance(node, ast.Subscript):
+        return None
+    key = _extract_subscript_key(node.slice, symbol_table, scope)
+    if key is None:
+        return None
+    value = node.value
+    # Two-level chaining: outer[key1][key2] where outer is introspection
+    is_two_level = isinstance(value, ast.Subscript) and _is_introspection_base(value.value)
+    if not is_two_level and not _is_introspection_base(value):
+        return None
+    entry = _NAME_RULE.get(key)
+    if entry is None:
+        return None
+    rule_id, severity, desc_prefix = entry
+    label = "chained subscript" if is_two_level else "introspection subscript"
+    return _make_finding(
+        rule_id=rule_id,
+        severity=severity,
+        file=file_path,
+        line=getattr(node, "lineno", None),
+        matched_text=f"split evasion: dynamic dispatch via {label} to '{key}'",
+        description=f"{desc_prefix} -- {label} resolves to '{key}'",
+    )
+
+
+def _is_introspection_base(node: ast.AST) -> bool:
+    """Check if node is an introspection expression: globals(), locals(), vars(...), obj.__dict__."""
+    if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+        return node.func.id in _INTROSPECTION_FUNCS
+    if isinstance(node, ast.Attribute) and node.attr == "__dict__":
+        return True
+    return False
+
+
+def _extract_subscript_key(slice_node: ast.AST, symbol_table: dict[str, str], scope: str) -> str | None:
+    """Extract the subscript key as a string (constant or tracked variable)."""
+    if isinstance(slice_node, ast.Constant) and isinstance(slice_node.value, str):
+        return slice_node.value
+    if isinstance(slice_node, ast.Name):
+        return _scoped_lookup(slice_node.id, symbol_table, scope)
+    return None
+
+
 def _try_resolve_split(
     node: ast.AST,
     symbol_table: dict[str, str],
@@ -83,11 +147,11 @@ def _try_resolve_split(
     """Try to resolve a node to a string via BinOp(Add/Mod), f-string, join, or format."""
     if isinstance(node, ast.BinOp):
         if isinstance(node.op, ast.Add):
-            return resolve_binop_chain(node, symbol_table, scope)
+            return resolve_binop_chain(node, symbol_table, scope, alias_map=alias_map)
         if isinstance(node.op, ast.Mod):
             return _resolve_percent_format(node, symbol_table, scope)
     if isinstance(node, ast.JoinedStr):
-        return resolve_fstring(node, symbol_table, scope)
+        return resolve_fstring(node, symbol_table, scope, alias_map=alias_map)
     if isinstance(node, ast.Call):
         am = alias_map or {}
         result = _resolve_join_call(node, symbol_table, scope, am) or _resolve_format_call(
@@ -95,6 +159,10 @@ def _try_resolve_split(
         )
         if result is not None:
             return result
+        # Bytes-constructor patterns: bytearray(b'...').decode(), str(b'...',enc), codecs.decode(b'...',enc)
+        bytes_result = resolve_bytes_constructor(node, am)
+        if bytes_result is not None:
+            return bytes_result
         # Fallback: standalone call returning a dangerous name
         return resolve_call_return(node, symbol_table, scope)
     return None
@@ -106,7 +174,7 @@ def _resolve_join_call(
     scope: str,
     alias_map: dict[str, str] | None = None,
 ) -> str | None:
-    """Resolve ''.join(...) with list/tuple, generator, or map(chr/str) arguments."""
+    """Resolve ''.join(...) with list/tuple, generator, reversed, or map(chr/str) arguments."""
     if not _is_str_join_call(node):
         return None
     if not isinstance(node.func, ast.Attribute) or not isinstance(node.func.value, ast.Constant):
@@ -118,7 +186,55 @@ def _resolve_join_call(
     if isinstance(arg, ast.GeneratorExp):
         return _resolve_generator_join(arg, sep, symbol_table, scope)
     if isinstance(arg, ast.Call):
-        return _resolve_map_join(arg, sep, alias_map or {})
+        am = alias_map or {}
+        rev = _resolve_reversed_join(arg, sep, symbol_table, scope)
+        if rev is not None:
+            return rev
+        return _resolve_map_join(arg, sep, am)
+    return None
+
+
+def _resolve_reversed_join(
+    call: ast.Call,
+    sep: str,
+    symbol_table: dict[str, str],
+    scope: str,
+) -> str | None:
+    """Resolve reversed() inside join: ``''.join(reversed('lave'))`` -> 'eval'.
+
+    Gates to reversed() on:
+    - string literal arguments (reversed the characters)
+    - List/Tuple of tracked elements (reverse then join)
+    - tracked variable names resolving to strings
+    """
+    if not (isinstance(call.func, ast.Name) and call.func.id == "reversed"):
+        return None
+    if len(call.args) != 1 or call.keywords:
+        return None
+    chars = _resolve_reversed_inner(call.args[0], sep, symbol_table, scope)
+    if chars is None:
+        return None
+    return sep.join(reversed(chars))
+
+
+def _resolve_reversed_inner(
+    inner: ast.expr, sep: str, symbol_table: dict[str, str], scope: str
+) -> list[str] | None:
+    """Resolve the inner argument of reversed() to a list of characters/parts."""
+    # reversed('string_literal')
+    if isinstance(inner, ast.Constant) and isinstance(inner.value, str):
+        return list(inner.value)
+    # reversed(['a', 'b', 'c']) or reversed(('a', 'b', 'c'))
+    if isinstance(inner, ast.List | ast.Tuple):
+        result = _resolve_join_elements(inner.elts, sep, symbol_table, scope)
+        if result is None:
+            return None
+        return result.split(sep) if sep else list(result)
+    # reversed(tracked_variable) where variable is a string
+    if isinstance(inner, ast.Name):
+        val = _scoped_lookup(inner.id, symbol_table, scope)
+        if val is not None:
+            return list(val)
     return None
 
 
