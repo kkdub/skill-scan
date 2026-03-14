@@ -159,3 +159,53 @@ class TestAcceptanceScenarios:
         findings = analyze_python(source, "test.py")
         dangerous = [f for f in findings if f.rule_id in ("EXEC-002", "EXEC-006")]
         assert len(dangerous) == 0
+
+
+class TestCallReturnAcceptance:
+    """Plan-level acceptance scenarios for call-return resolution."""
+
+    def test_inline_call_return_concat_to_eval(self) -> None:
+        """Function return values used inline to build a dangerous name are detected."""
+        source = textwrap.dedent("""\
+            def get_prefix():
+                return "ev"
+            def get_suffix():
+                return "al"
+            result = get_prefix() + get_suffix()
+        """)
+        findings = analyze_python(source, "test.py")
+        exec_findings = [f for f in findings if f.rule_id == "EXEC-002"]
+        assert len(exec_findings) >= 1
+        assert any("eval" in f.description for f in exec_findings)
+
+    def test_class_method_self_call_to_popen(self) -> None:
+        """Class method return values used via self.method() are detected."""
+        source = textwrap.dedent("""\
+            class Exploit:
+                def prefix(self):
+                    return "po"
+                def suffix(self):
+                    return "pen"
+                def run(self):
+                    cmd = self.prefix() + self.suffix()
+        """)
+        findings = analyze_python(source, "test.py")
+        exec_findings = [f for f in findings if f.rule_id == "EXEC-002"]
+        assert len(exec_findings) >= 1
+        assert any("popen" in f.description for f in exec_findings)
+
+    def test_double_indirection_call_assign_then_concat(self) -> None:
+        """Double-indirection (call-site assignment then variable concatenation) is detected."""
+        source = textwrap.dedent("""\
+            def get_prefix():
+                return "ev"
+            def get_suffix():
+                return "al"
+            x = get_prefix()
+            y = get_suffix()
+            result = x + y
+        """)
+        findings = analyze_python(source, "test.py")
+        exec_findings = [f for f in findings if f.rule_id == "EXEC-002"]
+        assert len(exec_findings) >= 1
+        assert any("eval" in f.description for f in exec_findings)

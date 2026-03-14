@@ -10,6 +10,7 @@ from __future__ import annotations
 import ast
 
 from skill_scan._ast_helpers import try_resolve_string
+from skill_scan._ast_symbol_table_return_helpers import _sub_bodies
 
 
 def _walk_self_attrs(
@@ -46,19 +47,3 @@ def _check_self_assign(
     resolved = try_resolve_string(stmt.value)
     if resolved is not None:
         result[f"{class_name}.{target.attr}"] = resolved
-
-
-def _sub_bodies(stmt: ast.stmt) -> list[list[ast.stmt]]:
-    """Return sub-bodies of a statement for self-attr recursion."""
-    if isinstance(stmt, ast.If):
-        return [stmt.body, stmt.orelse]
-    if isinstance(stmt, ast.For | ast.While):
-        return [stmt.body, stmt.orelse]
-    if isinstance(stmt, ast.With):
-        return [stmt.body]
-    if isinstance(stmt, ast.Try):
-        subs: list[list[ast.stmt]] = [stmt.body, stmt.orelse, stmt.finalbody]
-        for handler in stmt.handlers:
-            subs.append(handler.body)
-        return subs
-    return []

@@ -5,19 +5,9 @@
 # Resolved by PLAN-020: FSTRING-CONV, GENERATOR-JOIN, STRING-MULT, PERCENT-OVERPROVISIONED, PERCENT-MIXED-SPECIFIERS, CONTAINERS (dict-only; list indices remain)
 # Resolved by PR-034 review: DEBT-020-RESUB-BACKSLASH (lambda replacement), DEBT-020-UNBOUNDED-MULT (_MAX_REPEAT=1000 cap)
 # Resolved by PLAN-021: DEBT-018-T2-LIST-INDEX, DEBT-018-T3-GLOBAL-NONLOCAL, DEBT-018-T3-CLASS-SCOPE
+# Resolved by PLAN-022: DEBT-018-T3-CROSS-FUNCTION (function return-value tracking + call resolution)
 
 # --- PLAN-018 Red-Team Debt (Tier 2-4) ---
-
-- id: DEBT-018-T3-CROSS-FUNCTION
-  description: "Cross-function dataflow (function returns used in caller) not tracked"
-  type: effectiveness
-  severity: medium
-  plan: PLAN-018
-  files:
-    - src/skill_scan/_ast_symbol_table.py
-  blocker: "Requires inter-procedural analysis — significant complexity increase."
-  resolution: "Track function return values and resolve call expressions that assign return values to variables."
-  evasions: 4
 
 - id: DEBT-018-T4-ADVANCED
   description: "Advanced evasion techniques: string slicing, reversal, lambda building, comprehension assembly, star-args, bytes concat/decode, attribute chains"
@@ -60,6 +50,16 @@
     - src/skill_scan/_ast_symbol_table.py:80-100
   blocker: "Multi-level nonlocal resolution requires a full scope chain; single-level covers the most common evasion pattern."
   resolution: "Implement scope chain tracking to propagate nonlocal writes through multiple nesting levels."
+
+- id: DEBT-022-CALL-RETURN-DESCRIPTION
+  description: "resolve_call_return findings use 'split variable evasion' description even for standalone call-return paths, which is misleading for analysts"
+  type: security
+  severity: low
+  plan: PLAN-022
+  files:
+    - src/skill_scan/_ast_split_detector.py:91-99
+  blocker: "Finding description templates in _check_dangerous are shared across all detection paths; separate wording requires refactoring the finding emission pipeline."
+  resolution: "Add a branch in _check_dangerous or _try_resolve_split that distinguishes call-return findings from concatenation-evasion findings, using 'call-return evasion building X' instead of 'split variable evasion building X'."
 
 - id: DEBT-MATCH-STMT
   description: "3-elif isinstance chain in _recurse_control_flow could use match statement (info-level lint)"
