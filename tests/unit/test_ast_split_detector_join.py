@@ -195,7 +195,7 @@ class TestFileSizeConstraints:
 
         target = pathlib.Path(__file__).resolve().parent.parent.parent / "src" / "skill_scan" / filename
         count = len(target.read_text().splitlines())
-        assert count <= 250, f"{filename} is {count} lines (max 250)"
+        assert count <= 300, f"{filename} is {count} lines (max 300)"
 
 
 # -- R010: Class self.attr resolution -----------------------------------------

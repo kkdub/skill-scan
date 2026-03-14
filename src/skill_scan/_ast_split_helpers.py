@@ -101,15 +101,60 @@ def _resolve_subscript_expr(
     symbol_table: dict[str, str],
     scope: str,
 ) -> str | None:
-    """Resolve ast.Subscript to string via composite key lookup."""
+    """Resolve ast.Subscript to string via composite key lookup or slice extraction."""
     if not isinstance(node.value, ast.Name):
         return None
+    # Handle ast.Slice nodes (e.g. s[2:6], s[2:], s[:4])
+    if isinstance(node.slice, ast.Slice):
+        return _resolve_slice_expr(node.value.id, node.slice, symbol_table, scope)
     if not isinstance(node.slice, ast.Constant):
         return None
     key = _resolve_subscript_key(node.slice.value)
     if key is None:
         return None
     return _scoped_lookup(f"{node.value.id}[{key}]", symbol_table, scope)
+
+
+def _extract_slice_int(node: ast.expr | None) -> tuple[bool, int | None]:
+    """Extract an integer from an optional slice bound.
+
+    Returns (ok, value) where ok is False if the bound is non-Constant or
+    non-int (reject the slice). When node is None the bound is open-ended.
+    """
+    if node is None:
+        return True, None
+    if isinstance(node, ast.Constant) and isinstance(node.value, int):
+        return True, node.value
+    return False, None
+
+
+def _resolve_slice_expr(
+    var_name: str,
+    slc: ast.Slice,
+    symbol_table: dict[str, str],
+    scope: str,
+) -> str | None:
+    """Resolve a string slice (e.g. s[2:6]) to the extracted substring.
+
+    Requirements:
+    - Variable must be tracked in the symbol table
+    - Start and stop (when present) must be integer Constants
+    - Step must be None or a positive-int Constant (negative step rejected)
+    """
+    ok_step, step = _extract_slice_int(slc.step)
+    if not ok_step or (step is not None and step <= 0):
+        return None
+    ok_lo, start = _extract_slice_int(slc.lower)
+    if not ok_lo:
+        return None
+    ok_hi, stop = _extract_slice_int(slc.upper)
+    if not ok_hi:
+        return None
+
+    full_str = _scoped_lookup(var_name, symbol_table, scope)
+    if full_str is None:
+        return None
+    return full_str[start:stop:step]
 
 
 def _substitute_format(template: str, args: list[str]) -> str | None:

@@ -1,0 +1,332 @@
+id: "PLAN-023"
+title: "Advanced evasion detection — Tier 1 (high-impact string resolution & dynamic dispatch)"
+type: implementation
+status: Approved
+created: 2026-03-13
+
+linked_spec: null
+
+description: |
+  First half of DEBT-018-T4-ADVANCED. Adds detection for 6 high-impact evasion
+  techniques not yet handled by the AST-based split-evasion detector:
+
+  1. Implicit string concatenation — 'ev' 'al' (verify existing behavior)
+  2. String slicing — 'xxevalxx'[2:6]
+  3. String reversal — ''.join(reversed('lave'))
+  4. chr(ord()) nesting — chr(ord('e')) + chr(ord('v')) + ...
+  5. Bytes/bytearray/str/codecs constructors — bytearray(b'eval').decode()
+  6. Dynamic dispatch — globals()['eval'], vars()['system'], __dict__['eval']
+
+  All techniques reconstruct dangerous names (eval, exec, system, popen,
+  __import__, getattr) and must emit EXEC-002 or EXEC-006 findings.
+
+  Remaining Tier 2 techniques (replace chains, lambda/reduce, operator module,
+  decorator position, comprehension assembly, star-args) deferred to PLAN-024.
+
+requirements:
+  file: REQUIREMENTS-023.yaml
+  ids:
+    - R001    # Implicit string concat detection
+    - R002    # String slicing detection
+    - R003    # reversed() join detection
+    - R004    # chr(ord()) nesting detection
+    - R005    # Bytes/bytearray/str/codecs constructor detection
+    - R006    # Dynamic dispatch via __dict__/vars()/globals()
+    - R007    # Implicit concat in symbol table (structural)
+    - R008    # ast.Slice distinct from index lookup (structural)
+    - R009    # Correct EXEC-002/EXEC-006 rule IDs
+    - R010    # Positive fixture files per technique
+    - R011    # Negative fixture files per technique
+    - R012    # 300-line-per-file limit
+    - R013    # Facade Re-export Pattern
+    - R014    # No new dependencies (stdlib only)
+    - R-IMP001  # No false positives from ordinary slicing
+    - R-IMP002  # reversed() scoped to literals/tracked names
+    - R-IMP003  # chr(ord()) guards non-constant arguments
+    - R-IMP004  # Bytes constructor guards non-literal bytes
+    - R-IMP005  # Dynamic dispatch checks key against _NAME_RULE
+    - R-IMP006  # New findings go through AST deduplication
+    - R-IMP007  # No module exceeds 300 lines
+    - R-IMP008  # Fixtures follow pos_/neg_ naming conventions
+    - R-EFF001  # 100% detection on new pos_ fixtures
+    - R-EFF002  # Zero false positives on new neg_ fixtures
+    - R-EFF003  # Multi-part adjacent literal concat detected
+    - R-EFF004  # All three bytes-constructor variants exercised
+    - R-EFF005  # Two-level subscript chaining detected
+    - R-EFF006  # chr(ord()+0) padding resistance
+    - R-EFF007  # Open-ended slice detected
+  uncovered: []
+
+utilities_audit:
+  status: complete
+  search_performed:
+    - query: "Line counts for all source and test files in scope"
+      found: "_ast_symbol_table.py 290/300 (CRITICAL), _ast_symbol_table_helpers.py 263/300, _ast_split_helpers.py 245/300, _ast_split_resolve.py 118/300, _ast_split_detector.py 168/300, test_ast_split_detector.py 327 (OVER LIMIT)"
+    - query: "Existing slice, reversed, chr/ord, bytes, __dict__/globals resolution"
+      found: "No existing handling for any of the 6 target patterns. _resolve_chr_call in _ast_helpers.py handles chr(int) but not wired to split resolver. _resolve_subscript_key handles int index only, not ast.Slice."
+  categories:
+    error_handling:
+      needed: true
+      exists: "src/skill_scan/_ast_detectors.py"
+      gaps: []
+      action: use
+      location: "src/skill_scan/_ast_detectors.py"
+    validation:
+      needed: true
+      exists: "src/skill_scan/_ast_split_helpers.py"
+      gaps: []
+      action: use
+      location: "src/skill_scan/_ast_split_helpers.py"
+    logging:
+      needed: false
+    types:
+      needed: true
+      exists: "src/skill_scan/_ast_split_detector.py"
+      gaps:
+        - "_NAME_RULE may need new entries if new dangerous names are targeted (unlikely)"
+      action: extend
+      location: "src/skill_scan/_ast_split_detector.py"
+    configuration:
+      needed: false
+    http_client:
+      needed: false
+  infrastructure_parts: []
+
+environment:
+  status: assessed
+  build:
+    tool: "pyproject.toml (hatchling)"
+    install_cmd: "make install"
+    check_cmd: "make check"
+    prerequisites:
+      - "Python 3.13"
+      - "uv"
+  runtime_services: []
+  changes:
+    new_dependencies: []
+    env_vars: []
+    schema_changes: []
+    ci_changes: []
+    build_changes: []
+
+parts:
+  - id: a
+    title: "Implicit concat verification and string slicing resolution"
+    status: Done
+    requirements_covered: [R001, R002, R007, R008, R010, R011, R012, R014, R-IMP001, R-IMP007, R-IMP008, R-EFF003, R-EFF007]
+    approach:
+      - step: "Verify implicit concat already detected; create positive and negative fixture files"
+        files:
+          - tests/fixtures/split_evasion/pos_implicit_concat.py
+          - tests/fixtures/split_evasion/neg_implicit_concat_safe.py
+        notes: "Python parser merges adjacent string literals into a single ast.Constant at parse time, so the symbol table already tracks the full string. Write a pos_ fixture that assigns fragments using implicit concat (e.g. cmd = 'ev' 'al') and passes it to a dangerous function. Write a neg_ fixture with safe implicit concat. No production code changes expected — this validates existing behavior (R001, R007, R-EFF003)."
+      - step: "Add ast.Slice resolution to _resolve_subscript_expr in _ast_split_helpers.py"
+        files:
+          - src/skill_scan/_ast_split_helpers.py
+        notes: "Extend _resolve_subscript_expr to handle ast.Slice nodes (not just ast.Constant index). When the subscript value is an ast.Name and the slice is an ast.Slice with Constant start/stop, look up the variable in the symbol table and apply Python slicing to extract the substring. Support open-ended slices where upper is None (R-EFF007). Guard against non-Constant bounds and negative step to prevent false positives (R-IMP001). The file is at 245/300 — the Slice branch should add ~20-25 lines, staying within limit."
+      - step: "Create slice evasion fixture files"
+        files:
+          - tests/fixtures/split_evasion/pos_slice_eval.py
+          - tests/fixtures/split_evasion/pos_slice_open_ended.py
+          - tests/fixtures/split_evasion/neg_slice_safe.py
+        notes: "pos_slice_eval.py: variable holds a padded string, slice extracts dangerous name (e.g. s = 'xxevalxx'; name = s[2:6]). pos_slice_open_ended.py: open-ended slice with no stop (R-EFF007). neg_slice_safe.py: ordinary slicing on non-dangerous strings."
+    criteria:
+      - "Implicit concat fixture pos_implicit_concat.py produces at least one EXEC-002 or EXEC-006 finding via analyze_python()"
+      - "neg_implicit_concat_safe.py produces zero split/encoded findings"
+      - "_resolve_subscript_expr in _ast_split_helpers.py handles ast.Slice nodes with Constant start/stop bounds"
+      - "Slice resolution returns None for non-Constant slice bounds and for slices on untracked variables (no false positives)"
+      - "pos_slice_eval.py and pos_slice_open_ended.py each produce at least one EXEC-002 finding"
+      - "neg_slice_safe.py produces zero split/encoded findings"
+      - "_ast_split_helpers.py does not exceed 300 lines"
+
+  - id: b
+    title: "reversed() join and chr(ord()) expression resolution"
+    status: Done
+    depends_on: [a]
+    verify_group: resolver-extensions
+    requirements_covered: [R003, R004, R009, R010, R011, R-IMP002, R-IMP003, R-IMP006, R-EFF001, R-EFF006]
+    approach:
+      - step: "Extend _resolve_join_call in _ast_split_detector.py to handle reversed() as join argument"
+        files:
+          - src/skill_scan/_ast_split_detector.py
+        notes: "In _resolve_join_call, when the join argument is an ast.Call with func name 'reversed' and the inner argument is a string constant or a List/Tuple of tracked elements, resolve the inner elements then reverse the result before joining. For reversed('lave'), resolve to 'eval'. For reversed(['l','a','v','e']), reverse the list then join. Gate to reversed() on string literals/tracked names only (R-IMP002). The file is at 168/300 with 132 lines remaining — adding ~15-20 lines for the reversed() branch fits."
+      - step: "Wire chr() and ord() resolution into resolve_expr in _ast_split_resolve.py"
+        files:
+          - src/skill_scan/_ast_split_resolve.py
+        notes: "Add a chr() resolution path in resolve_expr: when an ast.Call node has func name 'chr', resolve its argument as an integer. If the argument is an ord() call with a single-character string constant, return that character. If the argument is a BinOp like ord('e') + 0, resolve the arithmetic (R-EFF006). Reuse _resolve_chr_call pattern from _ast_helpers.py. Guard non-constant arguments by returning None (R-IMP003). File is at 118/300, ample room."
+      - step: "Create fixture files for reversed() and chr(ord()) techniques"
+        files:
+          - tests/fixtures/split_evasion/pos_reversed_join.py
+          - tests/fixtures/split_evasion/pos_chr_ord_eval.py
+          - tests/fixtures/split_evasion/pos_chr_ord_padded.py
+          - tests/fixtures/split_evasion/neg_reversed_safe.py
+          - tests/fixtures/split_evasion/neg_chr_ord_safe.py
+        notes: "pos_reversed_join.py: ''.join(reversed('lave')) builds 'eval'. pos_chr_ord_eval.py: chr(ord('e')) + chr(ord('v')) + ... builds 'eval'. pos_chr_ord_padded.py: chr(ord('e') + 0) padding resistance (R-EFF006). neg_reversed_safe.py: reversed on safe strings. neg_chr_ord_safe.py: chr(ord()) building non-dangerous strings."
+    criteria:
+      - "''.join(reversed('lave')) resolves correctly and produces EXEC-002 finding"
+      - "''.join(reversed([...])) with list of character literals resolves and produces finding"
+      - "reversed() resolution is limited to string constants and List/Tuple of tracked values"
+      - "chr(ord('x')) nested calls resolve to the correct character"
+      - "chr(ord('e') + 0) with arithmetic padding resolves correctly"
+      - "Non-constant arguments to chr() or ord() return None without error"
+      - "All positive fixtures produce at least one finding; all negative fixtures produce zero"
+
+  - id: c
+    title: "Bytes/bytearray/str/codecs constructor detection"
+    status: Done
+    depends_on: [a]
+    verify_group: resolver-extensions
+    requirements_covered: [R005, R010, R011, R013, R-IMP004, R-EFF004]
+    approach:
+      - step: "Add bytes-constructor resolution to _ast_split_resolve.py"
+        files:
+          - src/skill_scan/_ast_split_resolve.py
+        notes: "Add a new function (e.g. _resolve_bytes_constructor) that recognizes three patterns: (1) bytearray(b'...').decode() — ast.Call where func is Attribute 'decode' on Call to 'bytearray' with bytes literal arg, (2) str(b'...', 'utf-8') — ast.Call to 'str' with two args where first is bytes literal, (3) codecs.decode(b'...', 'utf-8') — ast.Call to 'codecs.decode' (needs alias_map). Gate on literal bytes arguments only (R-IMP004). File has 182 lines remaining."
+      - step: "Wire bytes-constructor resolver into the split detector dispatch"
+        files:
+          - src/skill_scan/_ast_split_detector.py
+        notes: "In _try_resolve_split, add a branch that attempts bytes-constructor resolution on ast.Call nodes before or after the existing call-return resolution. Thread alias_map for codecs.decode() support. Re-export from _ast_split_detector.py if needed (R013)."
+      - step: "Create fixture files exercising all three bytes-constructor variants"
+        files:
+          - tests/fixtures/split_evasion/pos_bytearray_decode.py
+          - tests/fixtures/split_evasion/pos_str_bytes_constructor.py
+          - tests/fixtures/split_evasion/pos_codecs_decode.py
+          - tests/fixtures/split_evasion/neg_bytes_constructor_safe.py
+        notes: "Three positive fixtures exercise each variant independently (R-EFF004). neg_bytes_constructor_safe.py uses bytes constructors with non-dangerous content."
+    criteria:
+      - "bytearray(b'eval').decode() resolves to 'eval' and triggers EXEC-002"
+      - "str(b'exec', 'utf-8') resolves to 'exec' and triggers EXEC-002"
+      - "codecs.decode(b'system', 'utf-8') resolves to 'system' and triggers EXEC-002 (with alias_map support)"
+      - "Non-literal bytes arguments return None without error"
+      - "All three positive fixtures produce at least one finding; negative fixture produces zero"
+      - "_ast_split_resolve.py does not exceed 300 lines"
+
+  - id: d
+    title: "Dynamic dispatch detection via introspection subscript chains"
+    status: Done
+    depends_on: [a]
+    requirements_covered: [R006, R009, R010, R011, R012, R-IMP005, R-IMP007, R-EFF002, R-EFF005]
+    approach:
+      - step: "Add dynamic dispatch detector to _ast_split_detector.py"
+        files:
+          - src/skill_scan/_ast_split_detector.py
+        notes: "Add a new detection path that recognizes ast.Subscript nodes where the value is: (1) ast.Attribute with attr '__dict__' (obj.__dict__['name']), (2) ast.Call to 'vars' (vars(obj)['name']), (3) ast.Call to 'globals' or 'locals' (globals()['name']). Extract the subscript key (string constant or tracked variable), check against _NAME_RULE for EXEC-002/EXEC-006 (R009, R-IMP005). For two-level chaining (globals()['__builtins__']['eval']), handle nested Subscript where the outer subscript key is dangerous (R-EFF005). File has 132 lines remaining — this should add ~30-40 lines."
+      - step: "Wire dynamic dispatch detection into the main walk loop in detect_split_evasion"
+        files:
+          - src/skill_scan/_ast_split_detector.py
+        notes: "Add an ast.Subscript branch in the main node walk that checks for introspection patterns before falling through to the existing _try_resolve_split logic. The detection is independent of string concatenation — it's a direct pattern match on the AST node structure."
+      - step: "Create fixture files for dynamic dispatch patterns"
+        files:
+          - tests/fixtures/split_evasion/pos_globals_subscript.py
+          - tests/fixtures/split_evasion/pos_vars_subscript.py
+          - tests/fixtures/split_evasion/pos_dict_attr_subscript.py
+          - tests/fixtures/split_evasion/pos_globals_two_level.py
+          - tests/fixtures/split_evasion/neg_dynamic_dispatch_safe.py
+        notes: "pos_globals_subscript.py: globals()['eval']('1+1'). pos_vars_subscript.py: vars(__builtins__)['eval']. pos_dict_attr_subscript.py: os.__dict__['system']('ls'). pos_globals_two_level.py: globals()['__builtins__']['eval'] (R-EFF005). neg_dynamic_dispatch_safe.py: globals()['safe_name'] with non-dangerous key."
+    criteria:
+      - "globals()['eval'] pattern detected and emits EXEC-002 finding"
+      - "vars(obj)['system'] pattern detected and emits EXEC-002 finding"
+      - "obj.__dict__['eval'] pattern detected and emits EXEC-002 finding"
+      - "Two-level chaining globals()['__builtins__']['eval'] detected"
+      - "Extracted key is checked against _NAME_RULE — non-dangerous keys produce no finding"
+      - "All four positive fixtures produce at least one finding; negative fixture produces zero"
+      - "_ast_split_detector.py does not exceed 300 lines after changes"
+
+acceptance_scenarios:
+  - scenario: "String slicing evasion detected through full analyze_python pipeline"
+    invoke: "analyze_python('s = \"xxeval\"\\nname = s[2:]\\neval(name)', 'test.py')"
+    expect: "At least one finding with rule_id EXEC-002 referencing eval"
+    test_file: tests/unit/test_evasion_corpus.py
+    status: passing
+
+  - scenario: "Bytes constructor evasion detected through full analyze_python pipeline"
+    invoke: "analyze_python('import codecs\\nname = codecs.decode(b\"eval\", \"utf-8\")', 'test.py')"
+    expect: "At least one finding with rule_id EXEC-002 referencing eval"
+    test_file: tests/unit/test_evasion_corpus.py
+    status: passing
+
+  - scenario: "Dynamic dispatch via globals subscript detected through full analyze_python pipeline"
+    invoke: "analyze_python('globals()[\"eval\"](\"1+1\")', 'test.py')"
+    expect: "At least one finding with rule_id EXEC-002 referencing eval"
+    test_file: tests/unit/test_evasion_corpus.py
+    status: passing
+
+allowed_files:
+  - "src/skill_scan/_ast_split_*.py"
+  - "src/skill_scan/_ast_symbol_table*.py"
+  - "src/skill_scan/ast_analyzer.py"
+  - "tests/unit/test_ast_*.py"
+  - "tests/unit/test_evasion_corpus.py"
+  - "tests/fixtures/split_evasion/*.py"
+
+forbidden:
+  - "config/production/**"
+  - ".env*"
+
+acceptance_criteria:
+  - "All requirements have status: done"
+  - "All parts have status: Done"
+  - "All tests pass"
+  - "All acceptance scenarios have status: passing"
+  - "make check passes clean"
+
+stop_condition: |
+  When all requirements are verified and all parts are complete.
+
+work_log:
+  - part: a
+    status: Done
+    summary: "Verified implicit concat detection (Python parser handles it); added ast.Slice resolution to _resolve_subscript_expr; 5 fixtures, 18 tests"
+  - part: b
+    status: Done
+    summary: "Added reversed() join resolution and chr()/ord() expression resolution; 5 fixtures, 37 tests"
+  - part: c
+    status: Done
+    summary: "Added bytes/bytearray/str/codecs constructor detection; 4 fixtures, 35 tests"
+  - part: d
+    status: Done
+    summary: "Added dynamic dispatch detection via globals/vars/__dict__ subscript chains; 5 fixtures, 30 unit + 3 acceptance tests"
+  - part: docs
+    status: Done
+    summary: "Updated CLAUDE.md (new functions in _ast_split_helpers.py, _ast_split_resolve.py, _ast_split_detector.py; updated evasion corpus count 46→65; updated detect_split_evasion capabilities), README.md (AST-based analysis bullet updated with new techniques)"
+
+evidence:
+  - "2703 tests passing, 1 xfailed, make check green"
+  - "All 4 parts verified on first try (0 fix iterations)"
+  - "File sizes: _ast_split_helpers.py 290/300, _ast_split_resolve.py 277/300, _ast_split_detector.py 284/300"
+  - "Documentation updated: CLAUDE.md and README.md reflect all new functions, detection capabilities, and evasion corpus count (54 pos, 11 neg)"
+
+handoff:
+  stopped_at: "documentation complete"
+  current_state: "All parts Done, documentation updated, plan ready for closure"
+  next_steps: ["Close plan if all gates have passed", "PLAN-024 is unlocked — Tier 2 evasion techniques (replace chains, lambda/reduce, operator module, decorator position, comprehension assembly, star-args)"]
+  blockers: []
+  scope:
+    files:
+      - src/skill_scan/_ast_split_helpers.py
+      - src/skill_scan/_ast_split_resolve.py
+      - src/skill_scan/_ast_split_detector.py
+    functions:
+      - "_resolve_slice_expr, _extract_slice_int"
+      - "_resolve_reversed_join, _resolve_reversed_inner"
+      - "_resolve_chr_call, _resolve_chr_arg, _resolve_int_arg, _resolve_ord_call, _resolve_int_binop"
+      - "resolve_bytes_constructor, _resolve_bytearray_decode, _resolve_str_bytes, _resolve_codecs_decode"
+      - "_check_dynamic_dispatch, _is_introspection_base, _extract_subscript_key"
+    components: ["split-evasion detector", "expression resolver"]
+  decisions:
+    - "Implicit concat (R001) is already handled by Python parser — fixture-only verification, no code changes"
+    - "Bytes constructors go in _ast_split_resolve.py (has room) rather than _ast_split_helpers.py (near limit)"
+    - "Dynamic dispatch is architecturally distinct — separate part (d), not grouped with resolver extensions"
+    - "Parts b and c share verify_group 'resolver-extensions' for deferred verification"
+    - "_ast_symbol_table.py (290/300) is NOT modified by this plan — implicit concat handled by parser"
+    - "Deferred imports of _scoped_lookup hoisted to module-level (no circular dependency risk)"
+  open_questions: []
+  cross_part_knowledge:
+    - "_ast_split_detector.py at 284/300 — near limit, future additions may need extraction"
+    - "_ast_split_resolve.py at 277/300 — near limit, bytes-constructor helpers are extraction candidates"
+    - "resolve_bytes_constructor lacks alias_map when called from resolve_expr — intentional constraint"
+  active_signals: []
+
+errors: []
+
+unlocks: ["PLAN-024"]

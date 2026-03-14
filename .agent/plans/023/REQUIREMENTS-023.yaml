@@ -1,0 +1,182 @@
+id: REQ-023
+title: "Advanced evasion detection — Tier 1 (high-impact string resolution & dynamic dispatch)"
+created: 2026-03-13
+backwards_compatibility: false
+
+requirements:
+  # --- Explicit (14) ---
+  - id: R001
+    description: "Detect implicit string concatenation used to build dangerous names"
+    category: functional
+    verify: "test::tests/unit/test_evasion_corpus.py"
+    acceptance: "analyze_python() flags code where adjacent string literals ('ev' 'al') form a dangerous name"
+
+  - id: R002
+    description: "Detect string slicing used to extract dangerous substrings"
+    category: functional
+    verify: "test::tests/unit/test_evasion_corpus.py"
+    acceptance: "analyze_python() flags code where slicing extracts a dangerous name (e.g. 'xxevalxx'[2:6])"
+
+  - id: R003
+    description: "Detect reversed() used to reconstruct dangerous names via join"
+    category: functional
+    verify: "test::tests/unit/test_evasion_corpus.py"
+    acceptance: "analyze_python() flags code where ''.join(reversed(...)) reconstructs a dangerous name"
+
+  - id: R004
+    description: "Detect chr(ord('x')) nesting used to reconstruct characters"
+    category: functional
+    verify: "test::tests/unit/test_evasion_corpus.py"
+    acceptance: "analyze_python() flags code where chr(ord('e')) + chr(ord('v'))... builds a dangerous name"
+
+  - id: R005
+    description: "Detect bytes/bytearray/str/codecs constructor patterns for string conversion"
+    category: functional
+    verify: "test::tests/unit/test_evasion_corpus.py"
+    acceptance: "analyze_python() flags bytearray(b'eval').decode(), str(b'eval','utf-8'), codecs.decode(b'eval','utf-8')"
+
+  - id: R006
+    description: "Detect dynamic attribute access via __dict__, vars(), globals() subscript chains"
+    category: functional
+    verify: "test::tests/unit/test_evasion_corpus.py"
+    acceptance: "analyze_python() flags globals()['eval'], vars(obj)['system'], obj.__dict__['eval']"
+
+  - id: R007
+    description: "Implicit concat handling must occur in the symbol table builder, not the split detector"
+    category: structural
+    verify: "grep::ast.Constant::src/skill_scan/_ast_symbol_table"
+    acceptance: "Python parser joins adjacent literals into ast.Constant; symbol table tracks these naturally"
+
+  - id: R008
+    description: "String slicing must resolve ast.Slice nodes, distinct from existing index-lookup handling"
+    category: structural
+    verify: "grep::ast.Slice::src/skill_scan"
+    acceptance: "ast.Slice handling in _resolve_subscript_expr is separate from integer-index handling"
+
+  - id: R009
+    description: "Findings must use EXEC-002 for eval/exec/system/popen and EXEC-006 for __import__/getattr"
+    category: functional
+    verify: "test::tests/unit/test_evasion_corpus.py"
+    acceptance: "All new findings use correct rule IDs consistent with _NAME_RULE lookup table"
+
+  - id: R010
+    description: "Each detection technique must have positive fixture files (pos_*.py)"
+    category: reliability
+    verify: "file::tests/fixtures/split_evasion/"
+    acceptance: "At least one pos_*.py fixture exists per technique added in this plan"
+
+  - id: R011
+    description: "Each detection technique must have at least one negative fixture file (neg_*.py)"
+    category: reliability
+    verify: "file::tests/fixtures/split_evasion/"
+    acceptance: "At least one neg_*.py fixture exists per technique added in this plan"
+
+  - id: R012
+    description: "300-line-per-file limit respected"
+    category: structural
+    verify: "grep::"
+    acceptance: "make check passes with no SIZE-001 violations on modified files"
+
+  - id: R013
+    description: "Facade Re-export Pattern followed where applicable"
+    category: structural
+    verify: "grep::re-export|__all__::src/skill_scan"
+    acceptance: "New public names re-exported through facade modules per existing pattern"
+
+  - id: R014
+    description: "No new dependencies — all detection uses stdlib only"
+    category: structural
+    verify: "file::pyproject.toml"
+    acceptance: "pyproject.toml dependencies unchanged; all new code uses ast, re, pathlib only"
+
+  # --- Implicit (8) ---
+  - id: R-IMP001
+    description: "No false positives from ordinary slice subscripts"
+    category: reliability
+    verify: "test::tests/fixtures/split_evasion/neg_slice_safe.py"
+    acceptance: "Slicing non-dangerous strings produces zero findings"
+
+  - id: R-IMP002
+    description: "reversed() scoped to string literals/tracked names only"
+    category: reliability
+    verify: "test::tests/fixtures/split_evasion/neg_reversed_safe.py"
+    acceptance: "reversed() on non-string or untracked values produces zero findings"
+
+  - id: R-IMP003
+    description: "chr(ord()) guards non-constant arguments"
+    category: reliability
+    verify: "test::tests/fixtures/split_evasion/neg_chr_ord_safe.py"
+    acceptance: "chr(ord(variable)) returns None without error"
+
+  - id: R-IMP004
+    description: "Bytes constructor guards non-literal byte arguments"
+    category: reliability
+    verify: "test::tests/fixtures/split_evasion/neg_bytes_constructor_safe.py"
+    acceptance: "bytearray(variable).decode() returns None without error"
+
+  - id: R-IMP005
+    description: "Dynamic dispatch checks extracted key against _NAME_RULE"
+    category: functional
+    verify: "grep::_NAME_RULE::src/skill_scan/_ast_split_detector.py"
+    acceptance: "Only keys matching _NAME_RULE entries produce findings"
+
+  - id: R-IMP006
+    description: "New findings go through AST deduplication"
+    category: reliability
+    verify: "null"
+    acceptance: "New findings flow through existing _check_dangerous and content_scanner dedup"
+
+  - id: R-IMP007
+    description: "No module exceeds 300 lines after changes"
+    category: structural
+    verify: "grep::"
+    acceptance: "make check passes — code-rules.json enforces SIZE-001"
+
+  - id: R-IMP008
+    description: "Fixtures follow pos_/neg_ naming and content conventions"
+    category: structural
+    verify: "file::tests/fixtures/split_evasion/"
+    acceptance: "All new fixtures use pos_/neg_ prefix and are standalone Python snippets"
+
+  # --- Effectiveness (7) ---
+  - id: R-EFF001
+    description: "100% detection rate across new pos_ fixtures"
+    category: effectiveness
+    verify: "corpus::tests/fixtures/split_evasion/::0"
+    acceptance: "Every new pos_*.py fixture produces at least one finding"
+
+  - id: R-EFF002
+    description: "Zero false positives on new neg_ fixtures"
+    category: effectiveness
+    verify: "corpus::tests/fixtures/split_evasion/::0"
+    acceptance: "Every new neg_*.py fixture produces zero findings"
+
+  - id: R-EFF003
+    description: "Multi-part adjacent literal concat detected"
+    category: effectiveness
+    verify: "test::tests/unit/test_evasion_corpus.py"
+    acceptance: "Three-part implicit concat ('ev' 'a' 'l') detected (auto-satisfied by Python parser)"
+
+  - id: R-EFF004
+    description: "All three bytes-constructor variants exercised independently"
+    category: effectiveness
+    verify: "test::tests/unit/test_evasion_corpus.py"
+    acceptance: "Separate fixtures for bytearray.decode(), str(bytes,enc), codecs.decode() all produce findings"
+
+  - id: R-EFF005
+    description: "Two-level subscript chaining detected"
+    category: effectiveness
+    verify: "test::tests/unit/test_evasion_corpus.py"
+    acceptance: "globals()['__builtins__']['eval'] produces a finding"
+
+  - id: R-EFF006
+    description: "chr(ord('e') + 0) padding resistance"
+    category: effectiveness
+    verify: "test::tests/unit/test_evasion_corpus.py"
+    acceptance: "chr(ord('e') + 0) resolves correctly and produces a finding"
+
+  - id: R-EFF007
+    description: "Open-ended slice ('xxeval'[2:]) detected"
+    category: effectiveness
+    verify: "test::tests/unit/test_evasion_corpus.py"
+    acceptance: "Slice with no stop index resolves correctly and produces a finding"
