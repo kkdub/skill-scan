@@ -73,23 +73,18 @@ def _resolve_expr_list(
 
 
 def _resolve_single_expr(expr: ast.expr, symbol_table: dict[str, str], scope: str) -> str | None:
-    """Resolve one expression node to a string value."""
-    if isinstance(expr, ast.Name):
-        return _scoped_lookup(expr.id, symbol_table, scope)
+    """Resolve one expression node to a string value.
+
+    Handles ast.Constant(str) directly; delegates Name, Attribute,
+    Subscript, and Call to resolve_expr() (deferred import to avoid
+    circular dependency since _ast_split_resolve imports from us).
+    """
     if isinstance(expr, ast.Constant) and isinstance(expr.value, str):
         return expr.value
-    if isinstance(expr, ast.Attribute) and isinstance(expr.value, ast.Name):
-        base, attr = expr.value.id, expr.attr
-        # Only resolve self/cls.attr or ClassName.attr (not arbitrary obj.attr)
-        key = f"{base}.{attr}"
-        if key in symbol_table:
-            return symbol_table[key]
-        if scope and base in ("self", "cls"):
-            return symbol_table.get(f"{scope}.{attr}")
-        return None
-    if isinstance(expr, ast.Subscript):
-        return _resolve_subscript_expr(expr, symbol_table, scope)
-    return None
+    # resolve_expr handles Name, Attribute, Subscript, and Call
+    from skill_scan._ast_split_resolve import resolve_expr
+
+    return resolve_expr(expr, symbol_table, scope)
 
 
 def _resolve_subscript_key(slice_val: object) -> str | None:

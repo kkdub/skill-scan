@@ -568,6 +568,26 @@ from skill_scan._ast_symbol_table import _Ref  # safe: facade already loaded
 
 > Trap: deferred imports incur a minor per-call cost; only use when the circular dependency cannot be resolved by restructuring (e.g. moving the shared type to a third module).
 
+## Parentheses-Suffix Composite Key for Return-Value Tracking
+
+Store function return values in the same flat symbol table as variable assignments, using a `'funcname()'` key. Parentheses cannot appear in Python identifiers, preventing collision with plain variable names and subscript keys.
+
+```python
+# build_symbol_table() -- storing a tracked return value
+ret_val = _collect_return_value(node.body, func_scope)
+if ret_val is not None:
+    result[f"{node.name}()"] = ret_val          # 'get_prefix()' -> 'ev'
+
+# resolve_call_return() -- looking it up at a call site
+if isinstance(func, ast.Name):
+    return symbol_table.get(f"{func.id}()")     # ast.Call('get_prefix') -> 'ev'
+
+# class method variant
+result[f"{cls_name}.{stmt.name}()"] = ret_val   # 'MyClass.method()' -> 'po'
+```
+
+> Trap: only converged returns are tracked — if any return path yields a different string (or cannot be statically resolved), `_collect_return_value()` returns `None` and the function is skipped. This is intentional: conservative tracking prevents false positives.
+
 ## Facade Re-export Pattern
 
 When splitting a large module into sibling files, keep the original file as a facade: it retains the orchestrator/entry-point functions and types, then re-exports all names from sibling files at the BOTTOM. This preserves every existing import path and mock.patch target.

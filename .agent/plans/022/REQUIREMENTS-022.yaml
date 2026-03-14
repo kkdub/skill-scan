@@ -1,0 +1,214 @@
+# REQUIREMENTS-022: Cross-Function Dataflow Tracking
+# Source: DEBT-018-T3-CROSS-FUNCTION resolution
+# Extracted: 2026-03-13
+
+backwards_compatibility: false
+
+requirements:
+  # --- Explicit ---
+  - id: R001
+    requirement: "build_symbol_table() tracks function return values when return statements resolve to string constants or chains of tracked variables."
+    category: functional
+    source: explicit
+    acceptance:
+      - "build_symbol_table(ast.parse(code)) includes 'funcname()' key for functions with string return values"
+    verify: "test::tests/unit/test_ast_symbol_table_returns.py"
+    status: done
+
+  - id: R002
+    requirement: "Functions with multiple return paths where all paths resolve to the same string are tracked; functions where paths diverge are not tracked (conservative)."
+    category: functional
+    source: explicit
+    acceptance:
+      - "Function with if/else returning same string -> tracked"
+      - "Function with if/else returning different strings -> NOT tracked"
+    verify: "test::tests/unit/test_ast_symbol_table_returns.py"
+    status: done
+
+  - id: R003
+    requirement: "Multi-return convergence accounts for all return path shapes (conditional returns, early returns, returns inside if/else/try)."
+    category: functional
+    source: explicit
+    acceptance:
+      - "Early return + final return with same value -> tracked"
+      - "Returns inside try/except with same value -> tracked"
+    verify: "test::tests/unit/test_ast_symbol_table_returns.py"
+    status: done
+
+  - id: R004
+    requirement: "x = my_func() call-site assignments resolve x to the function's tracked return value in the symbol table."
+    category: functional
+    source: explicit
+    acceptance:
+      - "After build_symbol_table, variable assigned from call has the return value"
+    verify: "test::tests/unit/test_ast_symbol_table_returns.py"
+    status: done
+
+  - id: R005
+    requirement: "Inline call expressions in split-building contexts (binop add, f-string, join, format) resolve via the return value table."
+    category: functional
+    source: explicit
+    acceptance:
+      - "get_a() + get_b() in split detector resolves to concatenated return values"
+      - "f'{get_a()}{get_b()}' resolves to interpolated return values"
+    verify: "test::tests/unit/test_ast_split_detector.py"
+    status: done
+
+  - id: R006
+    requirement: "Return tracking is scope-aware across module-level functions, class methods, and nested functions."
+    category: functional
+    source: explicit
+    acceptance:
+      - "Module function -> 'funcname()'"
+      - "Class method -> 'ClassName.method()'"
+      - "Nested function -> 'innerfunc()' (matches existing nested variable convention)"
+    verify: "test::tests/unit/test_ast_symbol_table_returns.py"
+    status: done
+
+  - id: R007
+    requirement: "Class method return values stored as 'ClassName.method()' in symbol table."
+    category: functional
+    source: explicit
+    acceptance:
+      - "build_symbol_table with class containing method returning string -> 'ClassName.method()' key present"
+    verify: "test::tests/unit/test_ast_symbol_table_returns.py"
+    status: done
+
+  - id: R008
+    requirement: "No backwards compatibility constraints -- existing interfaces may change freely."
+    category: constraint
+    source: explicit
+    acceptance:
+      - "N/A -- constraint on implementation freedom"
+    verify: null
+    status: done
+
+  - id: R009
+    requirement: "At least 4 positive evasion fixtures and at least 1 negative fixture for cross-function dataflow patterns."
+    category: functional
+    source: explicit
+    acceptance:
+      - "4 pos_call_return_*.py files exist in tests/fixtures/split_evasion/"
+      - "1 neg_call_return_*.py file exists in tests/fixtures/split_evasion/"
+    verify: "file::tests/fixtures/split_evasion"
+    status: done
+
+  # --- Implicit ---
+  - id: R-IMP001
+    requirement: "Return tracking is additive -- existing variable-assignment tracking unchanged."
+    category: reliability
+    source: implicit
+    acceptance:
+      - "All existing test_ast_symbol_table*.py tests pass without modification"
+    verify: "test::tests/unit/test_ast_symbol_table.py"
+    status: done
+
+  - id: R-IMP002
+    requirement: "Composite key format 'funcname()' prevents namespace collisions with variable keys."
+    category: structural
+    source: implicit
+    acceptance:
+      - "Parentheses suffix used consistently for all return-value keys"
+    verify: "grep::return.*composite.*key::src/skill_scan"
+    status: done
+
+  - id: R-IMP003
+    requirement: "Recursive or circular function calls do not cause infinite loops (bounded by MAX_RESOLVE_DEPTH)."
+    category: reliability
+    source: implicit
+    acceptance:
+      - "build_symbol_table on code with recursive function returns dict without hanging"
+    verify: "test::tests/unit/test_ast_symbol_table_returns.py"
+    status: done
+
+  - id: R-IMP004
+    requirement: "Inline call resolution returns None for unknown functions (graceful degradation)."
+    category: reliability
+    source: implicit
+    acceptance:
+      - "resolve_call_return for call to undefined function returns None"
+    verify: "test::tests/unit/test_ast_split_detector.py"
+    status: done
+
+  - id: R-IMP005
+    requirement: "All new and modified source files remain within the 300-line file size limit."
+    category: structural
+    source: implicit
+    acceptance:
+      - "wc -l on all modified files shows <= 300"
+    verify: "grep::^"
+    status: done
+
+  - id: R-IMP006
+    requirement: "Scanner core uses stdlib only -- no new dependencies added."
+    category: constraint
+    source: implicit
+    acceptance:
+      - "No new entries in pyproject.toml dependencies"
+    verify: "grep::^import|^from::src/skill_scan"
+    status: done
+
+  - id: R-IMP007
+    requirement: "Evasion fixtures follow pos_/neg_ naming convention in tests/fixtures/split_evasion/."
+    category: structural
+    source: implicit
+    acceptance:
+      - "New fixture filenames match pos_call_return_*.py and neg_call_return_*.py"
+    verify: "file::tests/fixtures/split_evasion"
+    status: done
+
+  - id: R-IMP008
+    requirement: "analyze_python() signature unchanged -- return values flow through existing symbol_table dict."
+    category: structural
+    source: implicit
+    acceptance:
+      - "analyze_python(content, file_path) signature has no new parameters"
+    verify: "grep::def analyze_python::src/skill_scan/ast_analyzer.py"
+    status: done
+
+  # --- Effectiveness ---
+  - id: R-EFF001
+    requirement: "4 positive fixtures each produce at least one EXEC-002 or EXEC-006 finding (100% positive-corpus detection rate)."
+    category: effectiveness
+    source: effectiveness
+    acceptance:
+      - "Each pos_call_return_*.py fixture triggers at least one finding"
+    verify: "corpus::tests/fixtures/split_evasion::0"
+    status: done
+
+  - id: R-EFF002
+    requirement: "Negative fixtures produce zero findings (zero false-positive rate on safe function calls)."
+    category: effectiveness
+    source: effectiveness
+    acceptance:
+      - "neg_call_return_safe.py triggers zero findings"
+    verify: "corpus::tests/fixtures/split_evasion::0"
+    status: done
+
+  - id: R-ADV001
+    requirement: "Double-indirection (function return assigned to variable, variable used in concatenation) is resolved to the dangerous string."
+    category: adversarial
+    source: effectiveness
+    acceptance:
+      - "x = get_prefix(); y = get_suffix(); x + y -> detected as dangerous name"
+    verify: "test::tests/unit/test_ast_split_detector.py"
+    status: done
+
+  - id: R-ADV002
+    requirement: "Class method return used inline (e.g., self.prefix() + self.suffix()) is detected."
+    category: adversarial
+    source: effectiveness
+    acceptance:
+      - "self.prefix() + self.suffix() building 'popen' -> EXEC-002 finding"
+    verify: "test::tests/unit/test_ast_split_detector.py"
+    status: done
+
+  - id: R-ADV003
+    requirement: "Functions with side effects or unpredictable returns are NOT collapsed (no false positives from unsafe collapsing)."
+    category: adversarial
+    source: effectiveness
+    acceptance:
+      - "Function with divergent return paths has no entry in return table"
+      - "No EXEC finding triggered for divergent-return function calls"
+    verify: "test::tests/unit/test_ast_split_detector.py"
+    status: done

@@ -13,7 +13,11 @@ from skill_scan._ast_split_helpers import (
     _resolve_map_join,
     _resolve_percent_format,
 )
-from skill_scan._ast_split_resolve import resolve_binop_chain, resolve_fstring
+from skill_scan._ast_split_resolve import (
+    resolve_binop_chain,
+    resolve_call_return,
+    resolve_fstring,
+)
 from skill_scan.decoder import decode_payload, extract_encoded_strings
 from skill_scan.models import Finding, Severity
 
@@ -86,9 +90,13 @@ def _try_resolve_split(
         return resolve_fstring(node, symbol_table, scope)
     if isinstance(node, ast.Call):
         am = alias_map or {}
-        return _resolve_join_call(node, symbol_table, scope, am) or _resolve_format_call(
+        result = _resolve_join_call(node, symbol_table, scope, am) or _resolve_format_call(
             node, symbol_table, scope
         )
+        if result is not None:
+            return result
+        # Fallback: standalone call returning a dangerous name
+        return resolve_call_return(node, symbol_table, scope)
     return None
 
 

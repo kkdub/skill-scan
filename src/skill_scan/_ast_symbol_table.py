@@ -4,6 +4,10 @@ Builds a symbol table from Python source AST by tracking simple string
 assignments at module-level and function-level scopes. Resolves variable
 indirection chains (y = x where x is tracked) bounded by MAX_RESOLVE_DEPTH.
 
+Also tracks function return values under composite keys with parentheses
+suffix (e.g. 'funcname()', 'ClassName.method()') when all return paths
+converge to the same string constant.
+
 Used by the split detector to reconstruct payloads assembled via variables.
 """
 
@@ -41,6 +45,7 @@ def build_symbol_table(tree: ast.Module) -> dict[str, str]:
     Non-string assignments (int, list, etc.) are silently skipped.
     """
     from skill_scan._ast_symbol_table_helpers import _collect_scope_declarations
+    from skill_scan._ast_symbol_table_return_helpers import _collect_return_value
 
     module_scope = _collect_assignments(tree.body)
     _resolve_indirections(module_scope)
@@ -53,6 +58,12 @@ def build_symbol_table(tree: ast.Module) -> dict[str, str]:
             func_scope = _collect_assignments(node.body)
             _resolve_indirections(func_scope, parent_scope=module_scope)
             global_names, _ = _collect_scope_declarations(node.body)
+            # Track return value BEFORE routing globals -- _route_globals
+            # pops global-declared names from func_scope, so return
+            # expressions referencing globals would fail to resolve after.
+            ret_val = _collect_return_value(node.body, func_scope)
+            if ret_val is not None:
+                result[f"{node.name}()"] = ret_val
             _route_globals(func_scope, global_names, result, module_scope)
             _process_nested(node.body, func_scope, result)
             for var_name, value in func_scope.items():
@@ -60,6 +71,9 @@ def build_symbol_table(tree: ast.Module) -> dict[str, str]:
                     result[f"{node.name}.{var_name}"] = value
         elif isinstance(node, ast.ClassDef):
             _process_class(node, module_scope, result)
+
+    # Post-pass: resolve call-site assignments (x = func() where func() is tracked)
+    _resolve_call_assignments(tree.body, result)
 
     return result
 
@@ -91,6 +105,7 @@ def _process_nested(
 ) -> None:
     """Handle nested functions -- route nonlocal writes to enclosing scope."""
     from skill_scan._ast_symbol_table_helpers import _collect_scope_declarations
+    from skill_scan._ast_symbol_table_return_helpers import _collect_return_value
 
     for node in body:
         if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
@@ -98,19 +113,39 @@ def _process_nested(
         inner_scope = _collect_assignments(node.body)
         _resolve_indirections(inner_scope, parent_scope=parent_scope)
         global_names, nonlocal_names = _collect_scope_declarations(node.body)
-        # Route global-declared writes to module scope
-        for name in global_names:
-            if name in inner_scope:
-                value = inner_scope.pop(name)
-                if isinstance(value, str):
-                    result[name] = value
-        for name in nonlocal_names:
-            if name in inner_scope:
-                value = inner_scope.pop(name)
-                parent_scope[name] = value
+        _route_nested_declarations(
+            inner_scope,
+            global_names,
+            nonlocal_names,
+            parent_scope,
+            result,
+        )
         for var_name, value in inner_scope.items():
             if isinstance(value, str):
                 result[f"{node.name}.{var_name}"] = value
+        # Track nested function return value under 'innerfunc()' composite key
+        ret_val = _collect_return_value(node.body, inner_scope)
+        if ret_val is not None:
+            result[f"{node.name}()"] = ret_val
+
+
+def _route_nested_declarations(
+    inner_scope: dict[str, str | _Ref],
+    global_names: set[str],
+    nonlocal_names: set[str],
+    parent_scope: dict[str, str | _Ref],
+    result: dict[str, str],
+) -> None:
+    """Route global/nonlocal writes from a nested function scope."""
+    for name in global_names:
+        if name in inner_scope:
+            value = inner_scope.pop(name)
+            if isinstance(value, str):
+                result[name] = value
+    for name in nonlocal_names:
+        if name in inner_scope:
+            value = inner_scope.pop(name)
+            parent_scope[name] = value
 
 
 def _process_class(
@@ -120,6 +155,7 @@ def _process_class(
 ) -> None:
     """Walk a ClassDef body: class-level assignments and self.attr in methods."""
     from skill_scan._ast_symbol_table_helpers import _handle_self_attr_assign
+    from skill_scan._ast_symbol_table_return_helpers import _collect_return_value
 
     cls_name = node.name
     # Class-level assignments (e.g. payload = 'eval')
@@ -129,14 +165,58 @@ def _process_class(
         if isinstance(value, str):
             result[f"{cls_name}.{var_name}"] = value
 
-    # Walk methods for self.attr = val pattern
+    # Walk methods for self.attr = val pattern + return value tracking
     for stmt in node.body:
         if not isinstance(stmt, ast.FunctionDef | ast.AsyncFunctionDef):
             continue
-        if not stmt.args.args:
+        if stmt.args.args:
+            self_name = stmt.args.args[0].arg
+            _handle_self_attr_assign(stmt.body, result, self_name, cls_name)
+        # Track method return value under 'ClassName.method()' composite key
+        method_scope = _collect_assignments(stmt.body)
+        _resolve_indirections(method_scope, parent_scope=module_scope)
+        ret_val = _collect_return_value(stmt.body, method_scope)
+        if ret_val is not None:
+            result[f"{cls_name}.{stmt.name}()"] = ret_val
+
+
+def _resolve_call_assignments(
+    body: list[ast.stmt],
+    result: dict[str, str],
+) -> None:
+    """Post-pass: resolve x = func() when 'func()' is a tracked return value.
+
+    Only handles simple module-level Name = Call patterns where the
+    call target is a known function with a tracked return value.
+    """
+    for stmt in body:
+        if not isinstance(stmt, ast.Assign):
             continue
-        self_name = stmt.args.args[0].arg
-        _handle_self_attr_assign(stmt.body, result, self_name, cls_name)
+        if len(stmt.targets) != 1:
+            continue
+        target = stmt.targets[0]
+        if not isinstance(target, ast.Name):
+            continue
+        if not isinstance(stmt.value, ast.Call):
+            continue
+        call = stmt.value
+        # Simple function call: func()
+        func_key = _get_call_key(call)
+        if func_key is not None and func_key in result:
+            result[target.id] = result[func_key]
+
+
+def _get_call_key(call: ast.Call) -> str | None:
+    """Map a Call node to the composite key used for tracked return values.
+
+    Returns 'funcname()' for simple calls, 'ClassName.method()' for
+    attribute calls. Returns None for unrecognised patterns.
+    """
+    if isinstance(call.func, ast.Name):
+        return f"{call.func.id}()"
+    if isinstance(call.func, ast.Attribute) and isinstance(call.func.value, ast.Name):
+        return f"{call.func.value.id}.{call.func.attr}()"
+    return None
 
 
 def _collect_assignments(
