@@ -170,7 +170,7 @@ requirements:
     source: implicit
     acceptance:
       - "build_symbol_table on deeply nested class/function structures returns dict without raising"
-    verify: "test::tests/unit/test_ast_symbol_table_edge.py"
+    verify: "test::tests/unit/test_ast_symbol_table_class.py"
     status: done
 
   - id: R-IMP004
@@ -184,7 +184,7 @@ requirements:
     status: done
 
   - id: R-IMP005
-    requirement: "All source files remain under 300 lines; all test files remain under 250 lines."
+    requirement: "All source and test files remain under 300 lines."
     category: reliability
     source: implicit
     acceptance:
