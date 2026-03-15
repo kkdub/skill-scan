@@ -31,27 +31,22 @@ _Resolver = Callable[..., str | None]
 
 
 def _is_binop_add(n: ast.AST) -> bool:
-    """Check if node is a BinOp with Add operator."""
     return isinstance(n, ast.BinOp) and isinstance(n.op, ast.Add)
 
 
 def _is_binop_mod(n: ast.AST) -> bool:
-    """Check if node is a BinOp with Mod operator."""
     return isinstance(n, ast.BinOp) and isinstance(n.op, ast.Mod)
 
 
 def _is_fstr(n: ast.AST) -> bool:
-    """Check if node is a JoinedStr (f-string)."""
     return isinstance(n, ast.JoinedStr)
 
 
 def _is_call(n: ast.AST) -> bool:
-    """Check if node is a Call expression."""
     return isinstance(n, ast.Call)
 
 
 def _is_replace(n: ast.AST) -> bool:
-    """Check if node is a .replace() method call."""
     func = getattr(n, "func", None)
     return _is_call(n) and isinstance(func, ast.Attribute) and func.attr == "replace"
 

@@ -78,14 +78,12 @@ class TestResolveReplaceChainDirect:
         result = _resolve(code)
         assert result is None
 
-    def test_keyword_arg_returns_none(self) -> None:
-        """Replace with keyword arguments not supported."""
-        # Python's str.replace doesn't accept kwargs, but the AST could have them
-        # from invalid or unusual code -- the resolver should bail out
-        code = "x = 'hello'.replace('h', 'j')"
-        # This one is valid, so it should work
+    def test_keyword_arg_replace_returns_none(self) -> None:
+        """Replace with keyword arguments returns None (resolver bails out)."""
+        # str.replace doesn't accept kwargs in CPython, but AST can parse them
+        code = "x = 'hello'.replace(old='h', new='j')"
         result = _resolve(code)
-        assert result == "jello"
+        assert result is None
 
     def test_non_call_base_returns_none(self) -> None:
         """Replace on a complex expression base returns None."""

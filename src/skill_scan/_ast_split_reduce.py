@@ -38,7 +38,16 @@ def _resolve_reduce_concat(
     iterable = node.args[1]
     if not _is_string_concat_combiner(combiner, am):
         return None
-    return _resolve_string_list(iterable)
+    result = _resolve_string_list(iterable)
+    if result is None:
+        return None
+    # Account for optional initializer (3rd argument)
+    if len(node.args) >= 3:
+        init = node.args[2]
+        if not (isinstance(init, ast.Constant) and isinstance(init.value, str)):
+            return None
+        result = init.value + result
+    return result
 
 
 def _is_string_concat_combiner(node: ast.expr, alias_map: dict[str, str]) -> bool:
@@ -53,6 +62,10 @@ def _is_string_concat_combiner(node: ast.expr, alias_map: dict[str, str]) -> boo
     if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name):
         canonical = alias_map.get(node.value.id, node.value.id)
         return canonical == "operator" and node.attr in ("add", "concat")
+    # from operator import add as plus; reduce(plus, [...])
+    if isinstance(node, ast.Name):
+        canonical = alias_map.get(node.id, node.id)
+        return canonical in ("operator.add", "operator.concat")
     return False
 
 

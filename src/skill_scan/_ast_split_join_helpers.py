@@ -136,10 +136,7 @@ def _resolve_reversed_inner(
         return list(inner.value)
     # reversed(['a', 'b', 'c']) or reversed(('a', 'b', 'c'))
     if isinstance(inner, ast.List | ast.Tuple):
-        result = _resolve_join_elements(inner.elts, sep, symbol_table, scope)
-        if result is None:
-            return None
-        return result.split(sep) if sep else list(result)
+        return _resolve_expr_list(inner.elts, symbol_table, scope)
     # reversed(tracked_variable) where variable is a string
     if isinstance(inner, ast.Name):
         val = _scoped_lookup(inner.id, symbol_table, scope)

@@ -50,8 +50,12 @@ class TestRegistryStructure:
     def test_resolvers_is_tuple(self) -> None:
         assert isinstance(_RESOLVERS, tuple)
 
-    def test_resolvers_has_five_entries(self) -> None:
-        assert len(_RESOLVERS) == 5
+    def test_resolvers_has_required_entries(self) -> None:
+        """Registry contains all required resolver entries (extensible)."""
+        preds = [p for p, _ in _RESOLVERS]
+        # All required predicates must be present
+        for required in (_is_binop_add, _is_binop_mod, _is_fstr, _is_replace, _is_call):
+            assert required in preds, f"Missing required predicate: {required.__name__}"
 
     def test_each_entry_is_predicate_resolver_pair(self) -> None:
         for pred, resolver in _RESOLVERS:

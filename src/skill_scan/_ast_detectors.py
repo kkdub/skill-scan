@@ -218,6 +218,20 @@ _DECORATOR_RULE: dict[str, tuple[str, Severity, str]] = {
     "getattr": ("EXEC-006", Severity.HIGH, "Decorator evasion"),
 }
 
+_DANGEROUS_BASES = frozenset({"builtins", "__builtins__"})
+
+
+def _resolve_decorator_name(decorator: ast.expr, am: dict[str, str]) -> str | None:
+    """Extract dangerous name from a decorator node, resolving aliases."""
+    if isinstance(decorator, ast.Name):
+        canonical = am.get(decorator.id, decorator.id)
+        return canonical.rsplit(".", 1)[-1] if "." in canonical else canonical
+    if isinstance(decorator, ast.Attribute) and isinstance(decorator.value, ast.Name):
+        base = am.get(decorator.value.id, decorator.value.id)
+        if base in _DANGEROUS_BASES:
+            return decorator.attr
+    return None
+
 
 def _detect_decorator_evasion(
     node: ast.AST, file_path: str, *, alias_map: dict[str, str] | None = None
@@ -226,14 +240,10 @@ def _detect_decorator_evasion(
     if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
         return []
 
+    am = alias_map or {}
     findings: list[Finding] = []
     for decorator in node.decorator_list:
-        name: str | None = None
-        if isinstance(decorator, ast.Name):
-            name = decorator.id
-        elif isinstance(decorator, ast.Attribute):
-            name = decorator.attr
-
+        name = _resolve_decorator_name(decorator, am)
         if name is not None and name in _DECORATOR_RULE:
             rule_id, severity, desc_prefix = _DECORATOR_RULE[name]
             findings.append(
