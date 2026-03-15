@@ -209,6 +209,71 @@ class TestSafeCases:
 
 
 # ---------------------------------------------------------------------------
+# Scope-aware detection
+# ---------------------------------------------------------------------------
+
+
+class TestScopeAwareDetection:
+    """Function-local dicts resolved via scope, not just module-level."""
+
+    def test_function_local_dict_detected(self) -> None:
+        code = """\
+        import subprocess
+        def run_cmd():
+            opts = {'shell': True}
+            subprocess.run(['ls'], **opts)
+        """
+        findings = _detect(code)
+        assert len(findings) == 1
+        assert findings[0].rule_id == "EXEC-002"
+
+    def test_shadowed_local_safe_no_false_positive(self) -> None:
+        """Module-level opts={'shell': True} should not trigger on a local safe opts."""
+        code = """\
+        import subprocess
+        opts = {'shell': True}
+        def run_cmd():
+            opts = {'shell': False}
+            subprocess.run(['ls'], **opts)
+        """
+        findings = _detect(code)
+        # Only module-level opts is dangerous -- local opts shadows it safely
+        kwargs_findings = [f for f in findings if "kwargs" in f.description.lower()]
+        assert len(kwargs_findings) == 0
+
+    def test_function_local_subscript_detected(self) -> None:
+        code = """\
+        import subprocess
+        def run_cmd():
+            opts = {}
+            opts['shell'] = True
+            subprocess.run(['ls'], **opts)
+        """
+        findings = _detect(code)
+        assert len(findings) == 1
+        assert findings[0].rule_id == "EXEC-002"
+
+
+# ---------------------------------------------------------------------------
+# Dict spread safety
+# ---------------------------------------------------------------------------
+
+
+class TestDictSpreadSafety:
+    """Dicts with **spread are treated as unresolvable (no false positives)."""
+
+    def test_spread_dict_not_detected(self) -> None:
+        code = "import subprocess; subprocess.run(['ls'], **{**base, 'shell': True})"
+        findings = _detect(code)
+        assert len(findings) == 0
+
+    def test_spread_overriding_shell_not_detected(self) -> None:
+        code = "import subprocess; subprocess.run(['ls'], **{'shell': True, **safe})"
+        findings = _detect(code)
+        assert len(findings) == 0
+
+
+# ---------------------------------------------------------------------------
 # R005: Finding attributes
 # ---------------------------------------------------------------------------
 

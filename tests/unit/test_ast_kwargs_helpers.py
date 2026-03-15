@@ -36,6 +36,16 @@ class TestExtractDictLiteral:
         result = _extract_dict_literal(node)
         assert result == {"b": "c"}
 
+    def test_spread_returns_none(self) -> None:
+        node = _PARSE("{**base, 'shell': True}").body[0].value  # type: ignore[attr-defined]
+        result = _extract_dict_literal(node)
+        assert result is None
+
+    def test_spread_after_constant_returns_none(self) -> None:
+        node = _PARSE("{'shell': True, **base}").body[0].value  # type: ignore[attr-defined]
+        result = _extract_dict_literal(node)
+        assert result is None
+
 
 class TestLookupSymbolTableDict:
     """_lookup_symbol_table_dict reconstructs dict from composite keys."""

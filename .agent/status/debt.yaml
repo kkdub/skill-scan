@@ -13,7 +13,7 @@
 # Resolved by PLAN-025: DEBT-024-KWARGS-UNPACKING (detect_kwargs_unpacking + _DANGEROUS_KWARGS table)
 
 - id: DEBT-025-DICT-UNION
-  description: "Detect dangerous kwargs via dict union operator — e.g. opts | {'shell': True} or opts |= {'shell': True} — not handled by _collect_dict_assigns pre-pass. Note: PEP 448 spread ({**base, 'shell': True}) IS detected via _extract_dict_literal inline key extraction."
+  description: "Detect dangerous kwargs via dict union operator — e.g. opts | {'shell': True} or opts |= {'shell': True} — not handled by _collect_dict_assigns pre-pass. PEP 448 spread dicts ({**base, 'shell': True}) are conservatively treated as unresolvable to prevent false positives from spread ordering."
   type: effectiveness
   severity: low
   plan: PLAN-025
