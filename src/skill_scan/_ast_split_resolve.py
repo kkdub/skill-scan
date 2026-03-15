@@ -54,6 +54,7 @@ def resolve_fstring(
     node: ast.JoinedStr,
     symbol_table: dict[str, str],
     scope: str,
+    *,
     alias_map: dict[str, str] | None = None,
 ) -> str | None:
     """Resolve an f-string where all interpolated values are tracked variables."""
@@ -159,9 +160,9 @@ def resolve_call(
     Registry-compatible wrapper that chains all Call sub-resolvers.
     """
     am = alias_map or {}
-    result = _resolve_join_call(node, symbol_table, scope, am) or _resolve_format_call(
-        node, symbol_table, scope
-    )
+    result = _resolve_join_call(node, symbol_table, scope, am)
+    if result is None:
+        result = _resolve_format_call(node, symbol_table, scope)
     if result is not None:
         return result
     bytes_result = resolve_bytes_constructor(node, am)

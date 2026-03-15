@@ -240,6 +240,17 @@ class TestReduceDetectorIntegration:
         exec_f = [f for f in findings if f.rule_id == "EXEC-002"]
         assert len(exec_f) >= 1
 
+    def test_from_functools_import_reduce_bare_form_produces_exec_002(self) -> None:
+        """Bare 'from functools import reduce' form is handled by full pipeline."""
+        source = textwrap.dedent("""\
+            from functools import reduce
+            _result = reduce(lambda a, b: a + b, ["ev", "al"])
+        """)
+        findings = _detect_with_aliases(source)
+        exec_f = [f for f in findings if f.rule_id == "EXEC-002"]
+        assert len(exec_f) >= 1
+        assert any("eval" in f.description for f in exec_f)
+
 
 class TestReduceModuleConstraints:
     """Verify file size constraints are maintained."""

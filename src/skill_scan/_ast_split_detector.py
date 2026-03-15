@@ -1,7 +1,4 @@
-"""AST split detector -- detect dangerous names assembled from split variables.
-Uses a registry of (predicate, resolver) pairs to dispatch node types.
-Dynamic dispatch via introspection subscripts is handled separately.
-"""
+"""AST split detector -- registry-based dispatch for dangerous-name reconstruction."""
 
 from __future__ import annotations
 
@@ -29,13 +26,28 @@ _NAME_RULE: dict[str, tuple[str, Severity, str]] = {
     **{n: ("EXEC-006", Severity.HIGH, "Dynamic import evasion") for n in _DYNAMIC_IMPORT_NAMES},
 }
 _INTROSPECTION_FUNCS = frozenset({"vars", "globals", "locals"})  # dynamic dispatch detection
-# -- Resolver registry: (predicate, resolver) pairs for _try_resolve_split --
 _Predicate = Callable[[ast.AST], bool]
 _Resolver = Callable[..., str | None]
-_is_binop_add: _Predicate = lambda n: isinstance(n, ast.BinOp) and isinstance(n.op, ast.Add)  # noqa: E731
-_is_binop_mod: _Predicate = lambda n: isinstance(n, ast.BinOp) and isinstance(n.op, ast.Mod)  # noqa: E731
-_is_fstr: _Predicate = lambda n: isinstance(n, ast.JoinedStr)  # noqa: E731
-_is_call: _Predicate = lambda n: isinstance(n, ast.Call)  # noqa: E731
+
+
+def _is_binop_add(n: ast.AST) -> bool:
+    """Check if node is a BinOp with Add operator."""
+    return isinstance(n, ast.BinOp) and isinstance(n.op, ast.Add)
+
+
+def _is_binop_mod(n: ast.AST) -> bool:
+    """Check if node is a BinOp with Mod operator."""
+    return isinstance(n, ast.BinOp) and isinstance(n.op, ast.Mod)
+
+
+def _is_fstr(n: ast.AST) -> bool:
+    """Check if node is a JoinedStr (f-string)."""
+    return isinstance(n, ast.JoinedStr)
+
+
+def _is_call(n: ast.AST) -> bool:
+    """Check if node is a Call expression."""
+    return isinstance(n, ast.Call)
 
 
 def _is_replace(n: ast.AST) -> bool:

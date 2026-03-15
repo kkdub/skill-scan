@@ -241,7 +241,7 @@ def _detect_decorator_evasion(
                     rule_id=rule_id,
                     severity=severity,
                     file=file_path,
-                    line=decorator.lineno,
+                    line=getattr(decorator, "lineno", None),
                     matched_text=f"@{name} decorator",
                     description=f"{desc_prefix} -- @{name} decorator detected via AST",
                 )
