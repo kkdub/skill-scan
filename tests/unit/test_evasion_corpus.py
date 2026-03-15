@@ -35,7 +35,7 @@ class TestCorpusPositive:
     def test_positive_detected(self, corpus_file: Path) -> None:
         source = corpus_file.read_text(encoding="utf-8")
         findings = analyze_python(source, str(corpus_file))
-        split_findings = [f for f in findings if "split" in f.matched_text or "encoded" in f.matched_text]
+        split_findings = [f for f in findings if f.rule_id in ("EXEC-002", "EXEC-006")]
         assert len(split_findings) >= 1, f"Expected detection in {corpus_file.name}, got {findings}"
 
     def test_detection_rate_above_90_percent(self) -> None:
@@ -46,7 +46,7 @@ class TestCorpusPositive:
         for corpus_file in _POSITIVE_FILES:
             source = corpus_file.read_text(encoding="utf-8")
             findings = analyze_python(source, str(corpus_file))
-            split_findings = [f for f in findings if "split" in f.matched_text or "encoded" in f.matched_text]
+            split_findings = [f for f in findings if f.rule_id in ("EXEC-002", "EXEC-006")]
             if split_findings:
                 detected += 1
         rate = detected / total
@@ -60,7 +60,7 @@ class TestCorpusNegative:
     def test_negative_no_false_positive(self, corpus_file: Path) -> None:
         source = corpus_file.read_text(encoding="utf-8")
         findings = analyze_python(source, str(corpus_file))
-        split_findings = [f for f in findings if "split" in f.matched_text or "encoded" in f.matched_text]
+        split_findings = [f for f in findings if f.rule_id in ("EXEC-002", "EXEC-006")]
         assert len(split_findings) == 0, f"False positive in {corpus_file.name}: {split_findings}"
 
     def test_minimum_negative_corpus_size(self) -> None:
@@ -77,8 +77,8 @@ class TestCorpusAdversarial:
         source_b = 'x = "al"\n'
         findings_a = analyze_python(source_a, "frag_a.py")
         findings_b = analyze_python(source_b, "frag_b.py")
-        split_a = [f for f in findings_a if "split" in f.matched_text]
-        split_b = [f for f in findings_b if "split" in f.matched_text]
+        split_a = [f for f in findings_a if f.rule_id in ("EXEC-002", "EXEC-006")]
+        split_b = [f for f in findings_b if f.rule_id in ("EXEC-002", "EXEC-006")]
         assert len(split_a) == 0, "Fragment 'ev' should not trigger"
         assert len(split_b) == 0, "Fragment 'al' should not trigger"
         # Combined triggers
@@ -88,7 +88,7 @@ class TestCorpusAdversarial:
             x = a + b
         """)
         findings = analyze_python(combined, "combined.py")
-        split_f = [f for f in findings if "split" in f.matched_text]
+        split_f = [f for f in findings if f.rule_id in ("EXEC-002", "EXEC-006")]
         assert len(split_f) >= 1, "Combined 'eval' should trigger"
 
 
@@ -103,7 +103,7 @@ class TestCorpusThreeVariable:
             x = a + b + c
         """)
         findings = analyze_python(source, "three_var.py")
-        split_f = [f for f in findings if "split" in f.matched_text]
+        split_f = [f for f in findings if f.rule_id in ("EXEC-002", "EXEC-006")]
         assert len(split_f) >= 1
         assert split_f[0].rule_id == "EXEC-002"
 
@@ -115,7 +115,7 @@ class TestCorpusThreeVariable:
             cmd = p1 + p2 + p3
         """)
         findings = analyze_python(source, "three_var.py")
-        split_f = [f for f in findings if "split" in f.matched_text]
+        split_f = [f for f in findings if f.rule_id in ("EXEC-002", "EXEC-006")]
         assert len(split_f) >= 1
         assert split_f[0].rule_id == "EXEC-002"
 

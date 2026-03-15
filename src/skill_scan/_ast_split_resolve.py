@@ -1,18 +1,17 @@
 """AST split resolver -- expression resolution helpers for the split detector.
 
-Resolves Name, Attribute, Subscript, Call, f-string, and BinOp(Add)
-expressions to string values via the symbol table. Used by
-_ast_split_detector to reconstruct payloads assembled from split variables.
+Resolves Name, Attribute, Subscript, Call, f-string, BinOp(Add), .replace()
+chain expressions to string values via the symbol table.
 """
 
 from __future__ import annotations
 
 import ast
 
+from skill_scan._ast_split_chr import _resolve_chr_call
 from skill_scan._ast_split_helpers import _resolve_subscript_expr, _scoped_lookup
 
 _MAX_BINOP_DEPTH = 50
-_MAX_INT_DEPTH = 50
 
 
 def resolve_binop_chain(
@@ -130,75 +129,6 @@ def resolve_expr(
     return _resolve_subscript_lookup(node, symbol_table, scope)
 
 
-def _resolve_chr_call(node: ast.Call) -> str | None:
-    """Resolve chr(N), chr(ord('x')), or chr(ord('x') + N) to a character.
-
-    Handles:
-    - chr(integer_literal): direct character lookup
-    - chr(ord('x')): nested ord() with single-character string
-    - chr(ord('x') + N): arithmetic on ord() result (padding resistance)
-
-    Returns None for non-constant arguments (R-IMP003).
-    """
-    if not (isinstance(node.func, ast.Name) and node.func.id == "chr"):
-        return None
-    if len(node.args) != 1 or node.keywords:
-        return None
-    return _resolve_chr_arg(node.args[0])
-
-
-def _resolve_chr_arg(arg: ast.expr) -> str | None:
-    """Resolve the argument to chr() as an integer, then convert to character."""
-    val = _resolve_int_arg(arg, _depth=0)
-    if val is not None and 0 <= val <= 0x10FFFF:
-        return chr(val)
-    return None
-
-
-def _resolve_int_arg(node: ast.expr, *, _depth: int = 0) -> int | None:
-    """Resolve an expression to an integer: literal, ord(), or BinOp arithmetic."""
-    if _depth > _MAX_INT_DEPTH:
-        return None
-    if isinstance(node, ast.Constant) and isinstance(node.value, int):
-        return node.value
-    # ord('x') -> integer
-    if isinstance(node, ast.Call):
-        return _resolve_ord_call(node)
-    # BinOp: e.g. ord('x') + 0, 100 + 1
-    if isinstance(node, ast.BinOp):
-        return _resolve_int_binop(node, _depth=_depth + 1)
-    return None
-
-
-def _resolve_ord_call(node: ast.Call) -> int | None:
-    """Resolve ord('x') to its integer value."""
-    if not (isinstance(node.func, ast.Name) and node.func.id == "ord"):
-        return None
-    if len(node.args) != 1 or node.keywords:
-        return None
-    arg = node.args[0]
-    if isinstance(arg, ast.Constant) and isinstance(arg.value, str) and len(arg.value) == 1:
-        return ord(arg.value)
-    return None
-
-
-def _resolve_int_binop(node: ast.BinOp, *, _depth: int = 0) -> int | None:
-    """Resolve integer BinOp (Add, Sub, Mult) on resolvable integer operands."""
-    if _depth > _MAX_INT_DEPTH:
-        return None
-    left = _resolve_int_arg(node.left, _depth=_depth + 1)
-    right = _resolve_int_arg(node.right, _depth=_depth + 1)
-    if left is None or right is None:
-        return None
-    if isinstance(node.op, ast.Add):
-        return left + right
-    if isinstance(node.op, ast.Sub):
-        return left - right
-    if isinstance(node.op, ast.Mult):
-        return left * right
-    return None
-
-
 def _resolve_subscript_lookup(node: ast.expr, symbol_table: dict[str, str], scope: str) -> str | None:
     """Resolve ast.Subscript (string key or int index) via composite key lookup."""
     if not isinstance(node, ast.Subscript):
@@ -206,7 +136,112 @@ def _resolve_subscript_lookup(node: ast.expr, symbol_table: dict[str, str], scop
     return _resolve_subscript_expr(node, symbol_table, scope)
 
 
+def resolve_percent_format(
+    node: ast.BinOp,
+    symbol_table: dict[str, str],
+    scope: str,
+    *,
+    alias_map: dict[str, str] | None = None,
+) -> str | None:
+    """Resolve BinOp(Mod) %-format expressions. Registry-compatible wrapper."""
+    return _resolve_percent_format(node, symbol_table, scope)
+
+
+def resolve_call(
+    node: ast.Call,
+    symbol_table: dict[str, str],
+    scope: str,
+    *,
+    alias_map: dict[str, str] | None = None,
+) -> str | None:
+    """Resolve Call nodes: join, format, bytes-constructor, reduce, or call-return.
+
+    Registry-compatible wrapper that chains all Call sub-resolvers.
+    """
+    am = alias_map or {}
+    result = _resolve_join_call(node, symbol_table, scope, am) or _resolve_format_call(
+        node, symbol_table, scope
+    )
+    if result is not None:
+        return result
+    bytes_result = resolve_bytes_constructor(node, am)
+    if bytes_result is not None:
+        return bytes_result
+    reduce_result = _resolve_reduce_concat(node, symbol_table, scope, alias_map=am)
+    if reduce_result is not None:
+        return reduce_result
+    return resolve_call_return(node, symbol_table, scope)
+
+
+def _is_replace_call(node: ast.expr) -> bool:
+    """Check if node is a .replace(old, new) call with two positional args."""
+    return (
+        isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Attribute)
+        and node.func.attr == "replace"
+        and len(node.args) == 2
+        and not node.keywords
+    )
+
+
+def _extract_replace_pair(call: ast.Call) -> tuple[str, str] | None:
+    """Extract (old, new) string pair from a .replace() call, or None."""
+    old_arg, new_arg = call.args
+    if (
+        isinstance(old_arg, ast.Constant)
+        and isinstance(old_arg.value, str)
+        and isinstance(new_arg, ast.Constant)
+        and isinstance(new_arg.value, str)
+    ):
+        return (old_arg.value, new_arg.value)
+    return None
+
+
+def _resolve_base_string(node: ast.expr, symbol_table: dict[str, str], scope: str) -> str | None:
+    """Resolve the base expression of a replace chain to a string."""
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return node.value
+    if isinstance(node, ast.Name):
+        return _scoped_lookup(node.id, symbol_table, scope)
+    return None
+
+
+def _resolve_replace_chain(
+    node: ast.Call,
+    symbol_table: dict[str, str],
+    scope: str,
+    *,
+    alias_map: dict[str, str] | None = None,
+) -> str | None:
+    """Resolve chained .replace(old, new) calls to a final string."""
+    replacements: list[tuple[str, str]] = []
+    cur: ast.expr = node
+    for _ in range(20):  # MAX_REPLACE_DEPTH
+        if not _is_replace_call(cur):
+            break
+        assert isinstance(cur, ast.Call)  # narrowing for mypy
+        pair = _extract_replace_pair(cur)
+        if pair is None:
+            return None
+        replacements.append(pair)
+        assert isinstance(cur.func, ast.Attribute)  # narrowed by _is_replace_call
+        cur = cur.func.value
+    if not replacements:
+        return None
+    base = _resolve_base_string(cur, symbol_table, scope)
+    if base is None:
+        return None
+    # Apply replacements left-to-right (first collected = innermost)
+    for old_val, new_val in reversed(replacements):
+        base = base.replace(old_val, new_val)
+    return base
+
+
 # re-export at BOTTOM -- Facade Re-export Pattern
-from skill_scan._ast_split_bytes import (  # noqa: E402
-    resolve_bytes_constructor as resolve_bytes_constructor,
+from skill_scan._ast_split_bytes import resolve_bytes_constructor as resolve_bytes_constructor  # noqa: E402
+from skill_scan._ast_split_helpers import (  # noqa: E402
+    _resolve_format_call as _resolve_format_call,
+    _resolve_percent_format as _resolve_percent_format,
 )
+from skill_scan._ast_split_join_helpers import _resolve_join_call as _resolve_join_call  # noqa: E402
+from skill_scan._ast_split_reduce import _resolve_reduce_concat as _resolve_reduce_concat  # noqa: E402

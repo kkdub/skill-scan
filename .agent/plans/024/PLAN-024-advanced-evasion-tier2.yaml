@@ -1,0 +1,534 @@
+id: "PLAN-024"
+title: "Advanced evasion detection — Tier 2 (functional & exotic patterns)"
+type: implementation
+status: Done
+created: 2026-03-14
+revised: 2026-03-14
+backwards_compatibility: true
+
+# Revision notes (Codex review remediation):
+# - Issue 1: R021, R022, R-IMP009 now mapped to parts
+# - Issue 2: C-a1 rewritten with falsifiable grep (_RESOLVERS definition + loop dispatch)
+# - Issue 3: Prohibited section clarified — _DETECTORS and detect_split_evasion are both valid paths
+# - Issue 4: Part d fixed to node-level signature (node, file_path, *, alias_map=...)
+# - Issue 5: Local _DECORATOR_RULE mandated in _ast_detectors.py (no _NAME_RULE import = no cycle)
+# - Issue 6: R017 dropped — symbol table can't track int lists; DEBT-024-TRACKED-COMPREHENSION
+# - Issue 7: Fixture isolation constraint added — each pos_ file must contain ONLY the technique
+# - Issue 8: Line-count guard (R002 ≤200) added to parts b, c, e
+# - Issue 9: wc -l replaced with Python one-liner (Windows/MSYS safe)
+# - Issue 10: Completion gate added (acceptance_criteria + stop_condition)
+# - Issue 11: Corpus filter update to rule_id matching in Part d approach
+# - Issue 12: Answered — corpus tests switch to rule_id filtering entirely
+# - Issue 13: Answered — R017 dropped, literal-only
+
+description: |
+  Second half of DEBT-018-T4-ADVANCED. Covers the lower-priority evasion
+  techniques deferred from Plan 023 (high-impact tier).
+
+  Techniques to implement:
+  1. String.replace() chains — 'xvxl'.replace('x', 'ea'[:1]).replace('x', 'ea'[1:])
+  2. functools.reduce(lambda a,b: a+b, [...]) concatenation
+  3. operator.add() / operator.concat() concatenation
+  4. Decorator position evasion — @eval, @exec, @builtins.eval
+  5. Comprehension assembly — ''.join([chr(c) for c in [101,118,97,108]])
+     (inline integer list literals only; tracked-variable variant deferred to debt)
+
+  Star-args/kwargs unpacking deferred to debt (DEBT-024-KWARGS-UNPACKING).
+  Tracked-variable comprehension deferred to debt (DEBT-024-TRACKED-COMPREHENSION).
+  Depends on Plan 023 completing first (shared infrastructure).
+
+depends_on: ["PLAN-023"]
+
+requirements_path: ".agent/plans/024/REQUIREMENTS-024.yaml"
+
+design_constraints:
+  module_structure: |
+    Brownfield — extending existing AST analysis pipeline. All new detection
+    logic goes in existing private modules or new private modules under
+    src/skill_scan/. Facade modules (ast_analyzer.py, _ast_split_detector.py)
+    re-export public names.
+  placement_rules: |
+    - New resolvers for registry pattern: _ast_split_resolve.py (88 lines remaining)
+    - Extracted resolvers from _ast_split_detector.py: _ast_split_join_helpers.py (222 lines remaining)
+    - Decorator detector: _ast_detectors.py (66 lines remaining)
+    - Comprehension chr() resolver: _ast_split_join_helpers.py
+    - Registry tuple and dispatch: _ast_split_detector.py (after extraction brings it under 200 lines)
+  prohibited: |
+    - DO NOT touch _ast_split_helpers.py (290/300 lines — no capacity)
+    - DO NOT touch _ast_symbol_table.py (290/300 lines — no capacity)
+    - No new external dependencies — stdlib only
+    - No new top-level finding emission paths — all findings enter analyze_python()
+      via either _DETECTORS (node-level, using _make_finding) or
+      detect_split_evasion() (tree-level, using _check_dangerous). Both are
+      existing pipelines. Decorator detector uses _make_finding within _DETECTORS
+      (same as _detect_unsafe_calls, _detect_dynamic_imports, etc.).
+    - DO NOT import _NAME_RULE from _ast_split_detector into _ast_detectors
+      (would create import cycle — _ast_split_detector already imports from
+      _ast_detectors). Define a local _DECORATOR_RULE dict instead.
+  key_decisions: |
+    - Registry pattern uses a _RESOLVERS tuple of (predicate, resolver) pairs,
+      modeled after the existing _DETECTORS tuple in ast_analyzer.py
+    - All resolvers share signature: (node, symbol_table, scope, *, alias_map=None) -> str | None
+    - Decorator detector is a node-level detector added to _DETECTORS (not a resolver)
+      with signature: (node, file_path, *, alias_map=None) -> list[Finding]
+    - Comprehension/reduce/operator resolvers are split-level resolvers added to _RESOLVERS
+    - alias_map threading already handled by build_alias_map() — functools/operator
+      aliases resolved automatically
+    - Each pos_*.py fixture must contain ONLY the evasion technique under test —
+      no other patterns that trigger existing detectors (prevents false-green criteria)
+  testing_strategy: |
+    - Positive and negative fixture files in tests/fixtures/split_evasion/
+    - Unit tests in tests/unit/test_evasion_corpus.py (extend existing corpus test)
+    - Corpus test filter updated from text-matching to rule_id matching:
+      f.rule_id in ('EXEC-002', 'EXEC-006') replaces "split"/"encoded" text check
+    - All 2703+ existing tests must continue passing
+
+utilities_audit:
+  - category: "String resolution"
+    needed: "Resolve .replace() chains, reduce() concat, operator.add()"
+    exists: "resolve_operand(), resolve_binop_chain(), resolve_expr() in _ast_split_resolve.py"
+    gaps: "No .replace() chain resolver; no reduce/operator resolvers"
+    action: "Add _resolve_replace_chain(), _resolve_reduce_concat() to _ast_split_resolve.py"
+    location: "src/skill_scan/_ast_split_resolve.py"
+
+  - category: "Decorator detection"
+    needed: "Detect @eval, @exec, @builtins.eval as decorators"
+    exists: "_DETECTORS tuple, _make_finding() in _ast_detectors.py"
+    gaps: "No decorator-specific detector function; no local dangerous-decorator mapping"
+    action: "Add _DECORATOR_RULE dict and _detect_decorator_evasion() to _ast_detectors.py; register in _DETECTORS"
+    location: "src/skill_scan/_ast_detectors.py"
+
+  - category: "Comprehension assembly"
+    needed: "Resolve ''.join([chr(c) for c in [...]]) with inline integer list literals"
+    exists: "_resolve_generator_join() in _ast_split_join_helpers.py (identity generators only)"
+    gaps: "No chr() mapping in comprehension resolution; no ListComp handling"
+    action: "Extend _resolve_generator_join() or add _resolve_comprehension_chr()"
+    location: "src/skill_scan/_ast_split_join_helpers.py"
+
+  - category: "Registry pattern"
+    needed: "Replace isinstance dispatcher in _try_resolve_split() with tuple of resolvers"
+    exists: "_DETECTORS tuple pattern in ast_analyzer.py (proven model)"
+    gaps: "_try_resolve_split() uses isinstance chain (4 branches: BinOp, JoinedStr, Call, default)"
+    action: "Extract resolver functions, build _RESOLVERS tuple, replace dispatcher"
+    location: "src/skill_scan/_ast_split_detector.py"
+
+  - category: "Alias resolution"
+    needed: "Resolve functools/operator aliases in reduce/operator detection"
+    exists: "build_alias_map() already captures all import aliases"
+    gaps: "None — alias_map threading already in place"
+    action: "Use existing alias_map parameter in new resolvers"
+    location: "src/skill_scan/_ast_helpers.py"
+
+  - category: "Corpus test infrastructure"
+    needed: "Test new detection techniques via fixture corpus"
+    exists: "test_evasion_corpus.py with pos_/neg_ fixture scanning"
+    gaps: "Filter uses text matching ('split'/'encoded' in matched_text) — won't catch decorator or comprehension findings"
+    action: "Update filter to rule_id-based: f.rule_id in ('EXEC-002', 'EXEC-006')"
+    location: "tests/unit/test_evasion_corpus.py"
+
+environment:
+  runtime: "Python 3.13, stdlib only"
+  toolchain: "uv, pytest, ruff, mypy, bandit"
+  dependencies: "No new dependencies"
+  ci: "make check (pre-commit hooks: ruff, mypy, pytest, bandit)"
+
+change_surface:
+  - path: "src/skill_scan/_ast_split_detector.py"
+    exports: ["detect_split_evasion"]
+    imported_by: ["ast_analyzer.py"]
+    risk: "HIGH — 284/300 lines, must shrink to <=200 in Part a and stay there"
+  - path: "src/skill_scan/_ast_split_resolve.py"
+    exports: ["resolve_binop_chain", "resolve_operand", "resolve_fstring", "resolve_expr", "resolve_call_return", "resolve_bytes_constructor"]
+    imported_by: ["_ast_split_detector.py"]
+    risk: "MEDIUM — 212/300, receives new resolvers and extracted code"
+  - path: "src/skill_scan/_ast_split_join_helpers.py"
+    exports: ["_resolve_generator_join", "_resolve_map_join"]
+    imported_by: ["_ast_split_helpers.py"]
+    risk: "LOW — 78/300, receives extracted code and comprehension resolver"
+  - path: "src/skill_scan/_ast_detectors.py"
+    exports: ["_detect_* functions", "_make_finding", "_DECORATOR_RULE"]
+    imported_by: ["ast_analyzer.py"]
+    risk: "LOW — 234/300, receives decorator detector (~30 lines)"
+  - path: "src/skill_scan/ast_analyzer.py"
+    exports: ["analyze_python", "_DETECTORS"]
+    imported_by: ["content_scanner.py"]
+    risk: "LOW — 107/300, adds detector to _DETECTORS tuple"
+  - path: "tests/unit/test_evasion_corpus.py"
+    risk: "LOW — filter update + new fixture assertions"
+  - path: "tests/fixtures/split_evasion/"
+    risk: "LOW — new fixture files only"
+
+parts:
+  - id: a
+    title: "Registry refactoring — extract resolvers and build _RESOLVERS tuple"
+    status: Done
+    requirements: [R001, R002, R003, R004, R020, R021, R022, R-IMP001, R-IMP002, R-IMP003]
+    depends_on: []
+    allowed_files:
+      - "src/skill_scan/_ast_split_detector.py"
+      - "src/skill_scan/_ast_split_resolve.py"
+      - "src/skill_scan/_ast_split_join_helpers.py"
+      - "tests/**"
+    approach:
+      - step: 1
+        action: "Catalog the 4 isinstance dispatch branches in _try_resolve_split(): BinOp(Add), BinOp(Mod), JoinedStr, Call (join/format/bytes/call-return)"
+      - step: 2
+        action: "Extract each branch into a standalone resolver function with signature (node, symbol_table, scope, *, alias_map=None) -> str | None. Place in _ast_split_resolve.py (88 lines remaining) or _ast_split_join_helpers.py (222 lines remaining) based on capacity. BinOp(Add) already exists as resolve_binop_chain — wrap with predicate only."
+      - step: 3
+        action: "Build _RESOLVERS tuple of (predicate_func, resolver_func) pairs in _ast_split_detector.py. Predicates are short lambdas or functions checking isinstance."
+      - step: 4
+        action: "Replace _try_resolve_split() isinstance chain with: for pred, resolver in _RESOLVERS: if pred(node): result = resolver(...); if result is not None: return result; return None"
+      - step: 5
+        action: "Update re-exports in _ast_split_detector.py facade if any public names moved. Ensure Facade Re-export Pattern followed (R022)."
+      - step: 6
+        action: "Verify _ast_split_detector.py is at or below 200 lines using: python -c \"print(len(open('src/skill_scan/_ast_split_detector.py').readlines()))\""
+      - step: 7
+        action: "Run full test suite — all 2703+ tests must pass unchanged. No new dependencies introduced (R021)."
+    criteria:
+      - id: C-a1
+        description: "_RESOLVERS tuple is defined in _ast_split_detector.py"
+        verify: "grep::_RESOLVERS\\s*=::src/skill_scan/_ast_split_detector.py"
+        expect: "at least one match"
+      - id: C-a2
+        description: "_try_resolve_split() dispatches via for-loop over _RESOLVERS"
+        verify: "grep::for.*_RESOLVERS::src/skill_scan/_ast_split_detector.py"
+        expect: "at least one match"
+      - id: C-a3
+        description: "_ast_split_detector.py is at or below 200 lines"
+        verify: "bash::python -c \"print(len(open('src/skill_scan/_ast_split_detector.py').readlines()))\""
+        expect: "<= 200"
+      - id: C-a4
+        description: "All existing tests pass"
+        verify: "test::tests/"
+        expect: "pytest exit 0, no fewer passing than baseline"
+      - id: C-a5
+        description: "All resolvers share common signature"
+        verify: "grep::def _resolve.*node.*symbol_table.*scope.*alias_map::src/skill_scan/_ast_split_resolve.py src/skill_scan/_ast_split_join_helpers.py"
+        expect: "all resolver functions match pattern"
+    verify_group: "resolvers"
+
+  - id: b
+    title: "String.replace() chain detection"
+    status: Done
+    requirements: [R005, R006, R007, R008, R018, R019, R-IMP004, R-IMP009, R-EFF001, R-EFF002, R-EFF003]
+    depends_on: [a]
+    allowed_files:
+      - "src/skill_scan/_ast_split_resolve.py"
+      - "src/skill_scan/_ast_split_detector.py"
+      - "tests/fixtures/split_evasion/pos_replace_chain*.py"
+      - "tests/fixtures/split_evasion/neg_replace_chain*.py"
+      - "tests/unit/test_evasion_corpus.py"
+      - "tests/**"
+    approach:
+      - step: 1
+        action: "Create pos_replace_chain.py fixture with 2-step and 3+ step .replace() chain building a dangerous name. Fixture must contain ONLY .replace() chain evasion — no other detectable patterns. Use safe variable names. Include a tracked-variable base variant."
+      - step: 2
+        action: "Create neg_replace_chain_safe.py fixture with .replace() chains that produce non-dangerous strings (e.g. 'hello'.replace('h', 'j'))."
+      - step: 3
+        action: "Implement _resolve_replace_chain() in _ast_split_resolve.py — walk the chain of .replace(old, new) calls, resolve base string (literal or symbol table lookup), apply each replacement left-to-right, return final string. Untracked base returns None."
+      - step: 4
+        action: "Register _resolve_replace_chain in _RESOLVERS tuple in _ast_split_detector.py with predicate checking for ast.Call with func.attr == 'replace'."
+      - step: 5
+        action: "Verify _ast_split_detector.py remains at or below 200 lines after registration."
+      - step: 6
+        action: "Run tests to confirm pos_ fixtures produce findings and neg_ fixtures produce zero."
+    criteria:
+      - id: C-b1
+        description: "pos_replace_chain.py fixture detected with EXEC-002 or EXEC-006"
+        verify: "test::tests/"
+        expect: "at least one finding with rule_id EXEC-002 or EXEC-006"
+      - id: C-b2
+        description: "neg_replace_chain_safe.py produces zero EXEC-002/EXEC-006 findings"
+        verify: "test::tests/"
+        expect: "zero findings"
+      - id: C-b3
+        description: "3+ chained .replace() calls produce a finding"
+        verify: "test::tests/"
+        expect: "fixture with 3+ replaces detected"
+      - id: C-b4
+        description: "Replace chain starting from tracked variable resolves correctly"
+        verify: "test::tests/"
+        expect: "variable-base replace chain produces finding"
+      - id: C-b5
+        description: "_ast_split_detector.py remains at or below 200 lines"
+        verify: "bash::python -c \"print(len(open('src/skill_scan/_ast_split_detector.py').readlines()))\""
+        expect: "<= 200"
+    verify_group: "resolvers"
+
+  - id: c
+    title: "functools.reduce() and operator.add/concat detection"
+    status: Done
+    requirements: [R009, R010, R011, R018, R019, R-IMP008, R-IMP009, R-EFF001, R-EFF002, R-EFF004]
+    depends_on: [a]
+    allowed_files:
+      - "src/skill_scan/_ast_split_resolve.py"
+      - "src/skill_scan/_ast_split_detector.py"
+      - "tests/fixtures/split_evasion/pos_reduce_concat*.py"
+      - "tests/fixtures/split_evasion/pos_operator_add*.py"
+      - "tests/fixtures/split_evasion/neg_reduce_safe*.py"
+      - "tests/fixtures/split_evasion/neg_operator_safe*.py"
+      - "tests/unit/test_evasion_corpus.py"
+      - "tests/**"
+    approach:
+      - step: 1
+        action: "Create pos_reduce_concat.py fixture with functools.reduce(lambda a,b: a+b, ['ev','al']) and aliased variant (import functools as ft). Fixture must contain ONLY reduce/operator evasion — no other detectable patterns."
+      - step: 2
+        action: "Create pos_operator_add.py fixture with reduce(operator.add, [...]) and operator.concat variant."
+      - step: 3
+        action: "Create neg_reduce_safe.py and neg_operator_safe.py with non-dangerous reduce/operator usage (e.g. reduce summing integers, operator.add on non-dangerous strings)."
+      - step: 4
+        action: "Implement _resolve_reduce_concat() in _ast_split_resolve.py — detect functools.reduce() calls with lambda a,b: a+b or operator.add/concat as first arg, resolve list literal string elements, concatenate. Use alias_map to resolve functools/operator aliases."
+      - step: 5
+        action: "Register in _RESOLVERS with predicate checking for ast.Call to reduce/functools.reduce (resolved via alias_map)."
+      - step: 6
+        action: "Verify _ast_split_detector.py remains at or below 200 lines after registration."
+      - step: 7
+        action: "Run tests to confirm detection with correct rule IDs."
+    criteria:
+      - id: C-c1
+        description: "pos_reduce_concat.py produces EXEC-002 or EXEC-006"
+        verify: "test::tests/"
+        expect: "at least one finding with rule_id EXEC-002 or EXEC-006"
+      - id: C-c2
+        description: "pos_operator_add.py produces EXEC-002 or EXEC-006"
+        verify: "test::tests/"
+        expect: "at least one finding with rule_id EXEC-002 or EXEC-006"
+      - id: C-c3
+        description: "Aliased functools (import functools as ft) detected"
+        verify: "test::tests/"
+        expect: "aliased variant produces finding"
+      - id: C-c4
+        description: "neg_reduce_safe.py and neg_operator_safe.py produce zero EXEC-002/EXEC-006 findings"
+        verify: "test::tests/"
+        expect: "zero findings"
+      - id: C-c5
+        description: "_ast_split_detector.py remains at or below 200 lines"
+        verify: "bash::python -c \"print(len(open('src/skill_scan/_ast_split_detector.py').readlines()))\""
+        expect: "<= 200"
+    verify_group: "resolvers"
+
+  - id: d
+    title: "Decorator position evasion detection"
+    status: Done
+    requirements: [R012, R013, R014, R018, R019, R023, R-IMP006, R-IMP007, R-IMP009, R-EFF001, R-EFF002, R-EFF005]
+    depends_on: []
+    allowed_files:
+      - "src/skill_scan/_ast_detectors.py"
+      - "src/skill_scan/ast_analyzer.py"
+      - "tests/fixtures/split_evasion/pos_decorator_eval*.py"
+      - "tests/fixtures/split_evasion/neg_decorator_safe*.py"
+      - "tests/unit/test_evasion_corpus.py"
+      - "tests/**"
+    approach:
+      - step: 1
+        action: "Create pos_decorator_eval.py fixture with @eval, @exec decorators on function defs, and @builtins.eval (attribute-form) on a class def. Fixture must contain ONLY decorator evasion — no string concat, no other detectable patterns. Use plain function bodies like 'pass'."
+      - step: 2
+        action: "Create neg_decorator_safe.py with @staticmethod, @property, @custom_decorator, @functools.wraps — common safe decorators that must not trigger."
+      - step: 3
+        action: "Define _DECORATOR_RULE dict in _ast_detectors.py — maps dangerous decorator names to (rule_id, Severity, description) tuples. Same name set as _NAME_RULE but defined locally to avoid import cycle: {'eval': ('EXEC-002', CRITICAL, 'Decorator evasion'), 'exec': ..., 'system': ..., 'popen': ..., '__import__': ('EXEC-006', HIGH, ...), 'getattr': ('EXEC-006', HIGH, ...)}."
+      - step: 4
+        action: "Implement _detect_decorator_evasion(node: ast.AST, file_path: str, *, alias_map: dict[str, str] | None = None) -> list[Finding] as a NODE-LEVEL detector. Check isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)), then iterate node.decorator_list. For ast.Name decorators, check id against _DECORATOR_RULE keys. For ast.Attribute decorators, check attr against _DECORATOR_RULE keys."
+      - step: 5
+        action: "Register _detect_decorator_evasion in _DETECTORS tuple in ast_analyzer.py."
+      - step: 6
+        action: "Update corpus test filter in test_evasion_corpus.py: replace text-matching filter ('split' in f.matched_text or 'encoded' in f.matched_text) with rule_id filter (f.rule_id in ('EXEC-002', 'EXEC-006')). Apply to TestCorpusPositive, TestCorpusNegative, and TestCorpusAdversarial classes."
+      - step: 7
+        action: "Run tests to confirm findings with correct rule IDs. Verify all existing pos_/neg_ corpus tests still pass with the new filter."
+    criteria:
+      - id: C-d1
+        description: "pos_decorator_eval.py produces EXEC-002 finding"
+        verify: "test::tests/"
+        expect: "at least one finding with rule_id EXEC-002"
+      - id: C-d2
+        description: "@builtins.eval decorator produces a finding"
+        verify: "test::tests/"
+        expect: "attribute-form decorator detected with EXEC-002"
+      - id: C-d3
+        description: "neg_decorator_safe.py produces zero EXEC-002/EXEC-006 findings"
+        verify: "test::tests/"
+        expect: "zero findings"
+      - id: C-d4
+        description: "_detect_decorator_evasion registered in _DETECTORS"
+        verify: "grep::_detect_decorator::src/skill_scan/ast_analyzer.py"
+        expect: "at least one match"
+      - id: C-d5
+        description: "_DECORATOR_RULE defined locally in _ast_detectors.py (no import from _ast_split_detector)"
+        verify: "grep::_DECORATOR_RULE::src/skill_scan/_ast_detectors.py"
+        expect: "at least one match"
+      - id: C-d6
+        description: "Corpus test filter uses rule_id matching"
+        verify: "grep::rule_id.*EXEC::tests/unit/test_evasion_corpus.py"
+        expect: "at least one match; no 'split' in f.matched_text filter remaining"
+      - id: C-d7
+        description: "All existing corpus tests still pass with new filter"
+        verify: "test::tests/unit/test_evasion_corpus.py"
+        expect: "pytest exit 0"
+
+  - id: e
+    title: "Comprehension assembly via join with chr() mapping over inline int list"
+    status: Done
+    requirements: [R015, R016, R018, R019, R-IMP005, R-IMP009, R-EFF001, R-EFF002, R-EFF006]
+    depends_on: [a]
+    allowed_files:
+      - "src/skill_scan/_ast_split_join_helpers.py"
+      - "src/skill_scan/_ast_split_resolve.py"
+      - "src/skill_scan/_ast_split_detector.py"
+      - "tests/fixtures/split_evasion/pos_comprehension_chr*.py"
+      - "tests/fixtures/split_evasion/neg_comprehension_safe*.py"
+      - "tests/unit/test_evasion_corpus.py"
+      - "tests/**"
+    approach:
+      - step: 1
+        action: "Create pos_comprehension_chr.py with both ListComp and GeneratorExp variants: ''.join([chr(c) for c in [101,118,97,108]]) and ''.join(chr(c) for c in [101,118,97,108]). Fixture must contain ONLY comprehension chr() evasion — no other detectable patterns."
+      - step: 2
+        action: "Create neg_comprehension_safe.py with chr() comprehension producing non-dangerous string (e.g. [104,101,108,108,111] = 'hello')."
+      - step: 3
+        action: "Extend _resolve_generator_join() in _ast_split_join_helpers.py to detect chr(x) call in the element expression (elt for GeneratorExp, elt for ListComp). When chr() detected, resolve the iterable — must be an inline ast.List of ast.Constant integers. Map each integer through chr(), join with separator."
+      - step: 4
+        action: "Handle ListComp by adding isinstance check for ast.ListComp alongside ast.GeneratorExp in the join argument dispatch in _resolve_join_call() or _ast_split_join_helpers.py."
+      - step: 5
+        action: "Verify _ast_split_detector.py remains at or below 200 lines."
+      - step: 6
+        action: "Run tests to confirm all variants detected with correct rule IDs."
+    criteria:
+      - id: C-e1
+        description: "pos_comprehension_chr.py produces EXEC-002"
+        verify: "test::tests/"
+        expect: "at least one finding with rule_id EXEC-002"
+      - id: C-e2
+        description: "ListComp and GeneratorExp variants both produce findings"
+        verify: "test::tests/"
+        expect: "both variants detected"
+      - id: C-e3
+        description: "neg_comprehension_safe.py produces zero EXEC-002/EXEC-006 findings"
+        verify: "test::tests/"
+        expect: "zero findings"
+      - id: C-e4
+        description: "Integer list [101,118,97,108] resolves to 'eval' via chr()"
+        verify: "test::tests/"
+        expect: "correct string resolution"
+      - id: C-e5
+        description: "_ast_split_detector.py remains at or below 200 lines"
+        verify: "bash::python -c \"print(len(open('src/skill_scan/_ast_split_detector.py').readlines()))\""
+        expect: "<= 200"
+    verify_group: "resolvers"
+
+acceptance_scenarios:
+  - id: AS-1
+    title: "Registry refactoring preserves all existing detection"
+    description: "After Part a, the registry pattern replaces the isinstance chain. All 2703+ existing tests pass with identical results. _ast_split_detector.py is at or below 200 lines. _RESOLVERS tuple defined and used for dispatch."
+    parts: [a]
+    verification: "pytest exit 0; line count <= 200; _RESOLVERS defined and used in for-loop"
+
+  - id: AS-2
+    title: "New resolver techniques detect evasion patterns"
+    description: "Parts b, c, e add replace-chain, reduce/operator, and comprehension resolvers. Each technique has pos/neg fixtures containing ONLY that technique. All positive fixtures produce EXEC-002/EXEC-006 findings; all negative fixtures produce zero findings."
+    parts: [b, c, e]
+    verification: "Corpus test passes with rule_id filter; all new pos_ fixtures produce >=1 finding; all new neg_ fixtures produce 0 findings"
+
+  - id: AS-3
+    title: "Decorator evasion detected via _DETECTORS pipeline"
+    description: "Part d adds decorator detection through the existing _DETECTORS pipeline (node-level, using _make_finding). @eval, @exec, @builtins.eval all produce EXEC-002 findings. Safe decorators produce zero findings. Corpus test filter updated to rule_id matching — all existing tests still pass."
+    parts: [d]
+    verification: "Corpus test passes; pos_decorator_eval.py produces EXEC-002; neg_decorator_safe.py produces zero; no import cycle between _ast_detectors and _ast_split_detector"
+
+acceptance_criteria:
+  - "All requirements have status: done"
+  - "All parts have status: Done"
+  - "All tests pass (make check green)"
+  - "_ast_split_detector.py <= 200 lines (final state)"
+  - "All source files <= 300 lines (SIZE-001)"
+  - "No import cycles between _ast_detectors.py and _ast_split_detector.py"
+  - "Corpus test filter uses rule_id matching (no text-matching filter)"
+
+stop_condition: |
+  All 5 parts complete. All 37 requirements verified. make check passes.
+  _ast_split_detector.py <= 200 lines. No import cycles. Corpus tests
+  use rule_id filtering. Ready for end-of-plan gates.
+
+coverage_report:
+  covered:
+    - "R001-R016, R018-R023: 22 explicit requirements covered by parts a-e"
+    - "R-IMP001-R-IMP009: All 9 implicit requirements covered"
+    - "R-EFF001-R-EFF006: All 6 effectiveness requirements covered"
+  total_requirements: 37
+  covered_count: 37
+  uncovered: []
+  dropped:
+    - id: R017
+      reason: "Symbol table is dict[str, str] — cannot track integer lists. Deferred to DEBT-024-TRACKED-COMPREHENSION."
+
+handoff:
+  stopped_at: "All 5 parts complete. Documentation updated. Status set to Done."
+  next_steps:
+    - "DEBT-024-KWARGS-UNPACKING: Research and plan star-args/kwargs unpacking evasion detection"
+    - "DEBT-024-TRACKED-COMPREHENSION: Extend symbol table to support non-string values (integer lists) for comprehension-over-tracked-variable detection"
+    - "DEBT-022-CALL-RETURN-DESCRIPTION: Improve finding descriptions for call-return patterns (low priority)"
+  blockers: []
+  decisions:
+    - "_RESOLVERS tuple placed in _ast_split_detector.py (registry pattern mirrors _DETECTORS in ast_analyzer.py)"
+    - "_DECORATOR_RULE defined locally in _ast_detectors.py to avoid import cycle with _ast_split_detector.py"
+    - "Chr/ord helpers extracted to _ast_split_chr.py and bytes helpers to _ast_split_bytes.py for SIZE-001 compliance"
+    - "_resolve_reduce_concat placed in new _ast_split_reduce.py and re-exported via _ast_split_resolve.py"
+    - "Corpus test filter changed from text-matching to rule_id matching (f.rule_id in ('EXEC-002', 'EXEC-006'))"
+  debt_resolution: |
+    This plan partially resolves DEBT-018-T4-ADVANCED (13 evasions).
+    Remaining techniques tracked as:
+    - DEBT-024-KWARGS-UNPACKING: star-args/kwargs unpacking detection
+    - DEBT-024-TRACKED-COMPREHENSION: comprehension over tracked variable
+      (codes = [101,...]; ''.join(chr(c) for c in codes)) — requires symbol
+      table extension to support non-string value types
+  documentation: |
+    CLAUDE.md and CODE-PATTERNS.md updated (2026-03-14).
+  follow_up: |
+    - DEBT-024-KWARGS-UNPACKING: Research and plan kwargs unpacking detection
+    - DEBT-024-TRACKED-COMPREHENSION: Extend symbol table for non-string types
+    - DEBT-022-CALL-RETURN-DESCRIPTION: Finding description improvement (low priority)
+    - Consider consolidating _ast_split_*.py modules if line counts allow
+
+work_log:
+  - date: 2026-03-14
+    type: implement
+    note: "Part a — Registry refactoring: extracted _RESOLVERS tuple and for-loop dispatch into _ast_split_detector.py; refactored _try_resolve_split() to iterate registry; _ast_split_detector.py reduced to 187 lines"
+    part: a
+  - date: 2026-03-14
+    type: implement
+    note: "Part a — Extracted chr/ord helpers to _ast_split_chr.py (new); extracted bytes helpers to _ast_split_bytes.py (new); added resolve_call() and resolve_percent_format() as registry-compatible wrappers in _ast_split_resolve.py"
+    part: a
+  - date: 2026-03-14
+    type: implement
+    note: "Part b — Added _resolve_replace_chain() in _ast_split_resolve.py; registered with _is_replace predicate before _is_call in _RESOLVERS; fixtures: pos_replace_chain.py, neg_replace_chain_safe.py"
+    part: b
+  - date: 2026-03-14
+    type: implement
+    note: "Part c — Added _resolve_reduce_concat() in new _ast_split_reduce.py (re-exported via _ast_split_resolve.py); detects functools.reduce(lambda a,b: a+b, [...]) and functools.reduce(operator.add/concat, [...]); fixtures: pos_reduce_concat.py, pos_operator_add.py, neg_reduce_safe.py, neg_operator_safe.py"
+    part: c
+  - date: 2026-03-14
+    type: implement
+    note: "Part d — Added _DECORATOR_RULE dict and _detect_decorator_evasion() in _ast_detectors.py; registered in _DETECTORS tuple in ast_analyzer.py; re-exported from ast_analyzer.py; updated corpus test filter from text-matching to rule_id matching; fixtures: pos_decorator_eval.py, neg_decorator_safe.py"
+    part: d
+  - date: 2026-03-14
+    type: implement
+    note: "Part e — Extended _ast_split_join_helpers.py with _resolve_comprehension_join() (handles both GeneratorExp and ListComp) and _resolve_comprehension_chr() for inline integer list; added ListComp dispatch in _resolve_join_call(); fixtures: pos_comprehension_chr.py, neg_comprehension_safe.py"
+    part: e
+  - date: 2026-03-14
+    type: docs
+    note: "Documentation update: CLAUDE.md updated with new modules (_ast_split_bytes.py, _ast_split_chr.py, _ast_split_reduce.py), _RESOLVERS pattern, decorator evasion, resolve_call/resolve_percent_format wrappers, updated fixture counts (60 pos, 16 neg), corpus test filter change, debt items; CODE-PATTERNS.md updated with _RESOLVERS Tuple Registry pattern in Section 2"
+    part: docs
+
+evidence:
+  - type: manual_verification
+    command: "glob tests/fixtures/split_evasion/pos_*.py"
+    result: "60 positive fixtures confirmed"
+  - type: manual_verification
+    command: "glob tests/fixtures/split_evasion/neg_*.py"
+    result: "16 negative fixtures confirmed"
+  - type: manual_verification
+    command: "grep _RESOLVERS src/skill_scan/_ast_split_detector.py"
+    result: "_RESOLVERS tuple defined and used in for-loop dispatch in _try_resolve_split()"
+  - type: manual_verification
+    command: "grep _detect_decorator_evasion src/skill_scan/ast_analyzer.py"
+    result: "registered in _DETECTORS tuple and re-exported"
+  - type: manual_verification
+    command: "read src/skill_scan/_ast_split_detector.py"
+    result: "187 lines — under 200-line target"

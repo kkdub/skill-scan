@@ -588,6 +588,30 @@ result[f"{cls_name}.{stmt.name}()"] = ret_val   # 'MyClass.method()' -> 'po'
 
 > Trap: only converged returns are tracked — if any return path yields a different string (or cannot be statically resolved), `_collect_return_value()` returns `None` and the function is skipped. This is intentional: conservative tracking prevents false positives.
 
+## _RESOLVERS Tuple Registry for Node Dispatch
+
+Use a `_RESOLVERS` tuple of `(predicate, resolver)` pairs to dispatch AST nodes to the right string-resolution function, modeled after the `_DETECTORS` tuple pattern. `_try_resolve_split()` iterates the tuple and returns the first non-`None` result. New resolver functions are added by appending to the tuple — no modification of the dispatch loop.
+
+```python
+_RESOLVERS: tuple[tuple[_Predicate, _Resolver], ...] = (
+    (_is_binop_add, resolve_binop_chain),
+    (_is_binop_mod, resolve_percent_format),
+    (_is_fstr, resolve_fstring),
+    (_is_replace, _resolve_replace_chain),
+    (_is_call, resolve_call),
+)
+
+def _try_resolve_split(node, symbol_table, scope, alias_map=None):
+    for pred, resolver in _RESOLVERS:
+        if pred(node):
+            result = resolver(node, symbol_table, scope, alias_map=alias_map)
+            if result is not None:
+                return result
+    return None
+```
+
+> Trap: predicates are ordered from most-specific to least-specific (e.g. `_is_replace` before `_is_call`). A more-general predicate placed first will shadow the specific resolver because `_is_call` matches `.replace()` call nodes too.
+
 ## Facade Re-export Pattern
 
 When splitting a large module into sibling files, keep the original file as a facade: it retains the orchestrator/entry-point functions and types, then re-exports all names from sibling files at the BOTTOM. This preserves every existing import path and mock.patch target.

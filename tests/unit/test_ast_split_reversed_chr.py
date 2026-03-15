@@ -13,7 +13,7 @@ import textwrap
 
 
 from skill_scan._ast_split_detector import detect_split_evasion
-from skill_scan._ast_split_resolve import (
+from skill_scan._ast_split_chr import (
     _resolve_chr_arg,
     _resolve_chr_call,
     _resolve_int_arg,

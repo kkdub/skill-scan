@@ -77,9 +77,11 @@ def _depth_error_finding(file_path: str) -> Finding:
 from skill_scan._ast_detectors import (  # noqa: E402
     _CATEGORY as _CATEGORY,
     _DANGEROUS_NAMES as _DANGEROUS_NAMES,
+    _DECORATOR_RULE as _DECORATOR_RULE,
     _RECOMMENDATIONS as _RECOMMENDATIONS,
     _UNSAFE_DESER_CALLS as _UNSAFE_DESER_CALLS,
     _UNSAFE_EXEC_CALLS as _UNSAFE_EXEC_CALLS,
+    _detect_decorator_evasion as _detect_decorator_evasion,
     _detect_dynamic_access as _detect_dynamic_access,
     _detect_dynamic_imports as _detect_dynamic_imports,
     _detect_string_concat_evasion as _detect_string_concat_evasion,
@@ -102,6 +104,7 @@ _DETECTORS = (
     _detect_unsafe_deserialization,
     _detect_string_concat_evasion,
     _detect_dynamic_access,
+    _detect_decorator_evasion,
     _detect_rot13_codec,
     _detect_rot13_maketrans,
 )

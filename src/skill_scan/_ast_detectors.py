@@ -207,6 +207,48 @@ def _detect_dynamic_access(
     return []
 
 
+# Dangerous names that can be used as decorators for evasion
+# Local dict -- NOT imported from _ast_split_detector (avoids import cycle)
+_DECORATOR_RULE: dict[str, tuple[str, Severity, str]] = {
+    "eval": ("EXEC-002", Severity.CRITICAL, "Decorator evasion"),
+    "exec": ("EXEC-002", Severity.CRITICAL, "Decorator evasion"),
+    "system": ("EXEC-002", Severity.CRITICAL, "Decorator evasion"),
+    "popen": ("EXEC-002", Severity.CRITICAL, "Decorator evasion"),
+    "__import__": ("EXEC-006", Severity.HIGH, "Decorator evasion"),
+    "getattr": ("EXEC-006", Severity.HIGH, "Decorator evasion"),
+}
+
+
+def _detect_decorator_evasion(
+    node: ast.AST, file_path: str, *, alias_map: dict[str, str] | None = None
+) -> list[Finding]:
+    """Detect dangerous names used as decorators (@eval, @exec, @builtins.eval)."""
+    if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
+        return []
+
+    findings: list[Finding] = []
+    for decorator in node.decorator_list:
+        name: str | None = None
+        if isinstance(decorator, ast.Name):
+            name = decorator.id
+        elif isinstance(decorator, ast.Attribute):
+            name = decorator.attr
+
+        if name is not None and name in _DECORATOR_RULE:
+            rule_id, severity, desc_prefix = _DECORATOR_RULE[name]
+            findings.append(
+                _make_finding(
+                    rule_id=rule_id,
+                    severity=severity,
+                    file=file_path,
+                    line=decorator.lineno,
+                    matched_text=f"@{name} decorator",
+                    description=f"{desc_prefix} -- @{name} decorator detected via AST",
+                )
+            )
+    return findings
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
