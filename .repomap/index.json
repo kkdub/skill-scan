@@ -1,0 +1,773 @@
+{
+  "version": "1.0",
+  "source_fingerprint": "c85a85cb22965c93ee3389280060e48c105855211e6a7d912a95d0cb9d3d9f43",
+  "indexed_directories": [
+    "src",
+    "lib"
+  ],
+  "entry_points": [
+    {
+      "type": "library",
+      "file": "src/skill_scan/__init__.py",
+      "exports": [
+        "Finding",
+        "OutputMode",
+        "Rule",
+        "ScanResult",
+        "Severity",
+        "Verdict",
+        "format_json",
+        "format_sarif",
+        "scan"
+      ]
+    },
+    {
+      "type": "library",
+      "file": "src/skill_scan/rules/__init__.py",
+      "exports": [
+        "load_default_rules",
+        "load_rules",
+        "load_rules_from_config",
+        "match_content",
+        "match_file",
+        "match_line"
+      ]
+    }
+  ],
+  "modules": {
+    "src/skill_scan/__init__.py": {
+      "purpose": "skill-scan: Security scanner for agent skills.",
+      "imports_internal": [],
+      "imports_external": [
+        "skill_scan"
+      ],
+      "exports": [
+        "Finding",
+        "OutputMode",
+        "Rule",
+        "ScanResult",
+        "Severity",
+        "Verdict",
+        "format_json",
+        "format_sarif",
+        "scan"
+      ],
+      "size_bytes": 491
+    },
+    "src/skill_scan/_ast_detectors.py": {
+      "purpose": "AST detector functions -- identify unsafe patterns in parsed syntax trees.",
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "ast",
+        "skill_scan"
+      ],
+      "exports": [],
+      "size_bytes": 7448
+    },
+    "src/skill_scan/_ast_helpers.py": {
+      "purpose": "AST helper utilities -- string resolution and node inspection.",
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "ast",
+        "skill_scan"
+      ],
+      "exports": [
+        "build_alias_map",
+        "get_call_name",
+        "is_subprocess_shell_true",
+        "has_safe_loader",
+        "try_resolve_string"
+      ],
+      "size_bytes": 9071
+    },
+    "src/skill_scan/_ast_join_helpers.py": {
+      "purpose": "AST join-resolution helpers \u2014 extracted from _ast_helpers.py.",
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "ast",
+        "collections",
+        "skill_scan"
+      ],
+      "exports": [],
+      "size_bytes": 2264
+    },
+    "src/skill_scan/_ast_rot13.py": {
+      "purpose": "AST detectors for ROT13 obfuscation patterns (OBFS-001).",
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "ast",
+        "skill_scan"
+      ],
+      "exports": [
+        "is_rot13_pair"
+      ],
+      "size_bytes": 5731
+    },
+    "src/skill_scan/_ast_split_detector.py": {
+      "purpose": "AST split detector -- detect dangerous names assembled from split variables.",
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "ast",
+        "re",
+        "skill_scan"
+      ],
+      "exports": [
+        "detect_split_evasion"
+      ],
+      "size_bytes": 9041
+    },
+    "src/skill_scan/_ast_split_helpers.py": {
+      "purpose": "AST split helpers -- str.format() and %-format resolution.",
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "ast",
+        "re",
+        "skill_scan"
+      ],
+      "exports": [],
+      "size_bytes": 7924
+    },
+    "src/skill_scan/_ast_split_join_helpers.py": {
+      "purpose": "AST split join helpers -- generator expression and map() resolution for join.",
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "ast",
+        "skill_scan"
+      ],
+      "exports": [],
+      "size_bytes": 2728
+    },
+    "src/skill_scan/_ast_symbol_table.py": {
+      "purpose": "AST symbol table builder -- variable assignment tracking with scope.",
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "ast",
+        "skill_scan"
+      ],
+      "exports": [
+        "build_symbol_table"
+      ],
+      "size_bytes": 4214
+    },
+    "src/skill_scan/_ast_symbol_table_helpers.py": {
+      "purpose": "Private assignment-tracking helpers used by the symbol table builder.",
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "ast",
+        "skill_scan"
+      ],
+      "exports": [],
+      "size_bytes": 7410
+    },
+    "src/skill_scan/_decoder_helpers.py": {
+      "purpose": "Decoder internals \u2014 regex patterns, extraction helpers, and decode functions.",
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "base64",
+        "binascii",
+        "re",
+        "skill_scan",
+        "typing"
+      ],
+      "exports": [],
+      "size_bytes": 6915
+    },
+    "src/skill_scan/_decoder_url_unicode.py": {
+      "purpose": "URL and unicode-escape decoder internals.",
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "re",
+        "skill_scan",
+        "typing",
+        "urllib"
+      ],
+      "exports": [],
+      "size_bytes": 3673
+    },
+    "src/skill_scan/_fetchers.py": {
+      "purpose": "Skill fetcher protocol and implementations.",
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "pathlib",
+        "shutil",
+        "skill_scan",
+        "tempfile",
+        "typing"
+      ],
+      "exports": [
+        "SkillFetcher",
+        "LocalFetcher",
+        "GitHubFetcher"
+      ],
+      "size_bytes": 4537
+    },
+    "src/skill_scan/_github_api.py": {
+      "purpose": "GitHub API helpers for remote fetching.",
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "httpx",
+        "os",
+        "pathlib",
+        "typing",
+        "urllib"
+      ],
+      "exports": [
+        "FetchError",
+        "validate_entry_name",
+        "validate_download_url",
+        "import_httpx",
+        "parse_source",
+        "build_headers",
+        "api_get",
+        "download_file"
+      ],
+      "size_bytes": 4008
+    },
+    "src/skill_scan/ast_analyzer.py": {
+      "purpose": "AST-based Python code analyzer -- detect unsafe patterns via syntax tree.",
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "ast",
+        "skill_scan"
+      ],
+      "exports": [
+        "analyze_python"
+      ],
+      "size_bytes": 4059
+    },
+    "src/skill_scan/cli.py": {
+      "purpose": "CLI entry point for skill-scan.",
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "click",
+        "dataclasses",
+        "pathlib",
+        "shutil",
+        "skill_scan",
+        "sys"
+      ],
+      "exports": [
+        "skill_scan",
+        "scan_cmd",
+        "validate_cmd"
+      ],
+      "size_bytes": 5842
+    },
+    "src/skill_scan/config.py": {
+      "purpose": "Scan configuration \u2014 defaults and loading.",
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "dataclasses",
+        "pathlib",
+        "skill_scan",
+        "tomllib"
+      ],
+      "exports": [
+        "ScanConfig",
+        "load_config"
+      ],
+      "size_bytes": 3565
+    },
+    "src/skill_scan/content_scanner.py": {
+      "purpose": "File content scanning \u2014 reads files and applies detection rules.",
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "concurrent",
+        "os",
+        "pathlib",
+        "skill_scan"
+      ],
+      "exports": [
+        "scan_all_files"
+      ],
+      "size_bytes": 8181
+    },
+    "src/skill_scan/decoder.py": {
+      "purpose": "Decoder module \u2014 extract and decode encoded payloads.",
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "dataclasses",
+        "skill_scan"
+      ],
+      "exports": [
+        "EncodedPayload",
+        "extract_encoded_strings",
+        "decode_payload"
+      ],
+      "size_bytes": 5995
+    },
+    "src/skill_scan/file_checks.py": {
+      "purpose": "File safety checks \u2014 pure functions for FS-002 through FS-007.",
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "pathlib",
+        "skill_scan"
+      ],
+      "exports": [
+        "check_binary",
+        "check_unknown_extension",
+        "check_symlink_outside",
+        "check_file_size",
+        "check_total_size",
+        "check_file_count"
+      ],
+      "size_bytes": 3797
+    },
+    "src/skill_scan/file_classifier.py": {
+      "purpose": "File classification \u2014 decides which files to scan and which trigger findings.",
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "pathlib",
+        "skill_scan"
+      ],
+      "exports": [
+        "classify_entries"
+      ],
+      "size_bytes": 2604
+    },
+    "src/skill_scan/file_collector.py": {
+      "purpose": "Filesystem traversal for skill scanning \u2014 I/O only.",
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "pathlib",
+        "skill_scan"
+      ],
+      "exports": [
+        "walk_skill_dir"
+      ],
+      "size_bytes": 2573
+    },
+    "src/skill_scan/formatters.py": {
+      "purpose": "Text output formatters for scan results.",
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "collections",
+        "enum",
+        "skill_scan"
+      ],
+      "exports": [
+        "OutputMode",
+        "format_text"
+      ],
+      "size_bytes": 7152
+    },
+    "src/skill_scan/json_formatter.py": {
+      "purpose": "JSON output formatter for scan results.",
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "json",
+        "skill_scan"
+      ],
+      "exports": [
+        "format_json"
+      ],
+      "size_bytes": 1748
+    },
+    "src/skill_scan/models.py": {
+      "purpose": "Data models for skill-scan findings, rules, and scan results.",
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "dataclasses",
+        "enum",
+        "pathlib",
+        "re"
+      ],
+      "exports": [
+        "Severity",
+        "Verdict",
+        "Finding",
+        "Rule",
+        "ScanResult",
+        "FileEntry"
+      ],
+      "size_bytes": 2289
+    },
+    "src/skill_scan/normalizer.py": {
+      "purpose": "Text normalization for evasion-resistant matching.",
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "re"
+      ],
+      "exports": [
+        "strip_zero_width",
+        "canonicalize_whitespace",
+        "normalize_text"
+      ],
+      "size_bytes": 2979
+    },
+    "src/skill_scan/parser.py": {
+      "purpose": "SKILL.md frontmatter parser \u2014 stdlib only.",
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "pathlib",
+        "re"
+      ],
+      "exports": [
+        "SkillParseError",
+        "parse_skill_frontmatter"
+      ],
+      "size_bytes": 5024
+    },
+    "src/skill_scan/rules/__init__.py": {
+      "purpose": "Detection rules \u2014 loading, parsing, and matching engine.",
+      "imports_internal": [],
+      "imports_external": [
+        "skill_scan"
+      ],
+      "exports": [
+        "load_default_rules",
+        "load_rules",
+        "load_rules_from_config",
+        "match_content",
+        "match_file",
+        "match_line"
+      ],
+      "size_bytes": 390
+    },
+    "src/skill_scan/rules/engine.py": {
+      "purpose": "Pattern matching engine \u2014 pure functions, no I/O.",
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "dataclasses",
+        "re",
+        "skill_scan"
+      ],
+      "exports": [
+        "match_line",
+        "match_file",
+        "match_content"
+      ],
+      "size_bytes": 8970
+    },
+    "src/skill_scan/rules/loader.py": {
+      "purpose": "Rule loading from TOML files \u2014 file I/O and parsing.",
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "pathlib",
+        "re",
+        "skill_scan",
+        "tomllib"
+      ],
+      "exports": [
+        "load_rules",
+        "load_rules_from_config",
+        "load_default_rules"
+      ],
+      "size_bytes": 5995
+    },
+    "src/skill_scan/sarif_formatter.py": {
+      "purpose": "SARIF output formatter for scan results.",
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "importlib",
+        "json",
+        "skill_scan"
+      ],
+      "exports": [
+        "format_sarif"
+      ],
+      "size_bytes": 3175
+    },
+    "src/skill_scan/scanner.py": {
+      "purpose": "Core scan orchestration for the skill-scan pipeline.",
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "collections",
+        "pathlib",
+        "skill_scan",
+        "time"
+      ],
+      "exports": [
+        "scan"
+      ],
+      "size_bytes": 4650
+    },
+    "src/skill_scan/suppression.py": {
+      "purpose": "Inline suppression support via # noqa: RULE-ID comments.",
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "re",
+        "skill_scan"
+      ],
+      "exports": [
+        "parse_noqa",
+        "filter_suppressed"
+      ],
+      "size_bytes": 2477
+    },
+    "src/skill_scan/verdict.py": {
+      "purpose": "Verdict calculation logic \u2014 pure functions, no I/O.",
+      "imports_internal": [],
+      "imports_external": [
+        "__future__",
+        "skill_scan"
+      ],
+      "exports": [
+        "calculate_verdict",
+        "coverage_aware_verdict",
+        "count_by_severity"
+      ],
+      "size_bytes": 2027
+    }
+  },
+  "dependencies": {
+    "src/skill_scan/_ast_detectors.py": [
+      "src/skill_scan/_ast_helpers.py",
+      "src/skill_scan/models.py",
+      "src/skill_scan/rules/engine.py"
+    ],
+    "src/skill_scan/_ast_helpers.py": [
+      "src/skill_scan/_ast_join_helpers.py",
+      "src/skill_scan/_ast_split_detector.py"
+    ],
+    "src/skill_scan/_ast_join_helpers.py": [
+      "src/skill_scan/_ast_helpers.py"
+    ],
+    "src/skill_scan/_ast_rot13.py": [
+      "src/skill_scan/_ast_helpers.py",
+      "src/skill_scan/models.py"
+    ],
+    "src/skill_scan/_ast_split_detector.py": [
+      "src/skill_scan/_ast_detectors.py",
+      "src/skill_scan/_ast_helpers.py",
+      "src/skill_scan/_ast_split_helpers.py",
+      "src/skill_scan/_ast_split_join_helpers.py",
+      "src/skill_scan/decoder.py",
+      "src/skill_scan/rules/engine.py"
+    ],
+    "src/skill_scan/_ast_split_join_helpers.py": [
+      "src/skill_scan/_ast_helpers.py",
+      "src/skill_scan/_ast_split_helpers.py"
+    ],
+    "src/skill_scan/_ast_symbol_table.py": [
+      "src/skill_scan/_ast_symbol_table_helpers.py"
+    ],
+    "src/skill_scan/_ast_symbol_table_helpers.py": [
+      "src/skill_scan/_ast_helpers.py",
+      "src/skill_scan/_ast_symbol_table.py"
+    ],
+    "src/skill_scan/_decoder_helpers.py": [
+      "src/skill_scan/decoder.py"
+    ],
+    "src/skill_scan/_decoder_url_unicode.py": [
+      "src/skill_scan/decoder.py"
+    ],
+    "src/skill_scan/_fetchers.py": [
+      "src/skill_scan/_github_api.py"
+    ],
+    "src/skill_scan/ast_analyzer.py": [
+      "src/skill_scan/_ast_helpers.py",
+      "src/skill_scan/_ast_split_detector.py",
+      "src/skill_scan/_ast_symbol_table.py",
+      "src/skill_scan/models.py"
+    ],
+    "src/skill_scan/cli.py": [
+      "src/skill_scan/_fetchers.py",
+      "src/skill_scan/config.py",
+      "src/skill_scan/formatters.py",
+      "src/skill_scan/json_formatter.py",
+      "src/skill_scan/parser.py",
+      "src/skill_scan/sarif_formatter.py",
+      "src/skill_scan/scanner.py"
+    ],
+    "src/skill_scan/config.py": [
+      "src/skill_scan/rules/loader.py"
+    ],
+    "src/skill_scan/content_scanner.py": [
+      "src/skill_scan/ast_analyzer.py",
+      "src/skill_scan/models.py",
+      "src/skill_scan/rules/engine.py",
+      "src/skill_scan/suppression.py"
+    ],
+    "src/skill_scan/decoder.py": [
+      "src/skill_scan/_decoder_helpers.py",
+      "src/skill_scan/_decoder_url_unicode.py"
+    ],
+    "src/skill_scan/file_checks.py": [
+      "src/skill_scan/models.py"
+    ],
+    "src/skill_scan/file_classifier.py": [
+      "src/skill_scan/file_checks.py"
+    ],
+    "src/skill_scan/file_collector.py": [
+      "src/skill_scan/models.py"
+    ],
+    "src/skill_scan/rules/engine.py": [
+      "src/skill_scan/_ast_detectors.py",
+      "src/skill_scan/decoder.py",
+      "src/skill_scan/models.py",
+      "src/skill_scan/normalizer.py"
+    ],
+    "src/skill_scan/rules/loader.py": [
+      "src/skill_scan/models.py"
+    ],
+    "src/skill_scan/scanner.py": [
+      "src/skill_scan/_fetchers.py",
+      "src/skill_scan/config.py",
+      "src/skill_scan/content_scanner.py",
+      "src/skill_scan/file_classifier.py",
+      "src/skill_scan/file_collector.py",
+      "src/skill_scan/models.py",
+      "src/skill_scan/parser.py",
+      "src/skill_scan/rules/loader.py",
+      "src/skill_scan/verdict.py"
+    ]
+  },
+  "layers": {
+    "interface": [
+      "src/skill_scan/__init__.py",
+      "src/skill_scan/cli.py"
+    ],
+    "integration": [
+      "src/skill_scan/rules/__init__.py"
+    ],
+    "core": [
+      "src/skill_scan/_ast_detectors.py",
+      "src/skill_scan/_ast_helpers.py",
+      "src/skill_scan/_ast_join_helpers.py",
+      "src/skill_scan/_ast_rot13.py",
+      "src/skill_scan/_ast_split_detector.py",
+      "src/skill_scan/_ast_split_join_helpers.py",
+      "src/skill_scan/_ast_symbol_table.py",
+      "src/skill_scan/_ast_symbol_table_helpers.py",
+      "src/skill_scan/_decoder_helpers.py",
+      "src/skill_scan/_decoder_url_unicode.py",
+      "src/skill_scan/_fetchers.py",
+      "src/skill_scan/ast_analyzer.py",
+      "src/skill_scan/config.py",
+      "src/skill_scan/content_scanner.py",
+      "src/skill_scan/decoder.py",
+      "src/skill_scan/file_checks.py",
+      "src/skill_scan/file_classifier.py",
+      "src/skill_scan/file_collector.py",
+      "src/skill_scan/rules/engine.py",
+      "src/skill_scan/rules/loader.py",
+      "src/skill_scan/scanner.py"
+    ],
+    "foundation": [
+      "src/skill_scan/_ast_split_helpers.py",
+      "src/skill_scan/_github_api.py",
+      "src/skill_scan/formatters.py",
+      "src/skill_scan/json_formatter.py",
+      "src/skill_scan/models.py",
+      "src/skill_scan/normalizer.py",
+      "src/skill_scan/parser.py",
+      "src/skill_scan/sarif_formatter.py",
+      "src/skill_scan/suppression.py",
+      "src/skill_scan/verdict.py"
+    ]
+  },
+  "types": {
+    "EncodedPayload": {
+      "file": "src/skill_scan/decoder.py",
+      "line": 27,
+      "kind": "class"
+    },
+    "FetchError": {
+      "file": "src/skill_scan/_github_api.py",
+      "line": 18,
+      "kind": "class"
+    },
+    "FileEntry": {
+      "file": "src/skill_scan/models.py",
+      "line": 81,
+      "kind": "class"
+    },
+    "Finding": {
+      "file": "src/skill_scan/models.py",
+      "line": 33,
+      "kind": "class"
+    },
+    "GitHubFetcher": {
+      "file": "src/skill_scan/_fetchers.py",
+      "line": 44,
+      "kind": "class",
+      "methods": [
+        "tmp_dir",
+        "fetch"
+      ]
+    },
+    "LocalFetcher": {
+      "file": "src/skill_scan/_fetchers.py",
+      "line": 31,
+      "kind": "class",
+      "methods": [
+        "fetch"
+      ]
+    },
+    "OutputMode": {
+      "file": "src/skill_scan/formatters.py",
+      "line": 26,
+      "kind": "class"
+    },
+    "Rule": {
+      "file": "src/skill_scan/models.py",
+      "line": 47,
+      "kind": "class"
+    },
+    "ScanConfig": {
+      "file": "src/skill_scan/config.py",
+      "line": 47,
+      "kind": "class"
+    },
+    "ScanResult": {
+      "file": "src/skill_scan/models.py",
+      "line": 64,
+      "kind": "class"
+    },
+    "Severity": {
+      "file": "src/skill_scan/models.py",
+      "line": 14,
+      "kind": "class"
+    },
+    "SkillFetcher": {
+      "file": "src/skill_scan/_fetchers.py",
+      "line": 25,
+      "kind": "class",
+      "methods": [
+        "fetch"
+      ]
+    },
+    "SkillParseError": {
+      "file": "src/skill_scan/parser.py",
+      "line": 19,
+      "kind": "class"
+    },
+    "Verdict": {
+      "file": "src/skill_scan/models.py",
+      "line": 24,
+      "kind": "class"
+    }
+  }
+}
