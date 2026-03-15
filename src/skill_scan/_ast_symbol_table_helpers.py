@@ -33,10 +33,10 @@ def _process_stmt(stmt: ast.stmt, table: dict[str, str | _Ref]) -> None:
 def _recurse_control_flow(stmt: ast.stmt, table: dict[str, str | _Ref]) -> None:
     """Recurse into control flow bodies (if/for/while/with/try)."""
     match stmt:
-        case ast.If() | ast.For() | ast.While():
+        case ast.If() | ast.For() | ast.While() | ast.AsyncFor():
             _walk_body(stmt.body, table)
             _walk_body(stmt.orelse, table)
-        case ast.With():
+        case ast.With() | ast.AsyncWith():
             _walk_body(stmt.body, table)
         case ast.Try():
             _walk_body(stmt.body, table)
@@ -228,10 +228,10 @@ def _collect_scope_declarations(
             global_names.update(stmt.names)
         elif isinstance(stmt, ast.Nonlocal):
             nonlocal_names.update(stmt.names)
-        elif isinstance(stmt, ast.If | ast.For | ast.While):
+        elif isinstance(stmt, ast.If | ast.For | ast.While | ast.AsyncFor):
             _recurse(stmt.body)
             _recurse(stmt.orelse)
-        elif isinstance(stmt, ast.With):
+        elif isinstance(stmt, ast.With | ast.AsyncWith):
             _recurse(stmt.body)
         elif isinstance(stmt, ast.Try):
             _recurse(stmt.body)

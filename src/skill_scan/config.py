@@ -8,7 +8,7 @@ from __future__ import annotations
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import TypedDict
+from typing import TypedDict, TypeGuard
 
 from skill_scan.models import Rule
 from skill_scan.rules.loader import load_rules_from_config
@@ -117,22 +117,27 @@ def _build_config(data: dict[str, object]) -> ScanConfig:
     return ScanConfig(**kwargs)
 
 
+def _is_strict_int(val: object) -> TypeGuard[int]:
+    """True when val is int but not bool (bool is a subclass of int)."""
+    return isinstance(val, int) and not isinstance(val, bool)
+
+
 def _apply_scan_settings(scan_section: dict[str, object], kwargs: _ConfigKwargs) -> None:
     """Extract known [scan] fields into kwargs; unknown keys are ignored."""
     ext_list = scan_section.get("extensions")
     if isinstance(ext_list, list):
         kwargs["extensions"] = frozenset(str(e) for e in ext_list)
     val: object = scan_section.get("max_file_size")
-    if isinstance(val, int):
+    if _is_strict_int(val):
         kwargs["max_file_size"] = val
     val = scan_section.get("max_total_size")
-    if isinstance(val, int):
+    if _is_strict_int(val):
         kwargs["max_total_size"] = val
     val = scan_section.get("max_file_count")
-    if isinstance(val, int):
+    if _is_strict_int(val):
         kwargs["max_file_count"] = val
     val = scan_section.get("max_workers")
-    if isinstance(val, int):
+    if _is_strict_int(val):
         kwargs["max_workers"] = val
     val = scan_section.get("strict_schema")
     if isinstance(val, bool):
