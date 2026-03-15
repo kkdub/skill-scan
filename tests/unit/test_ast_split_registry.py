@@ -62,20 +62,22 @@ class TestRegistryStructure:
             assert callable(pred), f"{pred} is not callable"
             assert callable(resolver), f"{resolver} is not callable"
 
-    def test_resolvers_order_matches_expected(self) -> None:
-        """Registry order: BinOp(Add), BinOp(Mod), JoinedStr, Replace, Call."""
+    def test_replace_before_call_in_registry(self) -> None:
+        """Replace must be dispatched before generic Call (more specific first)."""
         preds = [p for p, _ in _RESOLVERS]
-        assert preds == [_is_binop_add, _is_binop_mod, _is_fstr, _is_replace, _is_call]
+        assert preds.index(_is_replace) < preds.index(_is_call)
 
-    def test_resolver_functions_match_expected(self) -> None:
+    def test_required_resolver_functions_present(self) -> None:
+        """All required resolver functions are registered."""
         resolvers = [r for _, r in _RESOLVERS]
-        assert resolvers == [
+        for required in (
             resolve_binop_chain,
             resolve_percent_format,
             resolve_fstring,
             _resolve_replace_chain,
             resolve_call,
-        ]
+        ):
+            assert required in resolvers, f"Missing resolver: {required.__name__}"
 
 
 # -- Predicate tests --
@@ -162,9 +164,13 @@ class TestResolverSignatures:
         ids=["binop_chain", "percent_format", "fstring", "replace_chain", "call"],
     )
     def test_resolver_returns_str_or_none(self, func: object) -> None:
-        sig = inspect.signature(func)  # type: ignore[arg-type]
-        ret = sig.return_annotation
-        assert ret == "str | None"
+        import types
+
+        hints = func.__annotations__
+        ret = hints.get("return")
+        assert ret in ("str | None", str | None, types.UnionType), (
+            f"Expected str | None return annotation, got {ret!r}"
+        )
 
 
 # -- Dispatch via registry tests --

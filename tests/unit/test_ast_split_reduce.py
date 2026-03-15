@@ -259,7 +259,8 @@ class TestReduceModuleConstraints:
         """_ast_split_detector.py must remain at or below 200 lines."""
         from pathlib import Path
 
-        detector = Path("src/skill_scan/_ast_split_detector.py")
+        root = Path(__file__).resolve().parents[2]
+        detector = root / "src" / "skill_scan" / "_ast_split_detector.py"
         line_count = len(detector.read_text().splitlines())
         assert line_count <= 200, f"_ast_split_detector.py is {line_count} lines (max 200)"
 
@@ -267,7 +268,8 @@ class TestReduceModuleConstraints:
         """_ast_split_reduce.py must remain under 300 lines."""
         from pathlib import Path
 
-        reducer = Path("src/skill_scan/_ast_split_reduce.py")
+        root = Path(__file__).resolve().parents[2]
+        reducer = root / "src" / "skill_scan" / "_ast_split_reduce.py"
         line_count = len(reducer.read_text().splitlines())
         assert line_count <= 300, f"_ast_split_reduce.py is {line_count} lines (max 300)"
 
@@ -275,6 +277,7 @@ class TestReduceModuleConstraints:
         """_ast_split_resolve.py must remain under 300 lines."""
         from pathlib import Path
 
-        resolver = Path("src/skill_scan/_ast_split_resolve.py")
+        root = Path(__file__).resolve().parents[2]
+        resolver = root / "src" / "skill_scan" / "_ast_split_resolve.py"
         line_count = len(resolver.read_text().splitlines())
         assert line_count <= 300, f"_ast_split_resolve.py is {line_count} lines (max 300)"

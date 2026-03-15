@@ -222,10 +222,18 @@ _DANGEROUS_BASES = frozenset({"builtins", "__builtins__"})
 
 
 def _resolve_decorator_name(decorator: ast.expr, am: dict[str, str]) -> str | None:
-    """Extract dangerous name from a decorator node, resolving aliases."""
+    """Extract dangerous name from a decorator node, resolving aliases.
+
+    For ast.Name decorators with a dotted canonical form (e.g. ``builtins.eval``),
+    only returns the name if the module prefix is a known dangerous base.
+    This prevents false positives from ``from mymodule import eval``.
+    """
     if isinstance(decorator, ast.Name):
         canonical = am.get(decorator.id, decorator.id)
-        return canonical.rsplit(".", 1)[-1] if "." in canonical else canonical
+        if "." in canonical:
+            base, name = canonical.rsplit(".", 1)
+            return name if base in _DANGEROUS_BASES else None
+        return canonical
     if isinstance(decorator, ast.Attribute) and isinstance(decorator.value, ast.Name):
         base = am.get(decorator.value.id, decorator.value.id)
         if base in _DANGEROUS_BASES:

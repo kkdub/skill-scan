@@ -26,11 +26,14 @@ def _detect(code: str) -> list[Finding]:
 
 
 def _resolve(code: str) -> str | None:
-    """Helper: parse a single expression and resolve its replace chain."""
+    """Helper: extract the last assignment whose RHS is a .replace() call."""
     tree = _PARSE(code)
     st = build_symbol_table(tree)
-    # Find the first Call node with .replace in the tree
-    for node in ast.walk(tree):
+    # Use tree.body (deterministic order) instead of ast.walk (unspecified order)
+    for stmt in reversed(tree.body):
+        if not isinstance(stmt, ast.Assign):
+            continue
+        node = stmt.value
         if (
             isinstance(node, ast.Call)
             and isinstance(node.func, ast.Attribute)
