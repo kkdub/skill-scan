@@ -207,6 +207,66 @@ def _detect_dynamic_access(
     return []
 
 
+# Dangerous names that can be used as decorators for evasion
+# Local dict -- NOT imported from _ast_split_detector (avoids import cycle)
+_DECORATOR_RULE: dict[str, tuple[str, Severity, str]] = {
+    "eval": ("EXEC-002", Severity.CRITICAL, "Decorator evasion"),
+    "exec": ("EXEC-002", Severity.CRITICAL, "Decorator evasion"),
+    "system": ("EXEC-002", Severity.CRITICAL, "Decorator evasion"),
+    "popen": ("EXEC-002", Severity.CRITICAL, "Decorator evasion"),
+    "__import__": ("EXEC-006", Severity.HIGH, "Decorator evasion"),
+    "getattr": ("EXEC-006", Severity.HIGH, "Decorator evasion"),
+}
+
+_DANGEROUS_BASES = frozenset({"builtins", "__builtins__"})
+
+
+def _resolve_decorator_name(decorator: ast.expr, am: dict[str, str]) -> str | None:
+    """Extract dangerous name from a decorator node, resolving aliases.
+
+    For ast.Name decorators with a dotted canonical form (e.g. ``builtins.eval``),
+    only returns the name if the module prefix is a known dangerous base.
+    This prevents false positives from ``from mymodule import eval``.
+    """
+    if isinstance(decorator, ast.Name):
+        canonical = am.get(decorator.id, decorator.id)
+        if "." in canonical:
+            base, name = canonical.rsplit(".", 1)
+            return name if base in _DANGEROUS_BASES else None
+        return canonical
+    if isinstance(decorator, ast.Attribute) and isinstance(decorator.value, ast.Name):
+        base = am.get(decorator.value.id, decorator.value.id)
+        if base in _DANGEROUS_BASES:
+            return decorator.attr
+    return None
+
+
+def _detect_decorator_evasion(
+    node: ast.AST, file_path: str, *, alias_map: dict[str, str] | None = None
+) -> list[Finding]:
+    """Detect dangerous names used as decorators (@eval, @exec, @builtins.eval)."""
+    if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef):
+        return []
+
+    am = alias_map or {}
+    findings: list[Finding] = []
+    for decorator in node.decorator_list:
+        name = _resolve_decorator_name(decorator, am)
+        if name is not None and name in _DECORATOR_RULE:
+            rule_id, severity, desc_prefix = _DECORATOR_RULE[name]
+            findings.append(
+                _make_finding(
+                    rule_id=rule_id,
+                    severity=severity,
+                    file=file_path,
+                    line=getattr(decorator, "lineno", None),
+                    matched_text=f"@{name} decorator",
+                    description=f"{desc_prefix} -- @{name} decorator detected via AST",
+                )
+            )
+    return findings
+
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------

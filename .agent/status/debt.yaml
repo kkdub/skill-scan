@@ -8,18 +8,31 @@
 # Resolved by PLAN-022: DEBT-018-T3-CROSS-FUNCTION (function return-value tracking + call resolution)
 
 # --- PLAN-018 Red-Team Debt (Tier 2-4) ---
+# Resolved by PLAN-023: string slicing, reversal, bytes concat/decode, attribute chains, chr/ord
+# Resolved by PLAN-024: lambda/reduce building, comprehension assembly, replace chains, decorator evasion
+# Remaining star-args tracked as DEBT-024-KWARGS-UNPACKING below
 
-- id: DEBT-018-T4-ADVANCED
-  description: "Advanced evasion techniques: string slicing, reversal, lambda building, comprehension assembly, star-args, bytes concat/decode, attribute chains"
+- id: DEBT-024-KWARGS-UNPACKING
+  description: "Detect dangerous **kwargs unpacking — e.g. subprocess.run('ls', **opts) where opts={'shell': True}"
+  type: effectiveness
+  severity: medium
+  plan: PLAN-024
+  files:
+    - src/skill_scan/_ast_detectors.py
+    - src/skill_scan/_ast_split_detector.py
+  blocker: "Architecturally different from string-evasion detection (argument safety vs string assembly). No prior art — bandit Issue #156 open since 2018, semgrep/CodeQL lack kwargs tracking. High false-positive risk from ubiquitous legitimate **kwargs usage."
+  resolution: "Dedicated plan: build a per-function-signature allowlist of dangerous kwarg keys (e.g. shell for subprocess), only flag when dict is statically resolvable via symbol table. Research needed on scope (which functions/keys to target)."
+
+- id: DEBT-024-TRACKED-COMPREHENSION
+  description: "Comprehension over tracked variable — codes = [101,118,97,108]; ''.join(chr(c) for c in codes) — not detected because symbol table only tracks dict[str, str]"
   type: effectiveness
   severity: low
-  plan: PLAN-018
+  plan: PLAN-024
   files:
-    - src/skill_scan/_ast_split_detector.py
     - src/skill_scan/_ast_symbol_table.py
-  blocker: "Each technique requires distinct resolution logic. Needs a dedicated plan."
-  resolution: "Plan a comprehensive string-building resolution module that handles slice, reverse, chr(), comprehension, and bytes patterns."
-  evasions: 13
+    - src/skill_scan/_ast_split_join_helpers.py
+  blocker: "Symbol table is dict[str, str] — extending to support list[int] values requires type union or parallel tracking structure. Inline integer list literals are handled by PLAN-024 Part e."
+  resolution: "Extend symbol table to track non-string types (at minimum list[int] for chr() comprehension patterns), or add a parallel pre-pass that collects integer-list assignments."
 
 # --- Structural / Maintenance Debt ---
 

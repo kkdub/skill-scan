@@ -1,35 +1,73 @@
-"""AST split join helpers -- generator expression and map() resolution for join.
+"""AST split join helpers -- join resolution for the split detector.
 
-Resolves ``''.join(x for x in [...])`` and ``''.join(map(chr/str, [...]))``
-patterns. Used by _ast_split_detector to detect dangerous names assembled
-via join-based evasion.
+Resolves ``''.join(x for x in [...])`` , ``''.join(map(chr/str, [...]))``,
+``''.join(reversed(...))``, and general ``'sep'.join([...])`` patterns.
+Used by _ast_split_detector to detect dangerous names assembled via
+join-based evasion.
 """
 
 from __future__ import annotations
 
 import ast
 
-from skill_scan._ast_split_helpers import _resolve_expr_list
+from skill_scan._ast_split_helpers import (
+    _resolve_expr_list,
+    _resolve_join_elements,
+    _scoped_lookup,
+)
 
 
 def _resolve_generator_join(
     gen: ast.GeneratorExp, sep: str, symbol_table: dict[str, str], scope: str
 ) -> str | None:
-    """Resolve ``p for p in ['ev', 'al']`` inside join -- single-variable identity generators."""
-    if len(gen.generators) != 1:
+    """Resolve ``p for p in ['ev', 'al']`` or ``chr(c) for c in [ints]`` inside join."""
+    return _resolve_comprehension_join(gen, sep, symbol_table, scope)
+
+
+def _resolve_comprehension_join(
+    node: ast.GeneratorExp | ast.ListComp, sep: str, symbol_table: dict[str, str], scope: str
+) -> str | None:
+    """Resolve generator or list comprehension inside join to a string.
+
+    Handles both ``x for x in [...]`` identity patterns and
+    ``chr(c) for c in [ints]`` chr-mapping patterns.
+    """
+    if len(node.generators) != 1:
         return None
-    comp = gen.generators[0]
+    comp = node.generators[0]
     if comp.ifs or not isinstance(comp.target, ast.Name):
         return None
     if not isinstance(comp.iter, ast.List | ast.Tuple):
         return None
-    # Only identity generators: ``x for x in [...]`` where elt == target
-    if not (isinstance(gen.elt, ast.Name) and gen.elt.id == comp.target.id):
+    # chr(x) comprehension: ``chr(c) for c in [101, 118, ...]``
+    chr_result = _resolve_comprehension_chr(node.elt, comp.target.id, comp.iter.elts, sep)
+    if chr_result is not None:
+        return chr_result
+    # Identity comprehension: ``x for x in [...]`` where elt == target
+    if not (isinstance(node.elt, ast.Name) and node.elt.id == comp.target.id):
         return None
     parts = _resolve_expr_list(comp.iter.elts, symbol_table, scope)
     if parts is None:
         return None
     return sep.join(parts)
+
+
+def _resolve_comprehension_chr(
+    elt: ast.expr, target_id: str, iter_elts: list[ast.expr], sep: str
+) -> str | None:
+    """Resolve ``chr(x) for x in [int, ...]`` comprehension pattern."""
+    if not (
+        isinstance(elt, ast.Call)
+        and isinstance(elt.func, ast.Name)
+        and elt.func.id == "chr"
+        and len(elt.args) == 1
+        and not elt.keywords
+    ):
+        return None
+    arg = elt.args[0]
+    if not (isinstance(arg, ast.Name) and arg.id == target_id):
+        return None
+    return _resolve_map_chr(iter_elts, sep)
 
 
 def _resolve_map_join(
@@ -76,3 +114,81 @@ def _resolve_map_str(elts: list[ast.expr], sep: str) -> str | None:
             return None
         parts.append(elt.value)
     return sep.join(parts)
+
+
+def _is_str_join_call(node: ast.Call) -> bool:
+    """Check if node is a '<str>'.join(<one_arg>) call."""
+    return (
+        isinstance(node.func, ast.Attribute)
+        and node.func.attr == "join"
+        and isinstance(node.func.value, ast.Constant)
+        and isinstance(node.func.value.value, str)
+        and len(node.args) == 1
+    )
+
+
+def _resolve_reversed_inner(
+    inner: ast.expr, sep: str, symbol_table: dict[str, str], scope: str
+) -> list[str] | None:
+    """Resolve the inner argument of reversed() to a list of characters/parts."""
+    # reversed('string_literal')
+    if isinstance(inner, ast.Constant) and isinstance(inner.value, str):
+        return list(inner.value)
+    # reversed(['a', 'b', 'c']) or reversed(('a', 'b', 'c'))
+    if isinstance(inner, ast.List | ast.Tuple):
+        return _resolve_expr_list(inner.elts, symbol_table, scope)
+    # reversed(tracked_variable) where variable is a string
+    if isinstance(inner, ast.Name):
+        val = _scoped_lookup(inner.id, symbol_table, scope)
+        if val is not None:
+            return list(val)
+    return None
+
+
+def _resolve_reversed_join(
+    call: ast.Call,
+    sep: str,
+    symbol_table: dict[str, str],
+    scope: str,
+) -> str | None:
+    """Resolve reversed() inside join: ``''.join(reversed('lave'))`` -> 'eval'.
+
+    Gates to reversed() on:
+    - string literal arguments (reversed the characters)
+    - List/Tuple of tracked elements (reverse then join)
+    - tracked variable names resolving to strings
+    """
+    if not (isinstance(call.func, ast.Name) and call.func.id == "reversed"):
+        return None
+    if len(call.args) != 1 or call.keywords:
+        return None
+    chars = _resolve_reversed_inner(call.args[0], sep, symbol_table, scope)
+    if chars is None:
+        return None
+    return sep.join(reversed(chars))
+
+
+def _resolve_join_call(
+    node: ast.Call,
+    symbol_table: dict[str, str],
+    scope: str,
+    alias_map: dict[str, str] | None = None,
+) -> str | None:
+    """Resolve ''.join(...) with list/tuple, generator, reversed, or map(chr/str) arguments."""
+    if not _is_str_join_call(node):
+        return None
+    if not isinstance(node.func, ast.Attribute) or not isinstance(node.func.value, ast.Constant):
+        return None  # defensive: _is_str_join_call guarantees this
+    sep = str(node.func.value.value)
+    arg = node.args[0]
+    if isinstance(arg, ast.List | ast.Tuple):
+        return _resolve_join_elements(arg.elts, sep, symbol_table, scope)
+    if isinstance(arg, ast.GeneratorExp | ast.ListComp):
+        return _resolve_comprehension_join(arg, sep, symbol_table, scope)
+    if isinstance(arg, ast.Call):
+        am = alias_map or {}
+        rev = _resolve_reversed_join(arg, sep, symbol_table, scope)
+        if rev is not None:
+            return rev
+        return _resolve_map_join(arg, sep, am)
+    return None

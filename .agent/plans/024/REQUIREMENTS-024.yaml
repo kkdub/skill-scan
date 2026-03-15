@@ -1,0 +1,243 @@
+id: REQ-024
+title: "Advanced evasion detection — Tier 2 (functional & exotic patterns)"
+created: 2026-03-14
+revised: 2026-03-14
+backwards_compatibility: true
+
+# Revision notes:
+# - R001 verify: replaced non-falsifiable grep with _RESOLVERS definition check
+# - R013 verify: changed to _DECORATOR_RULE in _ast_detectors.py (avoids import cycle)
+# - R017: DROPPED — symbol table is dict[str, str], can't track integer lists;
+#   deferred to DEBT-024-TRACKED-COMPREHENSION
+# - R-IMP006: reworded to accurately describe both emission paths
+#   (_DETECTORS via _make_finding, split resolvers via _check_dangerous)
+# - Total: 37 requirements (was 38)
+
+requirements:
+  # --- Explicit (22) ---
+  - id: R001
+    description: "Refactor _try_resolve_split() isinstance dispatcher into a registry pattern"
+    category: functional
+    verify: "grep::_RESOLVERS\\s*=::src/skill_scan/_ast_split_detector.py"
+    acceptance: "_RESOLVERS tuple defined; _try_resolve_split() dispatches via for-loop over _RESOLVERS instead of inline isinstance checks"
+
+  - id: R002
+    description: "_ast_split_detector.py must be at or below 200 lines after registry refactoring and remain there"
+    category: structural
+    verify: "file::src/skill_scan/_ast_split_detector.py"
+    acceptance: "Line count <= 200 after Part a AND after every subsequent part that modifies this file"
+
+  - id: R003
+    description: "All 2703+ existing tests must continue to pass after refactoring"
+    category: reliability
+    verify: "test::tests/"
+    acceptance: "pytest exits 0 with no fewer passing tests than baseline"
+
+  - id: R004
+    description: "Registry pattern supports a common resolver function signature"
+    category: functional
+    verify: "null"
+    acceptance: "All registered resolver functions share signature (node, symbol_table, scope, *, alias_map=None) -> str | None"
+
+  - id: R005
+    description: "Detect string.replace() chain patterns that reconstruct dangerous names"
+    category: functional
+    verify: "test::tests/"
+    acceptance: "pos_replace_chain.py fixture detected with EXEC-002 or EXEC-006"
+
+  - id: R006
+    description: "Replace chain resolver must resolve the complete chain to the final string"
+    category: functional
+    verify: "test::tests/"
+    acceptance: "Chain of N .replace() calls produces same resolved string as Python str.replace()"
+
+  - id: R007
+    description: "Replace chain detector handles 3+ chained .replace() calls"
+    category: functional
+    verify: "test::tests/"
+    acceptance: "Fixture with 3+ chained replaces produces a finding"
+
+  - id: R008
+    description: "Replace chain detector does not emit findings for non-dangerous resolved strings"
+    category: security
+    verify: "test::tests/"
+    acceptance: "neg_replace_chain_safe.py fixture produces zero findings"
+
+  - id: R009
+    description: "Detect functools.reduce(lambda a,b: a+b, [...]) that reconstructs dangerous names"
+    category: functional
+    verify: "test::tests/"
+    acceptance: "pos_reduce_concat.py fixture produces EXEC-002 or EXEC-006"
+
+  - id: R010
+    description: "Detect operator.add() and operator.concat() assembling dangerous names"
+    category: functional
+    verify: "test::tests/"
+    acceptance: "pos_operator_add.py fixture produces EXEC-002 or EXEC-006"
+
+  - id: R011
+    description: "Lambda/reduce and operator detectors use alias_map for module resolution"
+    category: functional
+    verify: "test::tests/"
+    acceptance: "Detection fires when functools/operator imported with aliases"
+
+  - id: R012
+    description: "Detect @eval or @exec used as decorators on function/class definitions"
+    category: functional
+    verify: "test::tests/"
+    acceptance: "pos_decorator_eval.py fixture produces EXEC-002"
+
+  - id: R013
+    description: "Decorator detector checks names against a local dangerous-decorator set"
+    category: functional
+    verify: "grep::_DECORATOR_RULE::src/skill_scan/_ast_detectors.py"
+    acceptance: "Detects @eval, @exec, @system, @popen, @__import__, @getattr via _DECORATOR_RULE dict"
+
+  - id: R014
+    description: "Decorator detector does not flag safe decorators"
+    category: security
+    verify: "test::tests/"
+    acceptance: "neg_decorator_safe.py produces zero findings"
+
+  - id: R015
+    description: "Detect comprehension assembly via join with chr() mapping over inline integer list"
+    category: functional
+    verify: "test::tests/"
+    acceptance: "pos_comprehension_chr.py produces EXEC-002"
+
+  - id: R016
+    description: "Comprehension join handles both ListComp and GeneratorExp with chr() over inline int list"
+    category: functional
+    verify: "test::tests/"
+    acceptance: "ListComp and GeneratorExp variants both produce findings"
+
+  # R017 DROPPED — symbol table can't track integer lists (dict[str, str]).
+  # Deferred to DEBT-024-TRACKED-COMPREHENSION.
+
+  - id: R018
+    description: "All techniques emit correct rule IDs (EXEC-002 or EXEC-006)"
+    category: functional
+    verify: "grep::_NAME_RULE\\|_DECORATOR_RULE::src/skill_scan/"
+    acceptance: "EXEC-002 for eval/exec/system/popen; EXEC-006 for __import__/getattr"
+
+  - id: R019
+    description: "Each technique has pos_*.py and neg_*.py fixture files"
+    category: reliability
+    verify: "file::tests/fixtures/split_evasion/"
+    acceptance: "At least one pos_ and neg_ fixture per technique"
+
+  - id: R020
+    description: "All source files remain at or below 300 lines"
+    category: structural
+    verify: "grep::SIZE-001::.agent/standards/code-rules.json"
+    acceptance: "make check passes with no SIZE-001 violations"
+
+  - id: R021
+    description: "No new dependencies — stdlib only"
+    category: structural
+    verify: "file::pyproject.toml"
+    acceptance: "pyproject.toml dependencies unchanged"
+
+  - id: R022
+    description: "New public names follow Facade Re-export Pattern"
+    category: structural
+    verify: "null"
+    acceptance: "Public functions re-exported from facade modules (ast_analyzer.py, _ast_split_detector.py)"
+
+  - id: R023
+    description: "Decorator evasion detects attribute-form decorators (@builtins.eval)"
+    category: functional
+    verify: "test::tests/"
+    acceptance: "@builtins.eval decorator produces a finding"
+
+  # --- Implicit (9) ---
+  - id: R-IMP001
+    description: "Registry refactoring preserves public API: analyze_python(), Finding, rule IDs"
+    category: reliability
+    verify: "test::tests/"
+    acceptance: "analyze_python() signature unchanged; EXEC-002/EXEC-006 findings identical"
+
+  - id: R-IMP002
+    description: "Registry dispatcher invoked from same call site — detect_split_evasion() interface unchanged"
+    category: reliability
+    verify: "grep::detect_split_evasion::src/skill_scan/ast_analyzer.py"
+    acceptance: "detect_split_evasion() signature and call site unchanged"
+
+  - id: R-IMP003
+    description: "New resolver functions accept alias_map and symbol_table parameters"
+    category: functional
+    verify: "null"
+    acceptance: "Every registered resolver accepts alias_map and symbol_table"
+
+  - id: R-IMP004
+    description: "Replace chain resolver allows variable base via symbol table lookup"
+    category: security
+    verify: "test::tests/"
+    acceptance: "Replace chain starting from tracked variable resolves correctly; untracked returns None"
+
+  - id: R-IMP005
+    description: "Comprehension chr() mapping works with inline integer list literals"
+    category: functional
+    verify: "test::tests/"
+    acceptance: "Integer list literal iterable resolves to string via chr() mapping"
+
+  - id: R-IMP006
+    description: "All findings converge through analyze_python() — resolver findings via _check_dangerous, decorator findings via _make_finding in _DETECTORS pipeline"
+    category: reliability
+    verify: "null"
+    acceptance: "No new top-level emission paths — resolvers emit via _check_dangerous in detect_split_evasion(); decorator detector emits via _make_finding in _DETECTORS loop; both converge in analyze_python()"
+
+  - id: R-IMP007
+    description: "Decorator detector added to _DETECTORS tuple in ast_analyzer.py"
+    category: structural
+    verify: "grep::_detect_decorator::src/skill_scan/ast_analyzer.py"
+    acceptance: "Detector registered in _DETECTORS tuple"
+
+  - id: R-IMP008
+    description: "reduce() detector handles functools aliases via alias_map"
+    category: functional
+    verify: "test::tests/"
+    acceptance: "import functools as ft; ft.reduce(...) is detected"
+
+  - id: R-IMP009
+    description: "Fixtures follow pos_/neg_ naming in tests/fixtures/split_evasion/"
+    category: structural
+    verify: "file::tests/fixtures/split_evasion/"
+    acceptance: "All new fixtures use pos_/neg_ prefix"
+
+  # --- Effectiveness (6) ---
+  - id: R-EFF001
+    description: "100% detection rate across new positive fixture files"
+    category: effectiveness
+    verify: "corpus::tests/fixtures/split_evasion/::0"
+    acceptance: "Every new pos_*.py fixture produces at least one finding"
+
+  - id: R-EFF002
+    description: "Zero false positives on new negative fixture files"
+    category: effectiveness
+    verify: "corpus::tests/fixtures/split_evasion/::0"
+    acceptance: "Every new neg_*.py fixture produces zero findings"
+
+  - id: R-EFF003
+    description: "Replace chain with 3+ chained .replace() calls detected"
+    category: effectiveness
+    verify: "test::tests/"
+    acceptance: "3-step and 4-step replace chain fixtures produce findings"
+
+  - id: R-EFF004
+    description: "functools.reduce(lambda a,b: a+b, [...]) with string fragments detected"
+    category: effectiveness
+    verify: "test::tests/"
+    acceptance: "2-fragment and 3+ fragment reduce lists detected"
+
+  - id: R-EFF005
+    description: "Decorator evasion detected in attribute form (@builtins.eval)"
+    category: effectiveness
+    verify: "test::tests/"
+    acceptance: "@builtins.eval and @bare_eval both produce findings"
+
+  - id: R-EFF006
+    description: "''.join([chr(c) for c in [101,118,97,108]]) detected as 'eval'"
+    category: effectiveness
+    verify: "test::tests/"
+    acceptance: "Integer list -> chr() -> 'eval' resolves and produces EXEC-002"
