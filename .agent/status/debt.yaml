@@ -1,6 +1,6 @@
 # .agent/status/debt.yaml
 # Entries are removed when resolved. Git history tracks removals.
-# Last updated: 2026-03-13
+# Last updated: 2026-03-15
 # Resolved by PLAN-019: lone surrogates, null bytes, OBFS-001 catalog, str.format/%-format evasion
 # Resolved by PLAN-020: FSTRING-CONV, GENERATOR-JOIN, STRING-MULT, PERCENT-OVERPROVISIONED, PERCENT-MIXED-SPECIFIERS, CONTAINERS (dict-only; list indices remain)
 # Resolved by PR-034 review: DEBT-020-RESUB-BACKSLASH (lambda replacement), DEBT-020-UNBOUNDED-MULT (_MAX_REPEAT=1000 cap)
@@ -10,18 +10,27 @@
 # --- PLAN-018 Red-Team Debt (Tier 2-4) ---
 # Resolved by PLAN-023: string slicing, reversal, bytes concat/decode, attribute chains, chr/ord
 # Resolved by PLAN-024: lambda/reduce building, comprehension assembly, replace chains, decorator evasion
-# Remaining star-args tracked as DEBT-024-KWARGS-UNPACKING below
+# Resolved by PLAN-025: DEBT-024-KWARGS-UNPACKING (detect_kwargs_unpacking + _DANGEROUS_KWARGS table)
 
-- id: DEBT-024-KWARGS-UNPACKING
-  description: "Detect dangerous **kwargs unpacking — e.g. subprocess.run('ls', **opts) where opts={'shell': True}"
+- id: DEBT-025-DICT-UNION
+  description: "Detect dangerous kwargs via dict union operator — e.g. opts | {'shell': True} or opts |= {'shell': True} — not handled by _collect_dict_assigns pre-pass. Note: PEP 448 spread ({**base, 'shell': True}) IS detected via _extract_dict_literal inline key extraction."
   type: effectiveness
-  severity: medium
-  plan: PLAN-024
+  severity: low
+  plan: PLAN-025
   files:
-    - src/skill_scan/_ast_detectors.py
-    - src/skill_scan/_ast_split_detector.py
-  blocker: "Architecturally different from string-evasion detection (argument safety vs string assembly). No prior art — bandit Issue #156 open since 2018, semgrep/CodeQL lack kwargs tracking. High false-positive risk from ubiquitous legitimate **kwargs usage."
-  resolution: "Dedicated plan: build a per-function-signature allowlist of dangerous kwarg keys (e.g. shell for subprocess), only flag when dict is statically resolvable via symbol table. Research needed on scope (which functions/keys to target)."
+    - src/skill_scan/_ast_kwargs_detector.py
+  blocker: "Dict union (PEP 584 a | b / a |= b) requires resolving both operands via the symbol table before merging. Low evasion risk — attacker must use union operator specifically."
+  resolution: "Extend _collect_dict_assigns to track dict union expressions, resolving both operands via the symbol table before merging."
+
+- id: DEBT-025-SHELL-INT-TRUTHY
+  description: "subprocess.run('ls', **{'shell': 1}) not detected — integer 1 is truthy and enables shell execution, but _kwarg_matches compares str(1)='1' against str(True)='True'"
+  type: effectiveness
+  severity: low
+  plan: PLAN-025
+  files:
+    - src/skill_scan/_ast_kwargs_detector.py
+  blocker: "Current _kwarg_matches uses exact str() comparison. Extending to truthy-value matching risks false positives on non-boolean-intended integer values in other future table entries."
+  resolution: "Add truthy normalization in _kwarg_matches for boolean-typed table entries, or add a second _DANGEROUS_KWARGS entry for integer 1."
 
 - id: DEBT-024-TRACKED-COMPREHENSION
   description: "Comprehension over tracked variable — codes = [101,118,97,108]; ''.join(chr(c) for c in codes) — not detected because symbol table only tracks dict[str, str]"
@@ -46,6 +55,16 @@
     - src/skill_scan/_ast_symbol_table.py:80-100
   blocker: "Multi-level nonlocal resolution requires a full scope chain; single-level covers the most common evasion pattern."
   resolution: "Implement scope chain tracking to propagate nonlocal writes through multiple nesting levels."
+
+- id: DEBT-021-SCOPE-ATTRIBUTION-ASSERTION
+  description: "R-IMP008 requires _build_scope_map to walk class method bodies for correct scope attribution, but test_ast_split_detector_join.py has no line/scope assertions — requirement can pass while attribution is wrong"
+  type: test-coverage
+  severity: low
+  plan: PLAN-021
+  files:
+    - tests/unit/test_ast_split_detector_join.py
+  blocker: "None — straightforward to add assertions checking .line or scope on findings from class method payloads."
+  resolution: "Add assertions in TestClassSelfAttrResolution or TestPlanAcceptance that verify finding line numbers correspond to the class method body, not the class definition."
 
 - id: DEBT-022-CALL-RETURN-DESCRIPTION
   description: "resolve_call_return findings use 'split variable evasion' description even for standalone call-return paths, which is misleading for analysts"

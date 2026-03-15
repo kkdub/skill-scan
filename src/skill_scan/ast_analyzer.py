@@ -14,6 +14,7 @@ from __future__ import annotations
 import ast
 
 from skill_scan._ast_helpers import build_alias_map
+from skill_scan._ast_kwargs_detector import detect_kwargs_unpacking as detect_kwargs_unpacking
 from skill_scan._ast_split_detector import detect_split_evasion as detect_split_evasion
 from skill_scan._ast_symbol_table import build_symbol_table as build_symbol_table
 from skill_scan.models import Finding, Severity
@@ -42,6 +43,7 @@ def analyze_python(content: str, file_path: str) -> list[Finding]:
             for detector in _DETECTORS:
                 findings.extend(detector(node, file_path, alias_map=alias_map))
         findings.extend(detect_split_evasion(tree, file_path, alias_map, symbol_table, _nodes=all_nodes))
+        findings.extend(detect_kwargs_unpacking(tree, file_path, alias_map, symbol_table))
     except RecursionError:
         findings.append(_depth_error_finding(file_path))
     return findings
@@ -96,6 +98,9 @@ from skill_scan._ast_rot13 import (  # noqa: E402
     _detect_rot13_codec as _detect_rot13_codec,
     _detect_rot13_maketrans as _detect_rot13_maketrans,
     is_rot13_pair as is_rot13_pair,
+)
+from skill_scan._ast_kwargs_detector import (  # noqa: E402
+    _DANGEROUS_KWARGS as _DANGEROUS_KWARGS,
 )
 
 _DETECTORS = (
