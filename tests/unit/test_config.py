@@ -157,3 +157,44 @@ def test_load_config_no_rules_section_leaves_custom_rules_empty(tmp_path: Path) 
     config = load_config(config_file)
 
     assert config.custom_rules == ()
+
+
+def test_load_config_max_total_size_override(tmp_path: Path) -> None:
+    """load_config reads max_total_size from [scan] section."""
+    config_file = tmp_path / "config.toml"
+    config_file.write_text("[scan]\nmax_total_size = 10_000_000\n", encoding="utf-8")
+
+    config = load_config(config_file)
+
+    assert config.max_total_size == 10_000_000
+    assert config.max_file_size == 500_000  # other defaults preserved
+
+
+def test_load_config_max_file_count_override(tmp_path: Path) -> None:
+    """load_config reads max_file_count from [scan] section."""
+    config_file = tmp_path / "config.toml"
+    config_file.write_text("[scan]\nmax_file_count = 50\n", encoding="utf-8")
+
+    config = load_config(config_file)
+
+    assert config.max_file_count == 50
+
+
+def test_load_config_max_workers_override(tmp_path: Path) -> None:
+    """load_config reads max_workers from [scan] section."""
+    config_file = tmp_path / "config.toml"
+    config_file.write_text("[scan]\nmax_workers = 4\n", encoding="utf-8")
+
+    config = load_config(config_file)
+
+    assert config.max_workers == 4
+
+
+def test_load_config_bool_not_accepted_as_int(tmp_path: Path) -> None:
+    """load_config rejects bool values for integer fields (bool is subclass of int)."""
+    config_file = tmp_path / "config.toml"
+    config_file.write_text("[scan]\nmax_file_size = true\n", encoding="utf-8")
+
+    config = load_config(config_file)
+
+    assert config.max_file_size == 500_000  # default, not 1

@@ -188,10 +188,63 @@ class TestEvasionFixtures:
 
 
 class TestGlobalInControlFlow:
-    """Global declaration inside if/else is still collected."""
+    """Global/nonlocal declarations inside control-flow bodies are collected."""
 
     def test_global_inside_if(self) -> None:
         code = "x = 'a'\ndef f():\n    if True:\n        global x\n        x = 'b'\n"
         result = build_symbol_table(_PARSE(code))
         assert result["x"] == "b"
         assert "f.x" not in result
+
+    def test_global_inside_for(self) -> None:
+        code = "x = 'a'\ndef f():\n    for _ in range(1):\n        global x\n        x = 'b'\n"
+        result = build_symbol_table(_PARSE(code))
+        assert result["x"] == "b"
+        assert "f.x" not in result
+
+    def test_global_inside_while(self) -> None:
+        code = "x = 'a'\ndef f():\n    while True:\n        global x\n        x = 'b'\n        break\n"
+        result = build_symbol_table(_PARSE(code))
+        assert result["x"] == "b"
+
+    def test_global_inside_with(self) -> None:
+        code = "x = 'a'\ndef f():\n    with open('f') as _:\n        global x\n        x = 'b'\n"
+        result = build_symbol_table(_PARSE(code))
+        assert result["x"] == "b"
+
+    def test_global_inside_try(self) -> None:
+        code = "x = 'a'\ndef f():\n    try:\n        global x\n        x = 'b'\n    except:\n        pass\n"
+        result = build_symbol_table(_PARSE(code))
+        assert result["x"] == "b"
+
+    def test_global_inside_try_handler(self) -> None:
+        code = "x = 'a'\ndef f():\n    try:\n        pass\n    except:\n        global x\n        x = 'b'\n"
+        result = build_symbol_table(_PARSE(code))
+        assert result["x"] == "b"
+
+    def test_global_inside_try_finally(self) -> None:
+        code = "x = 'a'\ndef f():\n    try:\n        pass\n    finally:\n        global x\n        x = 'b'\n"
+        result = build_symbol_table(_PARSE(code))
+        assert result["x"] == "b"
+
+    def test_nonlocal_inside_for(self) -> None:
+        code = (
+            "def outer():\n"
+            "    x = 'a'\n"
+            "    def inner():\n"
+            "        for _ in range(1):\n"
+            "            nonlocal x\n"
+            "            x = 'b'\n"
+        )
+        result = build_symbol_table(_PARSE(code))
+        assert result["outer.x"] == "b"
+
+    def test_global_inside_async_for(self) -> None:
+        code = "x = 'a'\nasync def f():\n    async for _ in aiter():\n        global x\n        x = 'b'\n"
+        result = build_symbol_table(_PARSE(code))
+        assert result["x"] == "b"
+
+    def test_global_inside_async_with(self) -> None:
+        code = "x = 'a'\nasync def f():\n    async with ctx() as _:\n        global x\n        x = 'b'\n"
+        result = build_symbol_table(_PARSE(code))
+        assert result["x"] == "b"

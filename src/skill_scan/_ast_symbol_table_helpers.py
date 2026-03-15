@@ -32,20 +32,18 @@ def _process_stmt(stmt: ast.stmt, table: dict[str, str | _Ref]) -> None:
 
 def _recurse_control_flow(stmt: ast.stmt, table: dict[str, str | _Ref]) -> None:
     """Recurse into control flow bodies (if/for/while/with/try)."""
-    if isinstance(stmt, ast.If):
-        _walk_body(stmt.body, table)
-        _walk_body(stmt.orelse, table)
-    elif isinstance(stmt, ast.For | ast.While):
-        _walk_body(stmt.body, table)
-        _walk_body(stmt.orelse, table)
-    elif isinstance(stmt, ast.With):
-        _walk_body(stmt.body, table)
-    elif isinstance(stmt, ast.Try):
-        _walk_body(stmt.body, table)
-        for handler in stmt.handlers:
-            _walk_body(handler.body, table)
-        _walk_body(stmt.orelse, table)
-        _walk_body(stmt.finalbody, table)
+    match stmt:
+        case ast.If() | ast.For() | ast.While() | ast.AsyncFor():
+            _walk_body(stmt.body, table)
+            _walk_body(stmt.orelse, table)
+        case ast.With() | ast.AsyncWith():
+            _walk_body(stmt.body, table)
+        case ast.Try():
+            _walk_body(stmt.body, table)
+            for handler in stmt.handlers:
+                _walk_body(handler.body, table)
+            _walk_body(stmt.orelse, table)
+            _walk_body(stmt.finalbody, table)
 
 
 def _collect_walrus(stmt: ast.stmt, table: dict[str, str | _Ref]) -> None:
@@ -213,23 +211,34 @@ def _collect_scope_declarations(
 ) -> tuple[set[str], set[str]]:
     """Collect global and nonlocal declarations from a function body.
 
-    Walks only the immediate body (plus control-flow branches) but does NOT
-    recurse into nested functions. Returns (global_names, nonlocal_names).
+    Walks the immediate body and recurses into control-flow branches
+    (if/for/while/with/try) but does NOT recurse into nested functions.
+    Returns (global_names, nonlocal_names).
     """
     global_names: set[str] = set()
     nonlocal_names: set[str] = set()
+
+    def _recurse(stmts: list[ast.stmt]) -> None:
+        g, n = _collect_scope_declarations(stmts)
+        global_names.update(g)
+        nonlocal_names.update(n)
+
     for stmt in body:
         if isinstance(stmt, ast.Global):
             global_names.update(stmt.names)
         elif isinstance(stmt, ast.Nonlocal):
             nonlocal_names.update(stmt.names)
-        elif isinstance(stmt, ast.If):
-            g, n = _collect_scope_declarations(stmt.body)
-            global_names |= g
-            nonlocal_names |= n
-            g, n = _collect_scope_declarations(stmt.orelse)
-            global_names |= g
-            nonlocal_names |= n
+        elif isinstance(stmt, ast.If | ast.For | ast.While | ast.AsyncFor):
+            _recurse(stmt.body)
+            _recurse(stmt.orelse)
+        elif isinstance(stmt, ast.With | ast.AsyncWith):
+            _recurse(stmt.body)
+        elif isinstance(stmt, ast.Try):
+            _recurse(stmt.body)
+            for handler in stmt.handlers:
+                _recurse(handler.body)
+            _recurse(stmt.orelse)
+            _recurse(stmt.finalbody)
     return global_names, nonlocal_names
 
 
