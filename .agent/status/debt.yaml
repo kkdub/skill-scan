@@ -35,24 +35,7 @@
   resolution: "Extend symbol table to track non-string types (at minimum list[int] for chr() comprehension patterns), or add a parallel pre-pass that collects integer-list assignments."
 
 # --- Structural / Maintenance Debt ---
-
-- id: DEBT-TYPE-IGNORE-CONFIG
-  description: "# type: ignore[arg-type] on ScanConfig(**kwargs) in config.py:106 — pyright cannot verify dynamic kwargs dict"
-  type: code-quality
-  severity: low
-  files:
-    - src/skill_scan/config.py
-  resolution: "Restructure from_toml_dict() to pass explicit keyword arguments instead of building a kwargs dict, or use TypedDict for the intermediate dict."
-
-- id: DEBT-021-SCOPE-DECL-CONTROLFLOW
-  description: "_collect_scope_declarations only recurses into ast.If branches; misses global/nonlocal inside for/while/try/with bodies"
-  type: effectiveness
-  severity: low
-  plan: PLAN-021
-  files:
-    - src/skill_scan/_ast_symbol_table_helpers.py:211
-  blocker: "Out of scope for PLAN-021; evasion via global/nonlocal inside loops is rare and low-priority."
-  resolution: "Extend _collect_scope_declarations to mirror _recurse_control_flow — add For, While, With, Try branches."
+# Resolved by fix branch: DEBT-TYPE-IGNORE-CONFIG (TypedDict for config kwargs), DEBT-021-SCOPE-DECL-CONTROLFLOW (for/while/with/try)
 
 - id: DEBT-021-NONLOCAL-MULTILEVEL
   description: "_process_nested only routes nonlocal writes one level up; two-level-deep nonlocal (inner -> outer -> grandparent) not handled"

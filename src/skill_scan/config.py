@@ -8,6 +8,7 @@ from __future__ import annotations
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TypedDict
 
 from skill_scan.models import Rule
 from skill_scan.rules.loader import load_rules_from_config
@@ -83,10 +84,20 @@ def load_config(path: Path | None = None) -> ScanConfig:
     return _build_config(data)
 
 
+class _ConfigKwargs(TypedDict, total=False):
+    extensions: frozenset[str]
+    max_file_size: int
+    max_total_size: int
+    max_file_count: int
+    strict_schema: bool
+    max_workers: int
+    suppress_rules: frozenset[str]
+    custom_rules: tuple[Rule, ...]
+
+
 def _build_config(data: dict[str, object]) -> ScanConfig:
     """Build a ScanConfig from parsed TOML data."""
-
-    kwargs: dict[str, object] = {}
+    kwargs: _ConfigKwargs = {}
     scan_section = data.get("scan", {})
 
     if isinstance(scan_section, dict):
@@ -103,27 +114,26 @@ def _build_config(data: dict[str, object]) -> ScanConfig:
         if custom:
             kwargs["custom_rules"] = tuple(custom)
 
-    return ScanConfig(**kwargs)  # type: ignore[arg-type]
+    return ScanConfig(**kwargs)
 
 
-_SCAN_FIELDS: dict[str, type] = {
-    "max_file_size": int,
-    "max_total_size": int,
-    "max_file_count": int,
-    "max_workers": int,
-    "strict_schema": bool,
-}
-
-
-def _apply_scan_settings(scan_section: dict[str, object], kwargs: dict[str, object]) -> None:
+def _apply_scan_settings(scan_section: dict[str, object], kwargs: _ConfigKwargs) -> None:
     """Extract known [scan] fields into kwargs; unknown keys are ignored."""
-    if "extensions" in scan_section:
-        ext_list = scan_section["extensions"]
-        if isinstance(ext_list, list):
-            kwargs["extensions"] = frozenset(str(e) for e in ext_list)
-
-    for key, expected_type in _SCAN_FIELDS.items():
-        if key in scan_section:
-            value = scan_section[key]
-            if isinstance(value, expected_type):
-                kwargs[key] = value
+    ext_list = scan_section.get("extensions")
+    if isinstance(ext_list, list):
+        kwargs["extensions"] = frozenset(str(e) for e in ext_list)
+    val: object = scan_section.get("max_file_size")
+    if isinstance(val, int):
+        kwargs["max_file_size"] = val
+    val = scan_section.get("max_total_size")
+    if isinstance(val, int):
+        kwargs["max_total_size"] = val
+    val = scan_section.get("max_file_count")
+    if isinstance(val, int):
+        kwargs["max_file_count"] = val
+    val = scan_section.get("max_workers")
+    if isinstance(val, int):
+        kwargs["max_workers"] = val
+    val = scan_section.get("strict_schema")
+    if isinstance(val, bool):
+        kwargs["strict_schema"] = val

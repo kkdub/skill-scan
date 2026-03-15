@@ -211,23 +211,34 @@ def _collect_scope_declarations(
 ) -> tuple[set[str], set[str]]:
     """Collect global and nonlocal declarations from a function body.
 
-    Walks only the immediate body (plus control-flow branches) but does NOT
-    recurse into nested functions. Returns (global_names, nonlocal_names).
+    Walks the immediate body and recurses into control-flow branches
+    (if/for/while/with/try) but does NOT recurse into nested functions.
+    Returns (global_names, nonlocal_names).
     """
     global_names: set[str] = set()
     nonlocal_names: set[str] = set()
+
+    def _recurse(stmts: list[ast.stmt]) -> None:
+        g, n = _collect_scope_declarations(stmts)
+        global_names.update(g)
+        nonlocal_names.update(n)
+
     for stmt in body:
         if isinstance(stmt, ast.Global):
             global_names.update(stmt.names)
         elif isinstance(stmt, ast.Nonlocal):
             nonlocal_names.update(stmt.names)
-        elif isinstance(stmt, ast.If):
-            g, n = _collect_scope_declarations(stmt.body)
-            global_names |= g
-            nonlocal_names |= n
-            g, n = _collect_scope_declarations(stmt.orelse)
-            global_names |= g
-            nonlocal_names |= n
+        elif isinstance(stmt, ast.If | ast.For | ast.While):
+            _recurse(stmt.body)
+            _recurse(stmt.orelse)
+        elif isinstance(stmt, ast.With):
+            _recurse(stmt.body)
+        elif isinstance(stmt, ast.Try):
+            _recurse(stmt.body)
+            for handler in stmt.handlers:
+                _recurse(handler.body)
+            _recurse(stmt.orelse)
+            _recurse(stmt.finalbody)
     return global_names, nonlocal_names
 
 
