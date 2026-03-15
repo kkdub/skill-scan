@@ -73,11 +73,3 @@
     - src/skill_scan/_ast_split_detector.py:91-99
   blocker: "Finding description templates in _check_dangerous are shared across all detection paths; separate wording requires refactoring the finding emission pipeline."
   resolution: "Add a branch in _check_dangerous or _try_resolve_split that distinguishes call-return findings from concatenation-evasion findings, using 'call-return evasion building X' instead of 'split variable evasion building X'."
-
-- id: DEBT-MATCH-STMT
-  description: "3-elif isinstance chain in _recurse_control_flow could use match statement (info-level lint)"
-  type: code-quality
-  severity: low
-  files:
-    - src/skill_scan/_ast_symbol_table_helpers.py
-  resolution: "Refactor if/elif chain at line 35 to Python 3.10+ match statement."

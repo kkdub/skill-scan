@@ -32,20 +32,18 @@ def _process_stmt(stmt: ast.stmt, table: dict[str, str | _Ref]) -> None:
 
 def _recurse_control_flow(stmt: ast.stmt, table: dict[str, str | _Ref]) -> None:
     """Recurse into control flow bodies (if/for/while/with/try)."""
-    if isinstance(stmt, ast.If):
-        _walk_body(stmt.body, table)
-        _walk_body(stmt.orelse, table)
-    elif isinstance(stmt, ast.For | ast.While):
-        _walk_body(stmt.body, table)
-        _walk_body(stmt.orelse, table)
-    elif isinstance(stmt, ast.With):
-        _walk_body(stmt.body, table)
-    elif isinstance(stmt, ast.Try):
-        _walk_body(stmt.body, table)
-        for handler in stmt.handlers:
-            _walk_body(handler.body, table)
-        _walk_body(stmt.orelse, table)
-        _walk_body(stmt.finalbody, table)
+    match stmt:
+        case ast.If() | ast.For() | ast.While():
+            _walk_body(stmt.body, table)
+            _walk_body(stmt.orelse, table)
+        case ast.With():
+            _walk_body(stmt.body, table)
+        case ast.Try():
+            _walk_body(stmt.body, table)
+            for handler in stmt.handlers:
+                _walk_body(handler.body, table)
+            _walk_body(stmt.orelse, table)
+            _walk_body(stmt.finalbody, table)
 
 
 def _collect_walrus(stmt: ast.stmt, table: dict[str, str | _Ref]) -> None:
