@@ -7,28 +7,21 @@ Uses predicate/resolver pairs: binop-add, %-format, f-string, .replace(), call.
 from __future__ import annotations
 
 import ast
-import re
 from collections.abc import Callable
 
-from skill_scan._ast_detectors import _DANGEROUS_NAMES, _make_finding
+from skill_scan._ast_detectors import _make_finding
 from skill_scan._ast_split_helpers import _scoped_lookup
+from skill_scan._ast_split_match import _NAME_RULE, _check_dangerous
 from skill_scan._ast_split_resolve import (
     _resolve_replace_chain,
     resolve_binop_chain,
     resolve_call,
+    resolve_call_return,
     resolve_fstring,
     resolve_percent_format,
 )
-from skill_scan.decoder import decode_payload, extract_encoded_strings
-from skill_scan.models import Finding, Severity
+from skill_scan.models import Finding
 
-# EXEC-006 names (dynamic import/indirection) vs EXEC-002 (code execution)
-_DYNAMIC_IMPORT_NAMES = frozenset({"__import__", "getattr"})
-_EXEC_NAMES = _DANGEROUS_NAMES - _DYNAMIC_IMPORT_NAMES
-_NAME_RULE: dict[str, tuple[str, Severity, str]] = {
-    **{n: ("EXEC-002", Severity.CRITICAL, "String splitting evasion") for n in _EXEC_NAMES},
-    **{n: ("EXEC-006", Severity.HIGH, "Dynamic import evasion") for n in _DYNAMIC_IMPORT_NAMES},
-}
 _INTROSPECTION_FUNCS = frozenset({"vars", "globals", "locals"})  # dynamic dispatch detection
 _Predicate = Callable[[ast.AST], bool]
 _Resolver = Callable[..., str | None]
@@ -85,7 +78,7 @@ def detect_split_evasion(
             findings.append(dd)
             continue
         il_scope = il_scope_map.get(id(node), "")
-        resolved = _try_resolve_split(
+        pair = _try_resolve_split(
             node,
             symbol_table,
             scope,
@@ -93,9 +86,10 @@ def detect_split_evasion(
             int_list_table=int_list_table,
             int_list_scope=il_scope,
         )
-        if resolved is None:
+        if pair is None:
             continue
-        finding = _check_dangerous(resolved, file_path, node)
+        resolved, label = pair
+        finding = _check_dangerous(resolved, file_path, node, label=label)
         if finding is not None:
             findings.append(finding)
     return findings
@@ -178,8 +172,12 @@ def _try_resolve_split(
     *,
     int_list_table: dict[str, list[int]] | None = None,
     int_list_scope: str = "",
-) -> str | None:
-    """Try each resolver; forwards *int_list_table* to resolve_call."""
+) -> tuple[str, str] | None:
+    """Try each resolver; returns (resolved, label) or None.
+
+    Label is 'call-return' when resolution came from call-return tracking,
+    'split variable' otherwise.
+    """
     for pred, resolver in _RESOLVERS:
         if not pred(node):
             continue
@@ -189,36 +187,10 @@ def _try_resolve_split(
             kw["int_list_scope"] = int_list_scope
         result = resolver(node, symbol_table, scope, **kw)
         if result is not None:
-            return result
-    return None
-
-
-def _check_dangerous(resolved: str, file_path: str, node: ast.AST) -> Finding | None:
-    """Return a Finding for a dangerous assembled name, or None if safe."""
-    entry = _NAME_RULE.get(resolved)
-    if entry is not None:
-        rule_id, severity, desc_prefix = entry
-        return _make_finding(
-            rule_id=rule_id,
-            severity=severity,
-            file=file_path,
-            line=getattr(node, "lineno", None),
-            matched_text=f"split variable evasion building '{resolved}'",
-            description=f"{desc_prefix} -- variables reassembled to build '{resolved}' via AST",
-        )
-    # Bridge to decoder for base64/hex/url encoded payloads
-    for payload in extract_encoded_strings(resolved):
-        decoded = decode_payload(payload)
-        if decoded is None:
-            continue
-        for name in _DANGEROUS_NAMES:
-            if re.search(rf"\b{re.escape(name)}\b", decoded):
-                return _make_finding(
-                    rule_id="EXEC-002",
-                    severity=Severity.CRITICAL,
-                    file=file_path,
-                    line=getattr(node, "lineno", None),
-                    matched_text=f"split encoded evasion: decoded '{name}'",
-                    description=f"Encoded payload decoded to dangerous name '{name}' via AST",
-                )
+            label = "split variable"
+            if isinstance(node, ast.Call):
+                cr = resolve_call_return(node, symbol_table, scope)
+                if cr == result:
+                    label = "call-return"
+            return result, label
     return None

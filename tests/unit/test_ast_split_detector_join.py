@@ -207,18 +207,21 @@ class TestClassSelfAttrResolution:
         findings = _detect(code)
         assert len(findings) >= 1
         assert findings[0].rule_id == "EXEC-002"
+        assert findings[0].line == 5  # method body, not class def
 
     def test_cross_method_binop_produces_exec002(self) -> None:
         code = "class E:\n  def a(self):\n    self.x='ev'\n  def b(self):\n    self.y='al'\n  def c(self):\n    r=self.x+self.y"
         findings = _detect(code)
         assert len(findings) >= 1
         assert findings[0].rule_id == "EXEC-002"
+        assert findings[0].line == 7  # method body, not class def
 
     def test_self_attr_format_call_produces_exec002(self) -> None:
         code = "class C:\n  def f(self):\n    self.a='ev'\n    self.b='al'\n  def g(self):\n    r='{}{}'.format(self.a,self.b)"
         findings = _detect(code)
         assert len(findings) >= 1
         assert findings[0].rule_id == "EXEC-002"
+        assert findings[0].line == 6  # method body, not class def
 
     def test_safe_self_attr_no_finding(self) -> None:
         code = "class C:\n  def f(self):\n    self.x='hello'\n  def g(self):\n    r=f'{self.x}'"
@@ -249,3 +252,4 @@ class TestPlanAcceptance:
         exec002 = [f for f in findings if f.rule_id == "EXEC-002"]
         assert len(exec002) >= 1
         assert any("eval" in f.matched_text for f in exec002)
+        assert exec002[0].line == 7  # method body, not class def

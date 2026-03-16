@@ -151,6 +151,18 @@ class TestListCompInJoin:
         assert any("system" in f.matched_text for f in findings)
 
 
+class TestListCompChrAlias:
+    def test_import_alias_chr_in_comprehension(self) -> None:
+        code = "from builtins import chr as c\nx = ''.join(c(i) for i in [101,118,97,108])\n"
+        findings = analyze_python(code, _FILE)
+        assert any("eval" in f.matched_text for f in findings)
+
+    def test_import_alias_chr_in_listcomp(self) -> None:
+        code = "from builtins import chr as c\nx = ''.join([c(i) for i in [101,118,97,108]])\n"
+        findings = analyze_python(code, _FILE)
+        assert any("eval" in f.matched_text for f in findings)
+
+
 class TestBytesDecodeResolution:
     def test_bytes_decode_eval(self) -> None:
         code = "x = b'eval'.decode()\n"

@@ -1,6 +1,6 @@
 # .agent/status/debt.yaml
 # Entries are removed when resolved. Git history tracks removals.
-# Last updated: 2026-03-16
+# Last updated: 2026-03-17
 # Resolved by PLAN-019: lone surrogates, null bytes, OBFS-001 catalog, str.format/%-format evasion
 # Resolved by PLAN-020: FSTRING-CONV, GENERATOR-JOIN, STRING-MULT, PERCENT-OVERPROVISIONED, PERCENT-MIXED-SPECIFIERS, CONTAINERS (dict-only; list indices remain)
 # Resolved by PR-034 review: DEBT-020-RESUB-BACKSLASH (lambda replacement), DEBT-020-UNBOUNDED-MULT (_MAX_REPEAT=1000 cap)
@@ -13,6 +13,7 @@
 # Resolved by PLAN-025: DEBT-024-KWARGS-UNPACKING (detect_kwargs_unpacking + _DANGEROUS_KWARGS table)
 # Resolved by PLAN-026: DEBT-025-DICT-UNION, DEBT-025-SHELL-INT-TRUTHY
 # Resolved by PLAN-027: DEBT-026-CHAINED-UNION, DEBT-026-STRING-TRUTHINESS, DEBT-024-TRACKED-COMPREHENSION
+# Resolved by fix: DEBT-022-CALL-RETURN-DESCRIPTION, DEBT-021-SCOPE-ATTRIBUTION-ASSERTION, DEBT-027-CHR-ALIAS
 
 # --- Structural / Maintenance Debt ---
 # Resolved by fix branch: DEBT-TYPE-IGNORE-CONFIG (TypedDict for config kwargs), DEBT-021-SCOPE-DECL-CONTROLFLOW (for/while/with/try)
@@ -27,37 +28,30 @@
   blocker: "Multi-level nonlocal resolution requires a full scope chain; single-level covers the most common evasion pattern."
   resolution: "Implement scope chain tracking to propagate nonlocal writes through multiple nesting levels."
 
-- id: DEBT-021-SCOPE-ATTRIBUTION-ASSERTION
-  description: "R-IMP008 requires _build_scope_map to walk class method bodies for correct scope attribution, but test_ast_split_detector_join.py has no line/scope assertions — requirement can pass while attribution is wrong"
-  type: test-coverage
-  severity: low
-  plan: PLAN-021
-  files:
-    - tests/unit/test_ast_split_detector_join.py
-  blocker: "None — straightforward to add assertions checking .line or scope on findings from class method payloads."
-  resolution: "Add assertions in TestClassSelfAttrResolution or TestPlanAcceptance that verify finding line numbers correspond to the class method body, not the class definition."
 
-- id: DEBT-022-CALL-RETURN-DESCRIPTION
-  description: "resolve_call_return findings use 'split variable evasion' description even for standalone call-return paths, which is misleading for analysts"
-  type: security
-  severity: low
-  plan: PLAN-022
-  files:
-    - src/skill_scan/_ast_split_detector.py:91-99
-  blocker: "Finding description templates in _check_dangerous are shared across all detection paths; separate wording requires refactoring the finding emission pipeline."
-  resolution: "Add a branch in _check_dangerous or _try_resolve_split that distinguishes call-return findings from concatenation-evasion findings, using 'call-return evasion building X' instead of 'split variable evasion building X'."
 
 # --- PLAN-027 Red-Team Debt ---
 
-- id: DEBT-027-CHR-ALIAS
-  description: "_resolve_comprehension_chr hardcodes 'chr' as a string literal; chr aliased via f=chr or import builtins; builtins.chr(c) evades detection completely"
+- id: DEBT-027-MAP-CHR-BUILTINS-ALIAS
+  description: "_resolve_map_join compares fn_name == 'chr' but alias_map resolves 'from builtins import chr as c' to 'builtins.chr'; map(c, [ints]) evades when chr is import-aliased"
   type: effectiveness
   severity: low
   plan: PLAN-027
   files:
-    - src/skill_scan/_ast_split_join_helpers.py
-  blocker: "alias_map is threaded through the call chain but not consulted in _resolve_comprehension_chr; fixing requires checking alias_map for chr resolution, which is straightforward but out of scope for PLAN-027's targeted debt fixes."
-  resolution: "In _resolve_comprehension_chr, resolve the function name via alias_map (already available in the call chain) before comparing to 'chr'."
+    - src/skill_scan/_ast_split_map_helpers.py:25
+  blocker: "Same pattern as DEBT-027-CHR-ALIAS (now fixed in _resolve_comprehension_chr); needs the same 'in (chr, builtins.chr)' check."
+  resolution: "Change fn_name == 'chr' to fn_name in ('chr', 'builtins.chr') in _resolve_map_join, matching _resolve_comprehension_chr."
+
+- id: DEBT-045-CALL-RETURN-LABEL-PROPAGATION
+  description: "Call-return label only applies when the resolved Call node matches resolve_call_return; for mixed patterns like a()+b() (binop) or f'{a()}{b()}' (fstring), leaf call-return resolutions still get labeled 'split variable'"
+  type: effectiveness
+  severity: low
+  plan: none
+  files:
+    - src/skill_scan/_ast_split_detector.py:175-196
+    - src/skill_scan/_ast_split_resolve.py
+  blocker: "Requires resolvers to return (value, label) tuples or track whether any leaf resolution used call-return; changes the resolver signature contract across all _RESOLVERS entries."
+  resolution: "Have resolvers return (value, source_label) tuples instead of bare strings. Update _RESOLVERS type alias and all callers. Alternatively, add a thread-local or context flag that resolve_call_return sets when it contributes to a resolution."
 
 - id: DEBT-027-INTLIST-AUGMENTED
   description: "codes += [more_ints] and codes.extend([ints]) not tracked by _collect_int_list_assigns; attacker can split int list across multiple statements to evade"
