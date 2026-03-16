@@ -284,7 +284,6 @@ def _resolve_join_elements(
 
 
 # re-exports at BOTTOM -- backward-compat (Facade Re-export Pattern)
-from skill_scan._ast_split_join_helpers import (  # noqa: E402
-    _resolve_generator_join as _resolve_generator_join,
+from skill_scan._ast_split_map_helpers import (  # noqa: E402
     _resolve_map_join as _resolve_map_join,
 )

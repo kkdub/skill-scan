@@ -1,8 +1,7 @@
 """Kwargs unpacking detector -- detect dangerous keyword arguments via ** unpacking.
 
-Detects patterns like subprocess.run(**opts) where opts contains shell=True,
-or subprocess.run(**{'shell': True}). Table-driven via _DANGEROUS_KWARGS.
-Scope-aware via _build_scope_map. Pure functions: no I/O, no side effects.
+Detects subprocess.run(**opts) where opts contains shell=True (or any truthy value).
+Table-driven via _DANGEROUS_KWARGS.  Scope-aware via _build_scope_map.
 """
 
 from __future__ import annotations
@@ -14,20 +13,13 @@ from skill_scan._ast_helpers import get_call_name
 from skill_scan._ast_split_detector import _build_scope_map
 from skill_scan.models import Finding, Severity
 
-# Dangerous kwargs table -- maps function-name prefix to
-# (key, value, rule_id, severity, desc_prefix) tuples. Extend by adding entries.
+_UNRESOLVABLE = object()  # sentinel for _eval_constant_expr failure
 
+# Dangerous kwargs table: prefix -> (key, value, rule_id, severity, desc_prefix).
 _DangerousEntry = tuple[str, object, str, Severity, str]
-
 _DANGEROUS_KWARGS: dict[str, list[_DangerousEntry]] = {
     "subprocess.": [
-        (
-            "shell",
-            True,
-            "EXEC-002",
-            Severity.CRITICAL,
-            "subprocess with shell=True via **kwargs unpacking",
-        ),
+        ("shell", True, "EXEC-002", Severity.CRITICAL, "subprocess with shell=True via **kwargs unpacking"),
     ],
 }
 
@@ -40,11 +32,7 @@ def detect_kwargs_unpacking(
     *,
     _nodes: list[ast.AST] | None = None,
 ) -> list[Finding]:
-    """Detect dangerous keyword arguments passed via ** unpacking.
-
-    Walks all ast.Call nodes in *tree*.  For each call whose resolved name
-    matches a prefix in ``_DANGEROUS_KWARGS``, inspects ``node.keywords``
-    for ``**expr`` entries and checks resolved dicts against the table.
+    """Detect dangerous keyword arguments passed via ``**`` unpacking.
 
     Scope-aware: resolves function-local dicts before module-level ones.
     Accepts ``_nodes`` to reuse a pre-built ``ast.walk()`` list.
@@ -65,13 +53,10 @@ def detect_kwargs_unpacking(
 
 
 def _match_prefix(call_name: str) -> list[_DangerousEntry] | None:
-    """Return matching table entries for *call_name*, or None."""
+    """Return matching dangerous-kwargs entries for *call_name*, or ``None``."""
     if not call_name:
         return None
-    for prefix, entries in _DANGEROUS_KWARGS.items():
-        if call_name.startswith(prefix):
-            return entries
-    return None
+    return next((e for p, e in _DANGEROUS_KWARGS.items() if call_name.startswith(p)), None)
 
 
 def _check_call_kwargs(
@@ -79,7 +64,7 @@ def _check_call_kwargs(
     call_name: str,
     entries: list[_DangerousEntry],
     symbol_table: dict[str, str],
-    dict_assigns: dict[str, dict[str, str]],
+    dict_assigns: dict[str, dict[str, object]],
     file_path: str,
     findings: list[Finding],
     scope: str = "",
@@ -108,14 +93,12 @@ def _check_call_kwargs(
 def _resolve_kwargs_dict(
     node: ast.expr,
     symbol_table: dict[str, str],
-    dict_assigns: dict[str, dict[str, str]],
+    dict_assigns: dict[str, dict[str, object]],
     scope: str = "",
-) -> dict[str, str] | None:
-    """Resolve a ** unpacking argument to a dict of string key-value pairs.
+) -> dict[str, object] | None:
+    """Resolve ``**expr`` to a dict of key-value pairs, or ``None``.
 
-    Tries function-scoped lookups first (via *scope* prefix), then falls
-    back to module-level.  Returns ``None`` when the expression cannot be
-    resolved.
+    Tries scoped lookups first, then module-level.
     """
     if isinstance(node, ast.Dict):
         return _extract_dict_literal(node)
@@ -135,14 +118,12 @@ def _resolve_kwargs_dict(
     return None
 
 
-def _collect_dict_assigns(tree: ast.Module) -> dict[str, dict[str, str]]:
+def _collect_dict_assigns(tree: ast.Module) -> dict[str, dict[str, object]]:
     """Pre-pass: collect dict variable assignments from all scopes.
 
-    Unlike the symbol table, this tracks ALL constant values (including
-    booleans and integers), converting them to strings for uniform comparison.
-    Scoped entries are keyed as ``'funcname.varname'``.
+    Tracks raw constant values (preserving native Python types).
     """
-    result: dict[str, dict[str, str]] = {}
+    result: dict[str, dict[str, object]] = {}
     _collect_from_body(tree.body, "", result)
     for node in tree.body:
         if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
@@ -154,7 +135,7 @@ def _collect_dict_assigns(tree: ast.Module) -> dict[str, dict[str, str]]:
     return result
 
 
-def _collect_from_body(body: list[ast.stmt], scope: str, result: dict[str, dict[str, str]]) -> None:
+def _collect_from_body(body: list[ast.stmt], scope: str, result: dict[str, dict[str, object]]) -> None:
     """Collect dict assignments from a body, keyed with *scope* prefix."""
     for stmt in body:
         if isinstance(stmt, ast.AugAssign) and isinstance(stmt.op, ast.BitOr):
@@ -166,7 +147,7 @@ def _collect_from_body(body: list[ast.stmt], scope: str, result: dict[str, dict[
 def _track_assign(
     target: ast.expr,
     value: ast.expr,
-    result: dict[str, dict[str, str]],
+    result: dict[str, dict[str, object]],
     scope: str,
 ) -> None:
     """Dispatch a single-target Assign to the appropriate tracker."""
@@ -184,30 +165,30 @@ def _track_assign(
 def _track_subscript_assign(
     target: ast.Subscript,
     value: ast.expr,
-    result: dict[str, dict[str, str]],
+    result: dict[str, dict[str, object]],
     scope: str = "",
 ) -> None:
-    """Track a subscript assignment like opts['shell'] = True."""
+    """Track ``opts['shell'] = True`` -- subscript assignment to tracked dict."""
     if not isinstance(target.value, ast.Name):
         return
-    if not isinstance(target.slice, ast.Constant):
+    if not (isinstance(target.slice, ast.Constant) and isinstance(target.slice.value, str)):
         return
-    if not isinstance(target.slice.value, str):
-        return
-    if not isinstance(value, ast.Constant):
+    resolved = _eval_constant_expr(value)
+    if resolved is _UNRESOLVABLE:
         return
     var_name = f"{scope}.{target.value.id}" if scope else target.value.id
-    if var_name not in result:
-        result[var_name] = {}
-    result[var_name][target.slice.value] = str(value.value)
+    result.setdefault(var_name, {})[target.slice.value] = resolved
 
 
 def _resolve_dict_operand(
     node: ast.expr,
-    result: dict[str, dict[str, str]],
+    result: dict[str, dict[str, object]],
     scope: str,
-) -> dict[str, str] | None:
-    """Resolve one operand of a dict union to a concrete dict, or None."""
+) -> dict[str, object] | None:
+    """Resolve one operand of a dict union to a concrete dict, or ``None``.
+
+    Recurses into ``ast.BinOp(BitOr)`` for chained unions (``a | b | c``).
+    """
     if isinstance(node, ast.Dict):
         return _extract_dict_literal(node)
     if isinstance(node, ast.Name):
@@ -216,13 +197,19 @@ def _resolve_dict_operand(
         if hit is not None or not scope:
             return hit
         return result.get(node.id)
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr):
+        left = _resolve_dict_operand(node.left, result, scope)
+        if left is None:
+            return None
+        right = _resolve_dict_operand(node.right, result, scope)
+        return {**left, **right} if right is not None else None
     return None
 
 
 def _track_union(
     target: ast.Name,
     binop: ast.BinOp,
-    result: dict[str, dict[str, str]],
+    result: dict[str, dict[str, object]],
     scope: str,
 ) -> None:
     """Track ``x = a | b`` where both operands are resolvable dicts."""
@@ -233,7 +220,7 @@ def _track_union(
         result[key] = {**left, **right}
 
 
-def _track_aug_union(stmt: ast.AugAssign, result: dict[str, dict[str, str]], scope: str) -> None:
+def _track_aug_union(stmt: ast.AugAssign, result: dict[str, dict[str, object]], scope: str) -> None:
     """Track ``x |= rhs`` -- merge into existing tracked dict or drop."""
     if not isinstance(stmt.target, ast.Name):
         return
@@ -242,35 +229,49 @@ def _track_aug_union(stmt: ast.AugAssign, result: dict[str, dict[str, str]], sco
     if existing is None:
         return
     rhs = _resolve_dict_operand(stmt.value, result, scope)
-    if rhs is None:
+    if rhs is not None:
+        result[key] = {**existing, **rhs}
+    else:
         del result[key]
-        return
-    result[key] = {**existing, **rhs}
 
 
-def _extract_dict_literal(node: ast.Dict) -> dict[str, str] | None:
+def _eval_constant_expr(node: ast.expr) -> object:
+    """Resolve ast.Constant or UnaryOp(USub|UAdd, Constant) to a value.
+
+    Returns ``_UNRESOLVABLE`` sentinel when the node cannot be evaluated.
+    """
+    if isinstance(node, ast.Constant):
+        return node.value
+    if isinstance(node, ast.UnaryOp) and isinstance(node.operand, ast.Constant):
+        val = node.operand.value
+        if isinstance(node.op, ast.USub) and isinstance(val, int | float | complex):
+            return -val
+        if isinstance(node.op, ast.UAdd) and isinstance(val, int | float | complex):
+            return +val
+    return _UNRESOLVABLE
+
+
+def _extract_dict_literal(node: ast.Dict) -> dict[str, object] | None:
     """Extract constant key-value pairs from an inline ast.Dict.
 
-    Returns ``None`` if any ``**spread`` element is present, since spread
-    ordering can override extracted keys and produce false positives.
+    Returns ``None`` if any ``**spread`` is present (avoids false positives).
+    Values are stored as raw Python constants (preserving native types).
     """
     if any(k is None for k in node.keys):
         return None
-    result: dict[str, str] = {}
+    result: dict[str, object] = {}
     for key_node, value_node in zip(node.keys, node.values, strict=False):
-        if (
-            isinstance(key_node, ast.Constant)
-            and isinstance(key_node.value, str)
-            and isinstance(value_node, ast.Constant)
-        ):
-            result[key_node.value] = str(value_node.value)
+        if isinstance(key_node, ast.Constant) and isinstance(key_node.value, str):
+            val = _eval_constant_expr(value_node)
+            if val is not _UNRESOLVABLE:
+                result[key_node.value] = val
     return result
 
 
-def _lookup_symbol_table_dict(var_name: str, symbol_table: dict[str, str]) -> dict[str, str]:
+def _lookup_symbol_table_dict(var_name: str, symbol_table: dict[str, str]) -> dict[str, object]:
     """Reconstruct a dict from ``'varname[key]'`` composite keys in symbol table."""
     prefix = f"{var_name}["
-    result: dict[str, str] = {}
+    result: dict[str, object] = {}
     for st_key, st_value in symbol_table.items():
         if st_key.startswith(prefix) and st_key.endswith("]"):
             inner_key = st_key[len(prefix) : -1]
@@ -278,23 +279,18 @@ def _lookup_symbol_table_dict(var_name: str, symbol_table: dict[str, str]) -> di
     return result
 
 
-_FALSY_STRINGS: frozenset[str] = frozenset({"0", "0.0", "0j", "False", "None", "", "false"})
-
-
 def _kwarg_matches(
-    resolved: dict[str, str],
+    resolved: dict[str, object],
     key: str,
     value: object,
 ) -> bool:
     """Check whether *resolved* contains a matching (key, value) pair.
 
-    When *value* is ``bool``, uses a string-based truthiness heuristic.
-    Note: ``isinstance(True, int)`` is True, so bool check comes first.
+    Bool table entries use truthiness; non-bool entries use str() equality.
     """
     if key not in resolved:
         return False
-    resolved_val = str(resolved[key])
+    resolved_val = resolved[key]
     if isinstance(value, bool):
-        is_falsy = resolved_val in _FALSY_STRINGS
-        return (not is_falsy) if value else is_falsy
-    return resolved_val == str(value)
+        return bool(resolved_val) == value
+    return str(resolved_val) == str(value)

@@ -1,4 +1,8 @@
-"""AST split detector -- registry-based dispatch for dangerous-name reconstruction."""
+"""AST split detector -- registry-based dispatch for dangerous-name reconstruction.
+
+Walks AST nodes to find string-assembly patterns building dangerous names.
+Uses predicate/resolver pairs: binop-add, %-format, f-string, .replace(), call.
+"""
 
 from __future__ import annotations
 
@@ -67,10 +71,12 @@ def detect_split_evasion(
     symbol_table: dict[str, str],
     *,
     _nodes: list[ast.AST] | None = None,
+    int_list_table: dict[str, list[int]] | None = None,
 ) -> list[Finding]:
     """Detect dangerous names assembled from split variables."""
     findings: list[Finding] = []
     scope_map = _build_scope_map(tree)
+    il_scope_map = _build_scope_map(tree, method_scope=True) if int_list_table else scope_map
     for node in _nodes if _nodes is not None else ast.walk(tree):
         scope = scope_map.get(id(node), "")
         # Dynamic dispatch via introspection subscripts
@@ -78,7 +84,15 @@ def detect_split_evasion(
         if dd is not None:
             findings.append(dd)
             continue
-        resolved = _try_resolve_split(node, symbol_table, scope, alias_map)
+        il_scope = il_scope_map.get(id(node), "")
+        resolved = _try_resolve_split(
+            node,
+            symbol_table,
+            scope,
+            alias_map,
+            int_list_table=int_list_table,
+            int_list_scope=il_scope,
+        )
         if resolved is None:
             continue
         finding = _check_dangerous(resolved, file_path, node)
@@ -87,8 +101,12 @@ def detect_split_evasion(
     return findings
 
 
-def _build_scope_map(tree: ast.Module) -> dict[int, str]:
-    """Map node id -> scope name (function or class name for methods)."""
+def _build_scope_map(tree: ast.Module, *, method_scope: bool = False) -> dict[int, str]:
+    """Map node id -> scope name.
+
+    When *method_scope* is True, class methods get ``ClassName.method``
+    instead of just ``ClassName``, giving per-method granularity.
+    """
     result: dict[int, str] = {}
     pairs: list[tuple[ast.AST, str]] = []
     for node in tree.body:
@@ -97,7 +115,8 @@ def _build_scope_map(tree: ast.Module) -> dict[int, str]:
         elif isinstance(node, ast.ClassDef):
             for stmt in node.body:
                 if isinstance(stmt, ast.FunctionDef | ast.AsyncFunctionDef):
-                    pairs.append((stmt, node.name))
+                    scope = f"{node.name}.{stmt.name}" if method_scope else node.name
+                    pairs.append((stmt, scope))
     for root, scope_name in pairs:
         for child in ast.walk(root):
             result[id(child)] = scope_name
@@ -156,13 +175,21 @@ def _try_resolve_split(
     symbol_table: dict[str, str],
     scope: str,
     alias_map: dict[str, str] | None = None,
+    *,
+    int_list_table: dict[str, list[int]] | None = None,
+    int_list_scope: str = "",
 ) -> str | None:
-    """Try to resolve a node to a string via the _RESOLVERS registry."""
+    """Try each resolver; forwards *int_list_table* to resolve_call."""
     for pred, resolver in _RESOLVERS:
-        if pred(node):
-            result = resolver(node, symbol_table, scope, alias_map=alias_map)
-            if result is not None:
-                return result
+        if not pred(node):
+            continue
+        kw: dict[str, object] = {"alias_map": alias_map}
+        if resolver is resolve_call:
+            kw["int_list_table"] = int_list_table
+            kw["int_list_scope"] = int_list_scope
+        result = resolver(node, symbol_table, scope, **kw)
+        if result is not None:
+            return result
     return None
 
 

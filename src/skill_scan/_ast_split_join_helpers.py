@@ -1,9 +1,7 @@
 """AST split join helpers -- join resolution for the split detector.
 
-Resolves ``''.join(x for x in [...])`` , ``''.join(map(chr/str, [...]))``,
-``''.join(reversed(...))``, and general ``'sep'.join([...])`` patterns.
-Used by _ast_split_detector to detect dangerous names assembled via
-join-based evasion.
+Resolves ``''.join(...)`` patterns (list/generator/map/reversed) and tracked
+int-list variables used as comprehension iterables via ``_collect_int_list_assigns``.
 """
 
 from __future__ import annotations
@@ -15,47 +13,148 @@ from skill_scan._ast_split_helpers import (
     _resolve_join_elements,
     _scoped_lookup,
 )
+from skill_scan._ast_split_map_helpers import (
+    _resolve_map_chr,
+    _resolve_map_join,
+)
 
 
-def _resolve_generator_join(
-    gen: ast.GeneratorExp, sep: str, symbol_table: dict[str, str], scope: str
-) -> str | None:
-    """Resolve ``p for p in ['ev', 'al']`` or ``chr(c) for c in [ints]`` inside join."""
-    return _resolve_comprehension_join(gen, sep, symbol_table, scope)
+def _collect_int_list_assigns(tree: ast.Module) -> dict[str, list[int]]:
+    """Pre-pass: collect Name = [int, ...] assignments from all scopes."""
+    result: dict[str, list[int]] = {}
+    # Module-level assignments (no scope prefix)
+    _collect_int_lists_from_body(tree.body, "", result)
+    for node in tree.body:
+        # Function-level assignments (scoped by function name)
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+            _collect_int_lists_from_body(node.body, node.name, result)
+        # Class method assignments (scoped by class name)
+        elif isinstance(node, ast.ClassDef):
+            for stmt in node.body:
+                if isinstance(stmt, ast.FunctionDef | ast.AsyncFunctionDef):
+                    _collect_int_lists_from_body(stmt.body, f"{node.name}.{stmt.name}", result)
+    return result
+
+
+def _collect_int_lists_from_body(body: list[ast.stmt], scope: str, result: dict[str, list[int]]) -> None:
+    """Collect assignments; int-lists get values, others get [] shadow marker."""
+    for stmt in body:
+        if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1:
+            tgt = stmt.targets[0]
+            if isinstance(tgt, ast.Name):
+                key = f"{scope}.{tgt.id}" if scope else tgt.id
+                if isinstance(stmt.value, ast.List | ast.Tuple):
+                    ints = _extract_int_list(stmt.value.elts)
+                    result[key] = ints if ints is not None else []
+                else:
+                    result[key] = []
+        for child_body in _sub_bodies(stmt):
+            _collect_int_lists_from_body(child_body, scope, result)
+
+
+def _sub_bodies(stmt: ast.stmt) -> list[list[ast.stmt]]:
+    """Yield child body lists from control-flow nodes."""
+    # Only recurse into known control-flow nodes, not function/class defs
+    if not isinstance(stmt, ast.If | ast.For | ast.While | ast.AsyncFor | ast.With | ast.AsyncWith | ast.Try):
+        return []
+    # Collect body, orelse, finalbody attributes (varies by node type)
+    bodies = [getattr(stmt, a) for a in ("body", "orelse", "finalbody") if hasattr(stmt, a)]
+    # Try handlers have their own body lists
+    for handler in getattr(stmt, "handlers", ()):
+        bodies.append(handler.body)
+    return bodies
+
+
+def _extract_int_list(elts: list[ast.expr]) -> list[int] | None:
+    """Extract a list of int constants, or None if any element is non-int."""
+    # Strict all-or-nothing: one non-int element rejects the whole list
+    values: list[int] = []
+    for elt in elts:
+        if not isinstance(elt, ast.Constant) or not isinstance(elt.value, int):
+            return None
+        values.append(elt.value)
+    return values
 
 
 def _resolve_comprehension_join(
-    node: ast.GeneratorExp | ast.ListComp, sep: str, symbol_table: dict[str, str], scope: str
+    node: ast.GeneratorExp | ast.ListComp,
+    sep: str,
+    symbol_table: dict[str, str],
+    scope: str,
+    *,
+    int_list_table: dict[str, list[int]] | None = None,
+    int_list_scope: str = "",
 ) -> str | None:
-    """Resolve generator or list comprehension inside join to a string.
-
-    Handles both ``x for x in [...]`` identity patterns and
-    ``chr(c) for c in [ints]`` chr-mapping patterns.
-    """
+    """Resolve generator or list comprehension inside join to a string."""
     if len(node.generators) != 1:
         return None
     comp = node.generators[0]
     if comp.ifs or not isinstance(comp.target, ast.Name):
         return None
-    if not isinstance(comp.iter, ast.List | ast.Tuple):
-        return None
-    # chr(x) comprehension: ``chr(c) for c in [101, 118, ...]``
-    chr_result = _resolve_comprehension_chr(node.elt, comp.target.id, comp.iter.elts, sep)
+    if isinstance(comp.iter, ast.List | ast.Tuple):
+        return _resolve_direct_iter(node.elt, comp.target.id, comp.iter.elts, sep, symbol_table, scope)
+    if isinstance(comp.iter, ast.Name) and int_list_table:
+        return _resolve_tracked_iter(
+            node.elt,
+            comp.target.id,
+            comp.iter.id,
+            sep,
+            int_list_table,
+            scope,
+            int_list_scope=int_list_scope,
+        )
+    return None
+
+
+def _resolve_direct_iter(
+    elt: ast.expr,
+    target_id: str,
+    iter_elts: list[ast.expr],
+    sep: str,
+    symbol_table: dict[str, str],
+    scope: str,
+) -> str | None:
+    """Resolve comprehension with direct List/Tuple iteration source."""
+    # Try chr(x) pattern first: chr(c) for c in [101, 118, ...]
+    chr_result = _resolve_comprehension_chr(elt, target_id, iter_elts, sep)
     if chr_result is not None:
         return chr_result
-    # Identity comprehension: ``x for x in [...]`` where elt == target
-    if not (isinstance(node.elt, ast.Name) and node.elt.id == comp.target.id):
+    # Identity pattern: x for x in ['ev', 'al']
+    if isinstance(elt, ast.Name) and elt.id == target_id:
+        parts = _resolve_expr_list(iter_elts, symbol_table, scope)
+        if parts is not None:
+            return sep.join(parts)
+    return None
+
+
+def _resolve_tracked_iter(
+    elt: ast.expr,
+    target_id: str,
+    iter_name: str,
+    sep: str,
+    int_list_table: dict[str, list[int]],
+    scope: str,
+    *,
+    int_list_scope: str = "",
+) -> str | None:
+    """Resolve comprehension with tracked int-list variable as iteration source."""
+    ls = int_list_scope or scope
+    int_list = int_list_table.get(f"{ls}.{iter_name}") if ls else None
+    if int_list is not None and not int_list:
+        return None  # Shadow marker: locally bound but not an int list
+    if int_list is None:
+        int_list = int_list_table.get(iter_name)
+    if not int_list:
         return None
-    parts = _resolve_expr_list(comp.iter.elts, symbol_table, scope)
-    if parts is None:
-        return None
-    return sep.join(parts)
+    synthetic: list[ast.expr] = [ast.Constant(value=v) for v in int_list]
+    return _resolve_comprehension_chr(elt, target_id, synthetic, sep)
 
 
 def _resolve_comprehension_chr(
     elt: ast.expr, target_id: str, iter_elts: list[ast.expr], sep: str
 ) -> str | None:
     """Resolve ``chr(x) for x in [int, ...]`` comprehension pattern."""
+    # Verify the element is a chr() call with the loop variable as argument
     if not (
         isinstance(elt, ast.Call)
         and isinstance(elt.func, ast.Name)
@@ -68,52 +167,6 @@ def _resolve_comprehension_chr(
     if not (isinstance(arg, ast.Name) and arg.id == target_id):
         return None
     return _resolve_map_chr(iter_elts, sep)
-
-
-def _resolve_map_join(
-    call: ast.Call,
-    sep: str,
-    alias_map: dict[str, str],
-) -> str | None:
-    """Resolve ``map(chr, [ints])`` or ``map(str, [strs])`` inside join."""
-    from skill_scan._ast_helpers import get_call_name
-
-    if get_call_name(call, alias_map) != "map" or len(call.args) != 2:
-        return None
-    func_arg = call.args[0]
-    if not isinstance(func_arg, ast.Name):
-        return None
-    fn_name = alias_map.get(func_arg.id, func_arg.id)
-    iter_arg = call.args[1]
-    if not isinstance(iter_arg, ast.List | ast.Tuple):
-        return None
-    if fn_name == "chr":
-        return _resolve_map_chr(iter_arg.elts, sep)
-    if fn_name == "str":
-        return _resolve_map_str(iter_arg.elts, sep)
-    return None
-
-
-def _resolve_map_chr(elts: list[ast.expr], sep: str) -> str | None:
-    """Convert list of int literals to characters, joined by sep."""
-    parts: list[str] = []
-    for elt in elts:
-        if not isinstance(elt, ast.Constant) or not isinstance(elt.value, int):
-            return None
-        if not (0 <= elt.value <= 0x10FFFF):
-            return None
-        parts.append(chr(elt.value))
-    return sep.join(parts)
-
-
-def _resolve_map_str(elts: list[ast.expr], sep: str) -> str | None:
-    """Pass through list of string literals, joined by sep."""
-    parts: list[str] = []
-    for elt in elts:
-        if not isinstance(elt, ast.Constant) or not isinstance(elt.value, str):
-            return None
-        parts.append(elt.value)
-    return sep.join(parts)
 
 
 def _is_str_join_call(node: ast.Call) -> bool:
@@ -151,13 +204,8 @@ def _resolve_reversed_join(
     symbol_table: dict[str, str],
     scope: str,
 ) -> str | None:
-    """Resolve reversed() inside join: ``''.join(reversed('lave'))`` -> 'eval'.
-
-    Gates to reversed() on:
-    - string literal arguments (reversed the characters)
-    - List/Tuple of tracked elements (reverse then join)
-    - tracked variable names resolving to strings
-    """
+    """Resolve reversed() inside join: ``''.join(reversed('lave'))`` -> 'eval'."""
+    # Gate: must be a direct reversed() call with exactly one positional arg
     if not (isinstance(call.func, ast.Name) and call.func.id == "reversed"):
         return None
     if len(call.args) != 1 or call.keywords:
@@ -173,22 +221,31 @@ def _resolve_join_call(
     symbol_table: dict[str, str],
     scope: str,
     alias_map: dict[str, str] | None = None,
+    *,
+    int_list_table: dict[str, list[int]] | None = None,
+    int_list_scope: str = "",
 ) -> str | None:
     """Resolve ''.join(...) with list/tuple, generator, reversed, or map(chr/str) arguments."""
     if not _is_str_join_call(node):
         return None
-    if not isinstance(node.func, ast.Attribute) or not isinstance(node.func.value, ast.Constant):
-        return None  # defensive: _is_str_join_call guarantees this
+    if not (isinstance(node.func, ast.Attribute) and isinstance(node.func.value, ast.Constant)):
+        return None  # pragma: no cover — _is_str_join_call guarantees this
     sep = str(node.func.value.value)
     arg = node.args[0]
     if isinstance(arg, ast.List | ast.Tuple):
         return _resolve_join_elements(arg.elts, sep, symbol_table, scope)
     if isinstance(arg, ast.GeneratorExp | ast.ListComp):
-        return _resolve_comprehension_join(arg, sep, symbol_table, scope)
+        return _resolve_comprehension_join(
+            arg,
+            sep,
+            symbol_table,
+            scope,
+            int_list_table=int_list_table,
+            int_list_scope=int_list_scope,
+        )
     if isinstance(arg, ast.Call):
-        am = alias_map or {}
         rev = _resolve_reversed_join(arg, sep, symbol_table, scope)
         if rev is not None:
             return rev
-        return _resolve_map_join(arg, sep, am)
+        return _resolve_map_join(arg, sep, alias_map or {})
     return None
