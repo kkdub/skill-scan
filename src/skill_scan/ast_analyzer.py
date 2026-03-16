@@ -16,6 +16,7 @@ import ast
 from skill_scan._ast_helpers import build_alias_map
 from skill_scan._ast_kwargs_detector import detect_kwargs_unpacking as detect_kwargs_unpacking
 from skill_scan._ast_split_detector import detect_split_evasion as detect_split_evasion
+from skill_scan._ast_split_join_helpers import _collect_int_list_assigns as _collect_int_list_assigns
 from skill_scan._ast_symbol_table import build_symbol_table as build_symbol_table
 from skill_scan.models import Finding, Severity
 
@@ -36,13 +37,18 @@ def analyze_python(content: str, file_path: str) -> list[Finding]:
 
     alias_map = build_alias_map(tree)
     symbol_table = build_symbol_table(tree)
+    int_list_table = _collect_int_list_assigns(tree)
     findings: list[Finding] = []
     try:
         all_nodes = list(ast.walk(tree))
         for node in all_nodes:
             for detector in _DETECTORS:
                 findings.extend(detector(node, file_path, alias_map=alias_map))
-        findings.extend(detect_split_evasion(tree, file_path, alias_map, symbol_table, _nodes=all_nodes))
+        findings.extend(
+            detect_split_evasion(
+                tree, file_path, alias_map, symbol_table, _nodes=all_nodes, int_list_table=int_list_table
+            )
+        )
         findings.extend(detect_kwargs_unpacking(tree, file_path, alias_map, symbol_table, _nodes=all_nodes))
     except RecursionError:
         findings.append(_depth_error_finding(file_path))

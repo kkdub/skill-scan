@@ -144,7 +144,7 @@ class TestAugmentedUnion:
         tree = _PARSE(textwrap.dedent(code))
         da = _collect_dict_assigns(tree)
         assert da["opts"]["mode"] == "fast"
-        assert da["opts"]["shell"] == "True"
+        assert da["opts"]["shell"] is True
 
 
 # ---------------------------------------------------------------------------
@@ -235,13 +235,13 @@ class TestCollectDictAssignsUnion:
         code = "opts = {}\nopts = opts | {'shell': True}"
         tree = _PARSE(code)
         result = _collect_dict_assigns(tree)
-        assert result["opts"] == {"shell": "True"}
+        assert result["opts"] == {"shell": True}
 
     def test_aug_union_tracked(self) -> None:
         code = "opts = {'a': 1}\nopts |= {'b': 2}"
         tree = _PARSE(code)
         result = _collect_dict_assigns(tree)
-        assert result["opts"] == {"a": "1", "b": "2"}
+        assert result["opts"] == {"a": 1, "b": 2}
 
     def test_aug_union_unresolvable_removes_entry(self) -> None:
         code = "opts = {'a': 1}\nopts |= unknown"

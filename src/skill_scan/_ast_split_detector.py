@@ -1,4 +1,8 @@
-"""AST split detector -- registry-based dispatch for dangerous-name reconstruction."""
+"""AST split detector -- registry-based dispatch for dangerous-name reconstruction.
+
+Walks AST nodes to find string-assembly patterns building dangerous names.
+Uses predicate/resolver pairs: binop-add, %-format, f-string, .replace(), call.
+"""
 
 from __future__ import annotations
 
@@ -67,6 +71,7 @@ def detect_split_evasion(
     symbol_table: dict[str, str],
     *,
     _nodes: list[ast.AST] | None = None,
+    int_list_table: dict[str, list[int]] | None = None,
 ) -> list[Finding]:
     """Detect dangerous names assembled from split variables."""
     findings: list[Finding] = []
@@ -78,7 +83,7 @@ def detect_split_evasion(
         if dd is not None:
             findings.append(dd)
             continue
-        resolved = _try_resolve_split(node, symbol_table, scope, alias_map)
+        resolved = _try_resolve_split(node, symbol_table, scope, alias_map, int_list_table=int_list_table)
         if resolved is None:
             continue
         finding = _check_dangerous(resolved, file_path, node)
@@ -156,13 +161,19 @@ def _try_resolve_split(
     symbol_table: dict[str, str],
     scope: str,
     alias_map: dict[str, str] | None = None,
+    *,
+    int_list_table: dict[str, list[int]] | None = None,
 ) -> str | None:
-    """Try to resolve a node to a string via the _RESOLVERS registry."""
+    """Try each resolver; forwards *int_list_table* to resolve_call."""
     for pred, resolver in _RESOLVERS:
-        if pred(node):
-            result = resolver(node, symbol_table, scope, alias_map=alias_map)
-            if result is not None:
-                return result
+        if not pred(node):
+            continue
+        kw: dict[str, object] = {"alias_map": alias_map}
+        if resolver is resolve_call:
+            kw["int_list_table"] = int_list_table
+        result = resolver(node, symbol_table, scope, **kw)
+        if result is not None:
+            return result
     return None
 
 

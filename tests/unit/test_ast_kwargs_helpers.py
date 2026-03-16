@@ -19,17 +19,17 @@ _PARSE = ast.parse
 
 
 class TestExtractDictLiteral:
-    """_extract_dict_literal extracts constant key-value pairs."""
+    """_extract_dict_literal extracts constant key-value pairs as raw types."""
 
     def test_simple_dict(self) -> None:
         node = _PARSE("{'a': 1, 'b': 'hello'}").body[0].value  # type: ignore[attr-defined]
         result = _extract_dict_literal(node)
-        assert result == {"a": "1", "b": "hello"}
+        assert result == {"a": 1, "b": "hello"}
 
     def test_non_constant_values_skipped(self) -> None:
         node = _PARSE("{'a': x, 'b': 1}").body[0].value  # type: ignore[attr-defined]
         result = _extract_dict_literal(node)
-        assert result == {"b": "1"}
+        assert result == {"b": 1}
 
     def test_non_string_keys_skipped(self) -> None:
         node = _PARSE("{1: 'a', 'b': 'c'}").body[0].value  # type: ignore[attr-defined]
@@ -67,16 +67,16 @@ class TestLookupSymbolTableDict:
 
 
 class TestKwargMatches:
-    """_kwarg_matches compares values as strings."""
+    """_kwarg_matches compares values using native types."""
 
-    def test_true_matches_string_true(self) -> None:
-        assert _kwarg_matches({"shell": "True"}, "shell", True) is True
+    def test_true_matches_native_true(self) -> None:
+        assert _kwarg_matches({"shell": True}, "shell", True) is True
 
     def test_false_does_not_match_true(self) -> None:
-        assert _kwarg_matches({"shell": "False"}, "shell", True) is False
+        assert _kwarg_matches({"shell": False}, "shell", True) is False
 
     def test_missing_key_no_match(self) -> None:
-        assert _kwarg_matches({"other": "True"}, "shell", True) is False
+        assert _kwarg_matches({"other": True}, "shell", True) is False
 
 
 class TestResolveKwargsDict:
@@ -85,7 +85,7 @@ class TestResolveKwargsDict:
     def test_dict_node_resolved(self) -> None:
         node = _PARSE("{'shell': True}").body[0].value  # type: ignore[attr-defined]
         result = _resolve_kwargs_dict(node, {}, {})
-        assert result == {"shell": "True"}
+        assert result == {"shell": True}
 
     def test_name_node_resolved_via_symbol_table(self) -> None:
         node = _PARSE("opts").body[0].value  # type: ignore[attr-defined]
@@ -95,9 +95,9 @@ class TestResolveKwargsDict:
 
     def test_name_node_resolved_via_dict_assigns(self) -> None:
         node = _PARSE("opts").body[0].value  # type: ignore[attr-defined]
-        da = {"opts": {"shell": "True"}}
+        da: dict[str, dict[str, object]] = {"opts": {"shell": True}}
         result = _resolve_kwargs_dict(node, {}, da)
-        assert result == {"shell": "True"}
+        assert result == {"shell": True}
 
     def test_non_resolvable_returns_none(self) -> None:
         node = _PARSE("f()").body[0].value  # type: ignore[attr-defined]

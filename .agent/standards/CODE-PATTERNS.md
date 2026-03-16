@@ -614,26 +614,60 @@ def _try_resolve_split(node, symbol_table, scope, alias_map=None):
 
 ## Boolean-Value Pre-Pass for Symbol-Table Gaps
 
-When a detector needs to check non-string constant values (booleans, integers) that the main symbol table cannot store (`dict[str, str]` converts everything to strings), use a focused AST pre-pass to collect those values separately. The pre-pass covers module scope, function scope, and class method scope; use `if extracted is not None:` (not `if extracted:`) to track empty dicts correctly (needed for union chains starting from `{}`). Convert values to strings for uniform storage.
+When a detector needs to check non-string constant values (booleans, integers) that the main symbol table cannot store (`dict[str, str]` converts everything to strings), use a focused AST pre-pass to collect those values separately as `dict[str, dict[str, object]]`. Store raw Python constants (via `_eval_constant_expr`) rather than converting to strings — this preserves the distinction between `int(0)` (falsy) and `str("0")` (truthy). The pre-pass covers module scope, function scope, and class method scope; use `if extracted is not None:` (not `if extracted:`) to track empty dicts correctly (needed for union chains starting from `{}`).
 
-For matching, use a **string-based truthiness heuristic** when the table entry is a `bool` — this allows integer truthy values (e.g. `shell=1`) to match a `True` table entry. Because the symbol table is `dict[str, str]`, the heuristic cannot distinguish `int(0)` from `str("0")` — both serialize to `"0"`. This is an accepted limitation (see DEBT-026-STRING-TRUTHINESS). Note: `isinstance(True, int)` is `True`, so the `bool` check must precede any `int` check.
+For matching, use Python native truthiness when the table entry is a `bool` — `bool(resolved_val) == value` covers `True`/`1`/truthy and `False`/`0`/falsy without a string heuristic. Note: `isinstance(True, int)` is `True`, so the `bool` check must precede any `int` check.
 
 ```python
-_FALSY_STRINGS: frozenset[str] = frozenset({"0", "0.0", "0j", "False", "None", "", "false"})
+def _eval_constant_expr(node: ast.expr) -> object:
+    """Resolve ast.Constant or UnaryOp(USub|UAdd, Constant) to a value."""
+    if isinstance(node, ast.Constant):
+        return node.value
+    if isinstance(node, ast.UnaryOp) and isinstance(node.operand, ast.Constant):
+        val = node.operand.value
+        if isinstance(node.op, ast.USub) and isinstance(val, int | float):
+            return -val
+        if isinstance(node.op, ast.UAdd) and isinstance(val, int | float):
+            return +val
+    return _UNRESOLVABLE  # sentinel
 
-def _kwarg_matches(resolved: dict[str, str], key: str, value: object) -> bool:
+def _kwarg_matches(resolved: dict[str, object], key: str, value: object) -> bool:
     if key not in resolved:
         return False
-    resolved_val = str(resolved[key])
+    resolved_val = resolved[key]
     if isinstance(value, bool):
-        is_falsy = resolved_val in _FALSY_STRINGS
-        return (not is_falsy) if value else is_falsy
-    return resolved_val == str(value)
+        return bool(resolved_val) == value  # int(0) falsy, str("0") truthy — correct
+    return str(resolved_val) == str(value)
 ```
 
-Dict union operators (`x = a | b`, `x |= rhs`) are tracked in `_collect_from_body`: both operands are resolved; if either is unresolvable the assignment is skipped (conservative). PEP 448 spread dicts (`{**base, ...}`) remain unresolvable by design.
+Dict union operators (`x = a | b`, `x |= rhs`) are tracked in `_collect_from_body`: both operands are resolved via `_resolve_dict_operand`, which recurses into `ast.BinOp(BitOr)` for chained unions (`a | b | c`); if either operand is unresolvable the assignment is skipped (conservative). PEP 448 spread dicts (`{**base, ...}`) remain unresolvable by design.
 
 > Trap: use `if extracted is not None:` not `if extracted:` when storing pre-pass results — an empty dict `{}` is falsy but still valid as the starting point for a union chain.
+
+## Integer-List Pre-Pass for Comprehension Resolution
+
+When a resolver needs to handle `chr(c) for c in tracked_var` where `tracked_var` is a module-level or function-level list of integers, collect those assignments in a parallel pre-pass (`dict[str, list[int]]`) and thread the table through the call chain as an optional kwarg. Only track all-integer lists (conservative: reject mixed-type lists). Synthesize `ast.Constant` nodes from the stored int values to reuse existing `_resolve_comprehension_chr`.
+
+```python
+def _collect_int_list_assigns(tree: ast.Module) -> dict[str, list[int]]:
+    result: dict[str, list[int]] = {}
+    _collect_int_lists_from_body(tree.body, "", result)
+    for node in tree.body:
+        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+            _collect_int_lists_from_body(node.body, node.name, result)
+    return result
+
+def _resolve_tracked_iter(elt, target_id, iter_name, sep, int_list_table, scope):
+    int_list = int_list_table.get(f"{scope}.{iter_name}") if scope else None
+    if int_list is None:
+        int_list = int_list_table.get(iter_name)
+    if int_list is None:
+        return None
+    synthetic = [ast.Constant(value=v) for v in int_list]
+    return _resolve_comprehension_chr(elt, target_id, synthetic, sep)
+```
+
+> Trap: `_extract_int_list` must return `None` on any non-integer element — one float or string in the list poisons the entire assignment (conservative). Do not infer types from mixed lists.
 
 ## Facade Re-export Pattern
 

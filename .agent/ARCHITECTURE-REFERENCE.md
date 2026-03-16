@@ -18,7 +18,7 @@ Detailed module-level documentation for skill-scan internals. For key patterns a
 - `build_alias_map(tree)` in `_ast_helpers.py` returns `dict[str, str]` mapping local alias to canonical module name; called by `analyze_python()` and threaded to all `_detect_*` functions via `alias_map` kwarg
 - `get_call_name(node, alias_map=None)` resolves aliased call names (e.g. `c.encode` with `alias_map={'c': 'codecs'}` → `'codecs.encode'`); all `_detect_*` functions accept `alias_map` kwarg (empty-dict default, backward-compatible)
 - `ast_analyzer.py` uses a `_DETECTORS` tuple to register all detector functions; current detectors: `_detect_unsafe_calls`, `_detect_dynamic_imports`, `_detect_unsafe_deserialization`, `_detect_string_concat_evasion`, `_detect_dynamic_access`, `_detect_decorator_evasion`, `_detect_rot13_codec`, `_detect_rot13_maketrans`; add new detectors to this tuple
-- `analyze_python()` also calls `build_symbol_table(tree)`, `detect_split_evasion(tree, file_path, alias_map, symbol_table)`, and `detect_kwargs_unpacking(tree, file_path, alias_map, symbol_table)` separately from the `_DETECTORS` loop — tree-level detectors that need the full symbol table go here, not in `_DETECTORS`
+- `analyze_python()` also calls `build_symbol_table(tree)`, `_collect_int_list_assigns(tree)`, `detect_split_evasion(tree, file_path, alias_map, symbol_table, int_list_table=...)`, and `detect_kwargs_unpacking(tree, file_path, alias_map, symbol_table)` separately from the `_DETECTORS` loop — tree-level detectors that need the full symbol table go here, not in `_DETECTORS`
 
 ## Symbol Table
 
@@ -43,7 +43,7 @@ Detailed module-level documentation for skill-scan internals. For key patterns a
 
 ## Split-Evasion Detector
 
-- `detect_split_evasion()` reconstructs strings via: `BinOp(Add)`, f-string interpolation, `"".join(...)`, `'template'.format(...)`, `'%s%s' % (a, b)`, `.replace()` chains, `functools.reduce()` concat, dict/list subscript lookups, `ast.Attribute` (`self.attr`), `ast.Call` (return values), `reversed()` join, `chr()`/`ord()` chains, bytes-constructor patterns, comprehension `chr()` mapping, and dynamic dispatch via introspection subscripts
+- `detect_split_evasion()` reconstructs strings via: `BinOp(Add)`, f-string interpolation, `"".join(...)`, `'template'.format(...)`, `'%s%s' % (a, b)`, `.replace()` chains, `functools.reduce()` concat, dict/list subscript lookups, `ast.Attribute` (`self.attr`), `ast.Call` (return values), `reversed()` join, `chr()`/`ord()` chains, bytes-constructor patterns, comprehension `chr()` mapping (including tracked int-list variables via `int_list_table`), and dynamic dispatch via introspection subscripts
 - Emits EXEC-002 for dangerous names (eval, exec, system, popen), EXEC-006 for dynamic import names (`__import__`, `getattr`); also bridges to decoder for split encoded payloads
 - `_RESOLVERS` — tuple of `(predicate, resolver)` pairs; `_try_resolve_split()` iterates and returns first non-`None` result; all resolvers share signature `(node, symbol_table, scope, *, alias_map=None) -> str | None`; add new resolvers here
 - `_NAME_RULE` maps dangerous names to `(rule_id, severity, description_prefix)`
@@ -60,7 +60,7 @@ Detailed module-level documentation for skill-scan internals. For key patterns a
 - `_ast_split_bytes.py` — resolves `bytearray(b'...').decode()`, `str(b'...', 'utf-8')`, `codecs.decode(b'...', 'utf-8')`; gates on literal bytes arguments only
 - `_ast_split_reduce.py` — resolves `functools.reduce(lambda a,b: a+b, [...])` and `functools.reduce(operator.add/concat, [...])`
 - `_ast_split_helpers.py` — format/%-format resolution; `_scoped_lookup`, `_resolve_join_elements`, `_resolve_subscript_expr`, `_resolve_slice_expr`; `_PERCENT_SPEC_RE` matches all standard %-specifiers with `(?<!%)` lookbehind
-- `_ast_split_join_helpers.py` — `_resolve_join_call()` dispatches to list/tuple, comprehension, reversed, or map resolvers; `map()` limited to `chr()` and `str()` only
+- `_ast_split_join_helpers.py` — `_resolve_join_call()` dispatches to list/tuple, comprehension, reversed, or map resolvers; `map()` limited to `chr()` and `str()` only; `_collect_int_list_assigns(tree)` pre-pass collects `Name = [int, ...]` assignments (module/function/class-method scope) as `dict[str, list[int]]`; `_resolve_comprehension_join()` accepts `int_list_table` kwarg and resolves `chr(c) for c in tracked_var` via `_resolve_tracked_iter()`
 
 ## Dynamic Dispatch Detection
 
@@ -73,8 +73,11 @@ Detailed module-level documentation for skill-scan internals. For key patterns a
 
 - `detect_kwargs_unpacking()` detects dangerous keyword arguments via `**` unpacking (e.g. `subprocess.run(**opts)` where `opts={'shell': True}`)
 - `_DANGEROUS_KWARGS` — table-driven config mapping function-name prefixes to `(kwarg_key, kwarg_value, rule_id, severity, description_prefix)` tuples; extend by adding entries
-- `_collect_dict_assigns(tree)` — pre-pass collecting dict assignments from module, function, and class-method scope; tracks all constant value types (including booleans and integers) converted to strings; handles dict union operators (`|`, `|=`) via `_track_union` / `_track_aug_union`; unresolvable operands drop the variable conservatively
-- `_kwarg_matches(resolved, key, value)` — uses truthiness semantics when `value` is `bool` (allows integer truthy matches like `shell=1`); falls back to exact `str()` comparison for non-bool table entries; `_FALSY_STRINGS` frozenset drives the falsy check
+- `_collect_dict_assigns(tree)` — pre-pass collecting dict assignments from module, function, and class-method scope; stores raw Python constant values (preserving native types via `_eval_constant_expr`); handles dict union operators (`|`, `|=`) via `_track_union` / `_track_aug_union`; unresolvable operands drop the variable conservatively
+- `_eval_constant_expr(node)` — resolves `ast.Constant` or `ast.UnaryOp(USub|UAdd, Constant)` to a Python value; returns `_UNRESOLVABLE` sentinel on failure; handles negative int/float literals (e.g. `shell=-1`)
+- `_extract_dict_literal(node)` — returns `dict[str, object]` with raw Python constant values (not `str()`); returns `None` if any `**spread` is present
+- `_resolve_dict_operand(node, result, scope)` — resolves a dict union operand; recurses into `ast.BinOp(BitOr)` for chained unions (`a | b | c`); returns `None` conservatively if any operand is unresolvable
+- `_kwarg_matches(resolved, key, value)` — uses Python native truthiness for `bool` table entries (`bool(resolved_val) == value`), allowing `shell=1` and `shell='0'` to match correctly; falls back to `str()` equality for non-bool table entries; `_FALSY_STRINGS` is removed
 
 ## Decoder
 
@@ -91,8 +94,8 @@ Detailed module-level documentation for skill-scan internals. For key patterns a
 ## Known Limitations
 
 - Return-value tracking: method returning via `self.attr` is NOT tracked (conservative gap); `_resolve_call_assignments` handles module-level `x = func()` only; only same-module calls resolved
-- DEBT-024-TRACKED-COMPREHENSION — `''.join(chr(c) for c in codes)` where `codes` is a tracked variable requires symbol table extension to support non-string values
 - PEP 448 spread dicts (`{**base, 'shell': True}`) in kwargs unpacking are unresolvable by design (conservative; spread ordering can override extracted keys)
+- `_collect_int_list_assigns` tracks only all-integer lists/tuples (conservative); mixed-type lists (`[101, 'x']`) are not tracked
 
 ## Evasion Corpus
 

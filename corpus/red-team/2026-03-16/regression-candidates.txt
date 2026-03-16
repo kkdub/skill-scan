@@ -1,0 +1,62 @@
+# Regression Test Candidates from Red-Team 2026-03-16
+# Target: src/skill_scan/_ast_kwargs_detector.py
+# Claim: R-EFF001 (truthy string detection, 0% false-negative rate)
+#
+# All inputs below EVADED detection and should become permanent test cases
+# after the underlying issue is fixed.
+
+## MUST-FIX: Negative number evasion (severity: critical, evasion rate: 50% in category)
+#
+# Root cause: _extract_dict_literal (line 252-268) and _track_subscript_assign
+# (line 174-191) only handle ast.Constant values. On Python 3.13+, negative
+# numbers are represented as ast.UnaryOp(USub, Constant(N)), not Constant(-N).
+# Complex expressions like (1+0j) are ast.BinOp(Add, Constant(1), Constant(0j)).
+# These value nodes are silently dropped, making the dict entry invisible.
+#
+# An attacker can evade detection with: subprocess.run(cmd, **{'shell': -1})
+
+# Input 1: shell=-1 inline dict (truthy int, UnaryOp in AST)
+import subprocess; subprocess.run(['ls'], **{'shell': -1})
+# Expected: EXEC-002 (int -1 is truthy)
+# Actual: NO FINDING (evasion)
+
+# Input 2: shell=-1.0 inline dict (truthy float, UnaryOp in AST)
+import subprocess; subprocess.run(['ls'], **{'shell': -1.0})
+# Expected: EXEC-002 (float -1.0 is truthy)
+# Actual: NO FINDING (evasion)
+
+# Input 3: shell=(1+0j) inline dict (truthy complex, BinOp in AST)
+import subprocess; subprocess.run(['ls'], **{'shell': (1+0j)})
+# Expected: EXEC-002 (complex 1+0j is truthy)
+# Actual: NO FINDING (evasion)
+
+# Input 4: shell=-1 tracked dict literal init
+import subprocess
+opts = {'shell': -1}
+subprocess.run(['ls'], **opts)
+# Expected: EXEC-002
+# Actual: NO FINDING (evasion -- _extract_dict_literal drops the entry)
+
+# Input 5: shell=-1 full pipeline (analyze_python)
+import subprocess; subprocess.run(['ls'], **{'shell': -1})
+# Expected: EXEC-002 (same root cause, full pipeline)
+# Actual: NO FINDING (evasion)
+
+## Additional regression candidates (edge cases that passed but worth tracking):
+
+# Input 6: shell=-1 via subscript assignment
+# (also affected by _track_subscript_assign requiring ast.Constant)
+import subprocess
+opts = {}
+opts['shell'] = -1
+subprocess.run(['ls'], **opts)
+# Expected: EXEC-002
+# Status: NOT DIRECTLY TESTED (covered by Input 4 root cause)
+
+# Input 7: shell=-1 via dict union
+import subprocess
+base = {}
+opts = base | {'shell': -1}
+subprocess.run(['ls'], **opts)
+# Expected: EXEC-002
+# Status: NOT DIRECTLY TESTED (union resolves via _extract_dict_literal)

@@ -54,7 +54,7 @@ src/skill_scan/           # Production source code
   _ast_split_bytes.py     # Bytes-constructor resolution
   _ast_split_chr.py       # chr/ord/int resolution
   _ast_split_reduce.py    # reduce/operator concat resolution
-  _ast_split_join_helpers.py # Generator/map/comprehension join resolution
+  _ast_split_join_helpers.py # Generator/map/comprehension join resolution; _collect_int_list_assigns pre-pass
   _ast_kwargs_detector.py # Kwargs unpacking detector (detect_kwargs_unpacking)
   decoder.py              # Facade: EncodedPayload, extract/decode
   _decoder_helpers.py     # Base64/hex extraction and decode
@@ -80,6 +80,7 @@ Key patterns and invariants. For detailed module-level docs, see `.agent/ARCHITE
 - Tree-level detectors needing the full symbol table (`detect_split_evasion`, `detect_kwargs_unpacking`) go in `analyze_python()` directly, not in `_DETECTORS`
 - `_NAME_RULE` / `_DECORATOR_RULE` — lookup tables mapping dangerous names to `(rule_id, severity, prefix)`; use when one detector emits different rule IDs per name
 - `_DANGEROUS_KWARGS` — table-driven config for kwargs detector; extend by adding entries, no code changes needed
+- `_collect_int_list_assigns(tree)` in `_ast_split_join_helpers.py` — parallel pre-pass collecting `Name = [int, ...]` assignments; built in `analyze_python()` and threaded to `detect_split_evasion` via `int_list_table` kwarg
 
 **Invariants**:
 - Bare `# noqa` does NOT suppress — security scanner requires explicit rule IDs (`# noqa: RULE-ID`)
@@ -88,9 +89,10 @@ Key patterns and invariants. For detailed module-level docs, see `.agent/ARCHITE
 - OBFS-* = obfuscation rules; EXEC-* = malicious code execution rules (distinct namespaces)
 - `_make_rot13_finding()` uses `category='obfuscation'` — do NOT reuse `_make_finding` (hardcodes `'malicious-code'`)
 - Deferred imports in `_ast_symbol_table.py` break circular deps — don't reorganize without checking import chains
+- `_extract_dict_literal` returns `dict[str, object]` (raw Python constants, not `str()`); `_kwarg_matches` uses native Python truthiness for `bool` table entries and `str()` equality for non-bool entries — `int(0)` is falsy, `str("0")` is truthy
+- `_eval_constant_expr` in `_ast_kwargs_detector.py` resolves `ast.Constant` and `ast.UnaryOp(USub|UAdd, Constant)` to Python values (handles negative int/float literals); returns `_UNRESOLVABLE` sentinel on failure
 
 **Known debt**:
-- DEBT-024-TRACKED-COMPREHENSION — tracked variable as comprehension iterable needs symbol table extension for non-string values
 - PEP 448 spread dicts (`{**base, ...}`) in kwargs are conservatively treated as unresolvable (no tracking planned)
 
 ## Tips

@@ -1,0 +1,477 @@
+{
+  "total": 76,
+  "evaded": 60,
+  "detected": 16,
+  "false_positives": 0,
+  "errors": 0,
+  "by_category": {
+    "reassignment": {
+      "total": 3,
+      "evaded": 0,
+      "detected": 3,
+      "false_pos": 0,
+      "errors": 0
+    },
+    "scope_confusion": {
+      "total": 5,
+      "evaded": 0,
+      "detected": 5,
+      "false_pos": 0,
+      "errors": 0
+    },
+    "conditional": {
+      "total": 7,
+      "evaded": 7,
+      "detected": 0,
+      "false_pos": 0,
+      "errors": 0
+    },
+    "augmented": {
+      "total": 6,
+      "evaded": 6,
+      "detected": 0,
+      "false_pos": 0,
+      "errors": 0
+    },
+    "nested_comp": {
+      "total": 7,
+      "evaded": 6,
+      "detected": 1,
+      "false_pos": 0,
+      "errors": 0
+    },
+    "indirection": {
+      "total": 6,
+      "evaded": 6,
+      "detected": 0,
+      "false_pos": 0,
+      "errors": 0
+    },
+    "aliasing": {
+      "total": 7,
+      "evaded": 7,
+      "detected": 0,
+      "false_pos": 0,
+      "errors": 0
+    },
+    "type_confusion": {
+      "total": 6,
+      "evaded": 3,
+      "detected": 3,
+      "false_pos": 0,
+      "errors": 0
+    },
+    "boundary": {
+      "total": 4,
+      "evaded": 2,
+      "detected": 2,
+      "false_pos": 0,
+      "errors": 0
+    },
+    "chr_aliasing": {
+      "total": 5,
+      "evaded": 5,
+      "detected": 0,
+      "false_pos": 0,
+      "errors": 0
+    },
+    "deep_nesting": {
+      "total": 4,
+      "evaded": 3,
+      "detected": 1,
+      "false_pos": 0,
+      "errors": 0
+    },
+    "list_construction": {
+      "total": 5,
+      "evaded": 4,
+      "detected": 1,
+      "false_pos": 0,
+      "errors": 0
+    },
+    "arithmetic_ints": {
+      "total": 3,
+      "evaded": 3,
+      "detected": 0,
+      "false_pos": 0,
+      "errors": 0
+    },
+    "complex_comp": {
+      "total": 4,
+      "evaded": 4,
+      "detected": 0,
+      "false_pos": 0,
+      "errors": 0
+    },
+    "semantic_equiv": {
+      "total": 4,
+      "evaded": 4,
+      "detected": 0,
+      "false_pos": 0,
+      "errors": 0
+    }
+  },
+  "evasions": [
+    {
+      "category": "conditional",
+      "name": "if_branch_assignment",
+      "code": "if True:\n    codes = [101, 118, 97, 108]\nx = ''.join(chr(c) for c in codes)",
+      "findings": []
+    },
+    {
+      "category": "conditional",
+      "name": "else_branch_assignment",
+      "code": "if False:\n    codes = [104, 101, 108, 108, 111]\nelse:\n    codes = [101, 118, 97, 108]\nx = ''.join(chr(c) for c in codes)",
+      "findings": []
+    },
+    {
+      "category": "conditional",
+      "name": "for_loop_assignment",
+      "code": "for _ in range(1):\n    codes = [101, 118, 97, 108]\nx = ''.join(chr(c) for c in codes)",
+      "findings": []
+    },
+    {
+      "category": "conditional",
+      "name": "try_except_assignment",
+      "code": "try:\n    codes = [101, 118, 97, 108]\nexcept Exception:\n    pass\nx = ''.join(chr(c) for c in codes)",
+      "findings": []
+    },
+    {
+      "category": "conditional",
+      "name": "while_assignment",
+      "code": "while True:\n    codes = [101, 118, 97, 108]\n    break\nx = ''.join(chr(c) for c in codes)",
+      "findings": []
+    },
+    {
+      "category": "conditional",
+      "name": "with_block_assignment",
+      "code": "import contextlib\nwith contextlib.nullcontext():\n    codes = [101, 118, 97, 108]\nx = ''.join(chr(c) for c in codes)",
+      "findings": []
+    },
+    {
+      "category": "conditional",
+      "name": "if_in_function",
+      "code": "def f():\n    if True:\n        codes = [101, 118, 97, 108]\n    x = ''.join(chr(c) for c in codes)",
+      "findings": []
+    },
+    {
+      "category": "augmented",
+      "name": "plus_equals_list",
+      "code": "codes = [101, 118]\ncodes += [97, 108]\nx = ''.join(chr(c) for c in codes)",
+      "findings": []
+    },
+    {
+      "category": "augmented",
+      "name": "extend_method",
+      "code": "codes = [101, 118]\ncodes.extend([97, 108])\nx = ''.join(chr(c) for c in codes)",
+      "findings": []
+    },
+    {
+      "category": "augmented",
+      "name": "append_one_by_one",
+      "code": "codes = []\ncodes.append(101)\ncodes.append(118)\ncodes.append(97)\ncodes.append(108)\nx = ''.join(chr(c) for c in codes)",
+      "findings": []
+    },
+    {
+      "category": "augmented",
+      "name": "insert_method",
+      "code": "codes = [101, 97, 108]\ncodes.insert(1, 118)\nx = ''.join(chr(c) for c in codes)",
+      "findings": []
+    },
+    {
+      "category": "augmented",
+      "name": "list_concat",
+      "code": "a = [101, 118]\nb = [97, 108]\ncodes = a + b\nx = ''.join(chr(c) for c in codes)",
+      "findings": []
+    },
+    {
+      "category": "augmented",
+      "name": "list_multiply",
+      "code": "# codes constructed via multiply doesn't directly help but tests boundary\ncodes = [101] * 1 + [118] * 1 + [97] * 1 + [108] * 1\nx = ''.join(chr(c) for c in codes)",
+      "findings": []
+    },
+    {
+      "category": "nested_comp",
+      "name": "nested_listcomp_iter",
+      "code": "codes = [101, 118, 97, 108]\nx = ''.join(chr(c) for c in [x for x in codes])",
+      "findings": []
+    },
+    {
+      "category": "nested_comp",
+      "name": "filter_in_comprehension",
+      "code": "codes = [101, 118, 97, 108, 0]\nx = ''.join(chr(c) for c in codes if c > 0)",
+      "findings": []
+    },
+    {
+      "category": "nested_comp",
+      "name": "double_generator",
+      "code": "rows = [[101, 118], [97, 108]]\nx = ''.join(chr(c) for row in rows for c in row)",
+      "findings": []
+    },
+    {
+      "category": "nested_comp",
+      "name": "set_comp_evasion",
+      "code": "# set comprehension (order not guaranteed, but tests parser)\ncodes = [101, 118, 97, 108]\nx = ''.join(chr(c) for c in sorted(codes))",
+      "findings": []
+    },
+    {
+      "category": "nested_comp",
+      "name": "dict_comp_values",
+      "code": "codes = {0: 101, 1: 118, 2: 97, 3: 108}\nx = ''.join(chr(codes[i]) for i in sorted(codes))",
+      "findings": []
+    },
+    {
+      "category": "nested_comp",
+      "name": "star_unpack_in_list",
+      "code": "a = [101, 118]\nb = [97, 108]\nx = ''.join(chr(c) for c in [*a, *b])",
+      "findings": []
+    },
+    {
+      "category": "indirection",
+      "name": "assigned_generator",
+      "code": "codes = [101, 118, 97, 108]\ngen = (chr(c) for c in codes)\nx = ''.join(gen)",
+      "findings": []
+    },
+    {
+      "category": "indirection",
+      "name": "map_with_tracked_var",
+      "code": "codes = [101, 118, 97, 108]\nx = ''.join(map(chr, codes))",
+      "findings": []
+    },
+    {
+      "category": "indirection",
+      "name": "list_call_wrapping",
+      "code": "codes = [101, 118, 97, 108]\nx = ''.join(chr(c) for c in list(codes))",
+      "findings": []
+    },
+    {
+      "category": "indirection",
+      "name": "iter_call_wrapping",
+      "code": "codes = [101, 118, 97, 108]\nx = ''.join(chr(c) for c in iter(codes))",
+      "findings": []
+    },
+    {
+      "category": "indirection",
+      "name": "reversed_tracked_var",
+      "code": "codes = [108, 97, 118, 101]\nx = ''.join(chr(c) for c in reversed(codes))",
+      "findings": []
+    },
+    {
+      "category": "indirection",
+      "name": "tuple_conversion",
+      "code": "codes = [101, 118, 97, 108]\nx = ''.join(chr(c) for c in tuple(codes))",
+      "findings": []
+    },
+    {
+      "category": "aliasing",
+      "name": "simple_alias",
+      "code": "original = [101, 118, 97, 108]\ncodes = original\nx = ''.join(chr(c) for c in codes)",
+      "findings": []
+    },
+    {
+      "category": "aliasing",
+      "name": "chained_alias",
+      "code": "a = [101, 118, 97, 108]\nb = a\nc = b\nx = ''.join(chr(c) for c in c)",
+      "findings": []
+    },
+    {
+      "category": "aliasing",
+      "name": "tuple_unpack_alias",
+      "code": "data = ([101, 118, 97, 108], 'other')\ncodes, _ = data\nx = ''.join(chr(c) for c in codes)",
+      "findings": []
+    },
+    {
+      "category": "aliasing",
+      "name": "dict_value_alias",
+      "code": "data = {'payload': [101, 118, 97, 108]}\ncodes = data['payload']\nx = ''.join(chr(c) for c in codes)",
+      "findings": []
+    },
+    {
+      "category": "aliasing",
+      "name": "function_return_alias",
+      "code": "def get_codes():\n    return [101, 118, 97, 108]\ncodes = get_codes()\nx = ''.join(chr(c) for c in codes)",
+      "findings": []
+    },
+    {
+      "category": "aliasing",
+      "name": "list_copy_alias",
+      "code": "original = [101, 118, 97, 108]\ncodes = original.copy()\nx = ''.join(chr(c) for c in codes)",
+      "findings": []
+    },
+    {
+      "category": "aliasing",
+      "name": "slice_copy_alias",
+      "code": "original = [101, 118, 97, 108]\ncodes = original[:]\nx = ''.join(chr(c) for c in codes)",
+      "findings": []
+    },
+    {
+      "category": "type_confusion",
+      "name": "mixed_int_and_float",
+      "code": "codes = [101, 118.0, 97, 108]\nx = ''.join(chr(int(c)) for c in codes)",
+      "findings": []
+    },
+    {
+      "category": "type_confusion",
+      "name": "negative_then_abs",
+      "code": "codes = [-101, -118, -97, -108]\nx = ''.join(chr(abs(c)) for c in codes)",
+      "findings": []
+    },
+    {
+      "category": "type_confusion",
+      "name": "bool_true_as_int",
+      "code": "codes = [True, 118, 97, 108]\nx = ''.join(chr(c) for c in codes)",
+      "findings": []
+    },
+    {
+      "category": "boundary",
+      "name": "large_int_list_100_elements",
+      "code": "codes = [101, 118, 97, 108, 101, 118, 97, 108, 101, 118, 97, 108, 101, 118, 97, 108, 101, 118, 97, 108, 101, 118, 97, 108, 101, 118, 97, 108, 101, 118, 97, 108, 101, 118, 97, 108, 101, 118, 97, 108, 101, 118, 97, 108, 101, 118, 97, 108, 101, 118, 97, 108, 101, 118, 97, 108, 101, 118, 97, 108, 101, 118, 97, 108, 101, 118, 97, 108, 101, 118, 97, 108, 101, 118, 97, 108, 101, 118, 97, 108, 101, 118, 97, 108, 101, 118, 97, 108, 101, 118, 97, 108, 101, 118, 97, 108, 101, 118, 97, 108]\nx = ''.join(chr(c) for c in codes)",
+      "findings": []
+    },
+    {
+      "category": "boundary",
+      "name": "single_char_eval_trick",
+      "code": "# Single element lists joined\ne = [101]; v = [118]; a = [97]; l = [108]\nx = ''.join(chr(c) for c in e) + ''.join(chr(c) for c in v) + ''.join(chr(c) for c in a) + ''.join(chr(c) for c in l)",
+      "findings": []
+    },
+    {
+      "category": "chr_aliasing",
+      "name": "chr_assigned_to_variable",
+      "code": "codes = [101, 118, 97, 108]\nf = chr\nx = ''.join(f(c) for c in codes)",
+      "findings": []
+    },
+    {
+      "category": "chr_aliasing",
+      "name": "builtins_chr",
+      "code": "import builtins\ncodes = [101, 118, 97, 108]\nx = ''.join(builtins.chr(c) for c in codes)",
+      "findings": []
+    },
+    {
+      "category": "chr_aliasing",
+      "name": "chr_via_getattr",
+      "code": "import builtins\ncodes = [101, 118, 97, 108]\nmy_chr = getattr(builtins, 'chr')\nx = ''.join(my_chr(c) for c in codes)",
+      "findings": []
+    },
+    {
+      "category": "chr_aliasing",
+      "name": "lambda_wrapper",
+      "code": "codes = [101, 118, 97, 108]\nto_char = lambda x: chr(x)\nx = ''.join(to_char(c) for c in codes)",
+      "findings": []
+    },
+    {
+      "category": "chr_aliasing",
+      "name": "from_builtins_import_chr",
+      "code": "from builtins import chr as my_chr\ncodes = [101, 118, 97, 108]\nx = ''.join(my_chr(c) for c in codes)",
+      "findings": []
+    },
+    {
+      "category": "deep_nesting",
+      "name": "class_in_function",
+      "code": "def f():\n    class C:\n        codes = [101, 118, 97, 108]\n        x = ''.join(chr(c) for c in codes)",
+      "findings": []
+    },
+    {
+      "category": "deep_nesting",
+      "name": "function_in_function",
+      "code": "def outer():\n    def inner():\n        codes = [101, 118, 97, 108]\n        x = ''.join(chr(c) for c in codes)",
+      "findings": []
+    },
+    {
+      "category": "deep_nesting",
+      "name": "triple_nested_function",
+      "code": "def a():\n    def b():\n        def c():\n            codes = [101, 118, 97, 108]\n            x = ''.join(chr(c) for c in codes)",
+      "findings": []
+    },
+    {
+      "category": "list_construction",
+      "name": "list_constructor",
+      "code": "codes = list((101, 118, 97, 108))\nx = ''.join(chr(c) for c in codes)",
+      "findings": []
+    },
+    {
+      "category": "list_construction",
+      "name": "list_from_map",
+      "code": "codes = list(map(int, ['101', '118', '97', '108']))\nx = ''.join(chr(c) for c in codes)",
+      "findings": []
+    },
+    {
+      "category": "list_construction",
+      "name": "bytearray_to_list",
+      "code": "codes = list(bytearray(b'eval'))\nx = ''.join(chr(c) for c in codes)",
+      "findings": []
+    },
+    {
+      "category": "list_construction",
+      "name": "struct_unpack",
+      "code": "import struct\ncodes = list(struct.unpack('4B', b'eval'))\nx = ''.join(chr(c) for c in codes)",
+      "findings": []
+    },
+    {
+      "category": "arithmetic_ints",
+      "name": "addition_in_list",
+      "code": "codes = [100+1, 117+1, 96+1, 107+1]\nx = ''.join(chr(c) for c in codes)",
+      "findings": []
+    },
+    {
+      "category": "arithmetic_ints",
+      "name": "xor_in_list",
+      "code": "key = 0xFF\ncodes = [101 ^ key, 118 ^ key, 97 ^ key, 108 ^ key]\n# runtime: [c ^ key for c in codes] = eval\nx = ''.join(chr(c ^ 0xFF) for c in codes)",
+      "findings": []
+    },
+    {
+      "category": "arithmetic_ints",
+      "name": "subtraction_encoding",
+      "code": "codes = [201, 218, 197, 208]\nx = ''.join(chr(c - 100) for c in codes)",
+      "findings": []
+    },
+    {
+      "category": "complex_comp",
+      "name": "walrus_in_comp",
+      "code": "codes = [101, 118, 97, 108]\nx = ''.join(chr(c) for c in codes if (y := c) > 0)",
+      "findings": []
+    },
+    {
+      "category": "complex_comp",
+      "name": "conditional_expr_in_elt",
+      "code": "codes = [101, 118, 97, 108]\nx = ''.join(chr(c) if c > 0 else '' for c in codes)",
+      "findings": []
+    },
+    {
+      "category": "complex_comp",
+      "name": "str_format_chr",
+      "code": "codes = [101, 118, 97, 108]\nx = ''.join('{}'.format(chr(c)) for c in codes)",
+      "findings": []
+    },
+    {
+      "category": "complex_comp",
+      "name": "f_string_chr",
+      "code": "codes = [101, 118, 97, 108]\nx = ''.join(f'{chr(c)}' for c in codes)",
+      "findings": []
+    },
+    {
+      "category": "semantic_equiv",
+      "name": "bytes_decode",
+      "code": "codes = [101, 118, 97, 108]\nx = bytes(codes).decode()",
+      "findings": []
+    },
+    {
+      "category": "semantic_equiv",
+      "name": "bytearray_decode",
+      "code": "codes = [101, 118, 97, 108]\nx = bytearray(codes).decode()",
+      "findings": []
+    },
+    {
+      "category": "semantic_equiv",
+      "name": "struct_pack_unpack",
+      "code": "import struct\ncodes = [101, 118, 97, 108]\nx = struct.pack('4B', *codes).decode()",
+      "findings": []
+    },
+    {
+      "category": "semantic_equiv",
+      "name": "array_module",
+      "code": "import array\ncodes = [101, 118, 97, 108]\na = array.array('B', codes)\nx = a.tobytes().decode()",
+      "findings": []
+    }
+  ],
+  "false_pos_list": []
+}

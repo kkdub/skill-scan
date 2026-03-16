@@ -1,0 +1,40 @@
+{
+  "run_date": "2026-03-16",
+  "target": "src/skill_scan/_ast_kwargs_detector.py",
+  "claim_tested": "R-EFF001: shell='0' (truthy string) no longer false-negative -- 0% false-negative rate on truthy string values passed as dangerous kwargs",
+  "total_inputs": 85,
+  "passed": 80,
+  "failed": 5,
+  "evasion_rate_percent": 5.9,
+  "categories": {
+    "truthy_string_evasion": {"count": 10, "evaded": 0, "rate": 0.0},
+    "truthy_non_string_evasion": {"count": 6, "evaded": 3, "rate": 50.0},
+    "falsy_values_safe": {"count": 6, "evaded": 0, "rate": 0.0},
+    "tracked_dict_truthy_evasion": {"count": 5, "evaded": 1, "rate": 20.0},
+    "dict_union_truthy_evasion": {"count": 4, "evaded": 0, "rate": 0.0},
+    "symbol_table_coercion": {"count": 3, "evaded": 0, "rate": 0.0},
+    "structural_evasion": {"count": 12, "evaded": 0, "rate": 0.0},
+    "import_aliasing_evasion": {"count": 4, "evaded": 0, "rate": 0.0},
+    "kwarg_matches_adversarial": {"count": 12, "evaded": 0, "rate": 0.0},
+    "full_pipeline_truthy_evasion": {"count": 6, "evaded": 1, "rate": 16.7},
+    "extract_dict_literal_type_preservation": {"count": 8, "evaded": 0, "rate": 0.0},
+    "resolution_path_priority": {"count": 2, "evaded": 0, "rate": 0.0},
+    "negative_int_ast_parsing": {"count": 2, "evaded": 0, "rate": 0.0},
+    "edge_cases": {"count": 7, "evaded": 0, "rate": 0.0}
+  },
+  "critical_findings": [
+    {
+      "category": "truthy_non_string_evasion",
+      "severity": "critical",
+      "evasion_rate_percent": 50.0,
+      "root_cause": "_extract_dict_literal only handles ast.Constant values; UnaryOp (negative numbers) and BinOp (complex expressions like 1+0j) are silently dropped",
+      "affected_inputs": [
+        "shell=-1 (inline dict)",
+        "shell=-1.0 (inline dict)",
+        "shell=(1+0j) (inline dict)",
+        "shell=-1 (tracked dict literal init)",
+        "shell=-1 (full pipeline)"
+      ]
+    }
+  ]
+}
