@@ -11,26 +11,27 @@
 # Resolved by PLAN-023: string slicing, reversal, bytes concat/decode, attribute chains, chr/ord
 # Resolved by PLAN-024: lambda/reduce building, comprehension assembly, replace chains, decorator evasion
 # Resolved by PLAN-025: DEBT-024-KWARGS-UNPACKING (detect_kwargs_unpacking + _DANGEROUS_KWARGS table)
+# Resolved by PLAN-026: DEBT-025-DICT-UNION, DEBT-025-SHELL-INT-TRUTHY
 
-- id: DEBT-025-DICT-UNION
-  description: "Detect dangerous kwargs via dict union operator — e.g. opts | {'shell': True} or opts |= {'shell': True} — not handled by _collect_dict_assigns pre-pass. PEP 448 spread dicts ({**base, 'shell': True}) are conservatively treated as unresolvable to prevent false positives from spread ordering."
+- id: DEBT-026-STRING-TRUTHINESS
+  description: "String-based truthiness heuristic cannot distinguish int(0) from str('0') — shell='0' (truthy at runtime) is treated as falsy (false negative). Same for shell='False', shell='None'. Fundamental limitation of dict[str, str] symbol table."
   type: effectiveness
   severity: low
-  plan: PLAN-025
+  plan: PLAN-026
   files:
-    - src/skill_scan/_ast_kwargs_detector.py
-  blocker: "Dict union (PEP 584 a | b / a |= b) requires resolving both operands via the symbol table before merging. Low evasion risk — attacker must use union operator specifically."
-  resolution: "Extend _collect_dict_assigns to track dict union expressions, resolving both operands via the symbol table before merging."
+    - src/skill_scan/_ast_kwargs_detector.py:279
+  blocker: "Symbol table is dict[str, str] — type info is lost at extraction time. Fixing requires extending the table to preserve constant types."
+  resolution: "Preserve ast.Constant type info through extraction (e.g. tagged union or parallel type map), then compare against runtime truthiness instead of string heuristic."
 
-- id: DEBT-025-SHELL-INT-TRUTHY
-  description: "subprocess.run('ls', **{'shell': 1}) not detected — integer 1 is truthy and enables shell execution, but _kwarg_matches compares str(1)='1' against str(True)='True'"
+- id: DEBT-026-CHAINED-UNION
+  description: "Chained dict union (a | b | c) not tracked — only single-level union (a | b) and augmented union (a |= b) are resolved. BinOp operands are not recursed into, so three-operand unions silently produce unresolvable results."
   type: effectiveness
   severity: low
-  plan: PLAN-025
+  plan: PLAN-026
   files:
     - src/skill_scan/_ast_kwargs_detector.py
-  blocker: "Current _kwarg_matches uses exact str() comparison. Extending to truthy-value matching risks false positives on non-boolean-intended integer values in other future table entries."
-  resolution: "Add truthy normalization in _kwarg_matches for boolean-typed table entries, or add a second _DANGEROUS_KWARGS entry for integer 1."
+  blocker: "Resolving chained BinOp(BitOr) requires recursing into operands, which adds complexity for a narrow evasion pattern. Single-level covers the common case."
+  resolution: "In _resolve_dict_operand, recurse into BinOp(BitOr) left/right operands instead of returning None for non-Name/Dict nodes."
 
 - id: DEBT-024-TRACKED-COMPREHENSION
   description: "Comprehension over tracked variable — codes = [101,118,97,108]; ''.join(chr(c) for c in codes) — not detected because symbol table only tracks dict[str, str]"

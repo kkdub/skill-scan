@@ -614,32 +614,26 @@ def _try_resolve_split(node, symbol_table, scope, alias_map=None):
 
 ## Boolean-Value Pre-Pass for Symbol-Table Gaps
 
-When a detector needs to check non-string constant values (booleans, integers) that the main symbol table cannot store (`dict[str, str]` converts everything to strings), use a focused AST pre-pass to collect those values separately. Keep the pre-pass module-scope only and convert values to strings for uniform comparison.
+When a detector needs to check non-string constant values (booleans, integers) that the main symbol table cannot store (`dict[str, str]` converts everything to strings), use a focused AST pre-pass to collect those values separately. The pre-pass covers module scope, function scope, and class method scope; use `if extracted is not None:` (not `if extracted:`) to track empty dicts correctly (needed for union chains starting from `{}`). Convert values to strings for uniform storage.
+
+For matching, use a **string-based truthiness heuristic** when the table entry is a `bool` — this allows integer truthy values (e.g. `shell=1`) to match a `True` table entry. Because the symbol table is `dict[str, str]`, the heuristic cannot distinguish `int(0)` from `str("0")` — both serialize to `"0"`. This is an accepted limitation (see DEBT-026-STRING-TRUTHINESS). Note: `isinstance(True, int)` is `True`, so the `bool` check must precede any `int` check.
 
 ```python
-def _collect_dict_assigns(tree: ast.Module) -> dict[str, dict[str, str]]:
-    """Pre-pass: collect dict variable assignments from module-level statements.
+_FALSY_STRINGS: frozenset[str] = frozenset({"0", "0.0", "0j", "False", "None", "", "false"})
 
-    Unlike the symbol table, tracks ALL constant values (including booleans),
-    converting them to strings for uniform comparison via str(value.value).
-    """
-    result: dict[str, dict[str, str]] = {}
-    for stmt in tree.body:
-        if not isinstance(stmt, ast.Assign) or len(stmt.targets) != 1:
-            continue
-        target = stmt.targets[0]
-        if isinstance(target, ast.Name) and isinstance(stmt.value, ast.Dict):
-            extracted = _extract_dict_literal(stmt.value)  # str(True) == 'True'
-            if extracted:
-                result[target.id] = extracted
-    return result
-
-# Matching: compare stored string against str(expected_value)
 def _kwarg_matches(resolved: dict[str, str], key: str, value: object) -> bool:
-    return key in resolved and str(resolved[key]) == str(value)
+    if key not in resolved:
+        return False
+    resolved_val = str(resolved[key])
+    if isinstance(value, bool):
+        is_falsy = resolved_val in _FALSY_STRINGS
+        return (not is_falsy) if value else is_falsy
+    return resolved_val == str(value)
 ```
 
-> Trap: the main symbol table uses `dict[str, str]` and stores `True` as `'True'`. When the detector table holds `value is True` (a Python bool), always compare via `str(value)` on both sides — never use `==` between bool and string directly.
+Dict union operators (`x = a | b`, `x |= rhs`) are tracked in `_collect_from_body`: both operands are resolved; if either is unresolvable the assignment is skipped (conservative). PEP 448 spread dicts (`{**base, ...}`) remain unresolvable by design.
+
+> Trap: use `if extracted is not None:` not `if extracted:` when storing pre-pass results — an empty dict `{}` is falsy but still valid as the starting point for a union chain.
 
 ## Facade Re-export Pattern
 
