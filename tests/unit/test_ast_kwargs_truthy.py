@@ -87,6 +87,18 @@ class TestIntegerFalsyNoMatch:
         findings = _detect(code)
         assert len(findings) == 0
 
+    def test_shell_float_0_no_finding(self) -> None:
+        """subprocess.run(**{'shell': 0.0}) -- float zero is falsy."""
+        code = "import subprocess; subprocess.run(['ls'], **{'shell': 0.0})"
+        findings = _detect(code)
+        assert len(findings) == 0
+
+    def test_shell_complex_0_no_finding(self) -> None:
+        """subprocess.run(**{'shell': 0j}) -- complex zero is falsy."""
+        code = "import subprocess; subprocess.run(['ls'], **{'shell': 0j})"
+        findings = _detect(code)
+        assert len(findings) == 0
+
     def test_dict_literal_shell_int_0_no_finding(self) -> None:
         """Dict literal init with integer 0 produces no finding."""
         code = """\

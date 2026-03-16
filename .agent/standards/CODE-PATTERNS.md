@@ -616,10 +616,10 @@ def _try_resolve_split(node, symbol_table, scope, alias_map=None):
 
 When a detector needs to check non-string constant values (booleans, integers) that the main symbol table cannot store (`dict[str, str]` converts everything to strings), use a focused AST pre-pass to collect those values separately. The pre-pass covers module scope, function scope, and class method scope; use `if extracted is not None:` (not `if extracted:`) to track empty dicts correctly (needed for union chains starting from `{}`). Convert values to strings for uniform storage.
 
-For matching, use truthiness semantics when the table entry is a `bool` — this allows integer truthy values (e.g. `shell=1`) to match a `True` table entry. Note: `isinstance(True, int)` is `True`, so the `bool` check must precede any `int` check.
+For matching, use a **string-based truthiness heuristic** when the table entry is a `bool` — this allows integer truthy values (e.g. `shell=1`) to match a `True` table entry. Because the symbol table is `dict[str, str]`, the heuristic cannot distinguish `int(0)` from `str("0")` — both serialize to `"0"`. This is an accepted limitation (see DEBT-026-STRING-TRUTHINESS). Note: `isinstance(True, int)` is `True`, so the `bool` check must precede any `int` check.
 
 ```python
-_FALSY_STRINGS: frozenset[str] = frozenset({"0", "False", "None", "", "false"})
+_FALSY_STRINGS: frozenset[str] = frozenset({"0", "0.0", "0j", "False", "None", "", "false"})
 
 def _kwarg_matches(resolved: dict[str, str], key: str, value: object) -> bool:
     if key not in resolved:

@@ -181,6 +181,33 @@ class TestDictUnionScoped:
         assert len(findings) == 1
         assert findings[0].rule_id == "EXEC-002"
 
+    def test_union_with_global_base_in_function(self) -> None:
+        """Global dict used as union operand inside function is resolved."""
+        code = """\
+        import subprocess
+        base = {'stdout': -1}
+        def run_cmd():
+            opts = base | {'shell': True}
+            subprocess.run(['ls'], **opts)
+        """
+        findings = _detect(code)
+        assert len(findings) == 1
+        assert findings[0].rule_id == "EXEC-002"
+
+    def test_aug_union_with_global_rhs_in_function(self) -> None:
+        """Global dict used as RHS of |= inside function is resolved."""
+        code = """\
+        import subprocess
+        danger = {'shell': True}
+        def run_cmd():
+            opts = {'stdout': -1}
+            opts |= danger
+            subprocess.run(['ls'], **opts)
+        """
+        findings = _detect(code)
+        assert len(findings) == 1
+        assert findings[0].rule_id == "EXEC-002"
+
 
 # ---------------------------------------------------------------------------
 # Regression: PEP 448 spread dicts still unresolvable

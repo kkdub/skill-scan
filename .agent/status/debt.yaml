@@ -13,6 +13,16 @@
 # Resolved by PLAN-025: DEBT-024-KWARGS-UNPACKING (detect_kwargs_unpacking + _DANGEROUS_KWARGS table)
 # Resolved by PLAN-026: DEBT-025-DICT-UNION, DEBT-025-SHELL-INT-TRUTHY
 
+- id: DEBT-026-STRING-TRUTHINESS
+  description: "String-based truthiness heuristic cannot distinguish int(0) from str('0') — shell='0' (truthy at runtime) is treated as falsy (false negative). Same for shell='False', shell='None'. Fundamental limitation of dict[str, str] symbol table."
+  type: effectiveness
+  severity: low
+  plan: PLAN-026
+  files:
+    - src/skill_scan/_ast_kwargs_detector.py:279
+  blocker: "Symbol table is dict[str, str] — type info is lost at extraction time. Fixing requires extending the table to preserve constant types."
+  resolution: "Preserve ast.Constant type info through extraction (e.g. tagged union or parallel type map), then compare against runtime truthiness instead of string heuristic."
+
 - id: DEBT-026-CHAINED-UNION
   description: "Chained dict union (a | b | c) not tracked — only single-level union (a | b) and augmented union (a |= b) are resolved. BinOp operands are not recursed into, so three-operand unions silently produce unresolvable results."
   type: effectiveness

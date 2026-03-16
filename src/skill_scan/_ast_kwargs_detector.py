@@ -14,11 +14,8 @@ from skill_scan._ast_helpers import get_call_name
 from skill_scan._ast_split_detector import _build_scope_map
 from skill_scan.models import Finding, Severity
 
-# ---------------------------------------------------------------------------
 # Dangerous kwargs table -- maps function-name prefix to
-# (kwarg_key, kwarg_value, rule_id, severity, description_prefix) tuples.
-# To add a new dangerous combo, append an entry -- no code changes needed.
-# ---------------------------------------------------------------------------
+# (key, value, rule_id, severity, desc_prefix) tuples. Extend by adding entries.
 
 _DangerousEntry = tuple[str, object, str, Severity, str]
 
@@ -215,7 +212,10 @@ def _resolve_dict_operand(
         return _extract_dict_literal(node)
     if isinstance(node, ast.Name):
         key = f"{scope}.{node.id}" if scope else node.id
-        return result.get(key)
+        hit = result.get(key)
+        if hit is not None or not scope:
+            return hit
+        return result.get(node.id)
     return None
 
 
@@ -278,7 +278,7 @@ def _lookup_symbol_table_dict(var_name: str, symbol_table: dict[str, str]) -> di
     return result
 
 
-_FALSY_STRINGS: frozenset[str] = frozenset({"0", "False", "None", "", "false"})
+_FALSY_STRINGS: frozenset[str] = frozenset({"0", "0.0", "0j", "False", "None", "", "false"})
 
 
 def _kwarg_matches(
@@ -288,7 +288,7 @@ def _kwarg_matches(
 ) -> bool:
     """Check whether *resolved* contains a matching (key, value) pair.
 
-    When *value* is ``bool``, uses truthiness (not exact string match).
+    When *value* is ``bool``, uses a string-based truthiness heuristic.
     Note: ``isinstance(True, int)`` is True, so bool check comes first.
     """
     if key not in resolved:
