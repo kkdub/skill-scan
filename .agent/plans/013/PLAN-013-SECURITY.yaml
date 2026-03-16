@@ -1,32 +1,27 @@
 plan: PLAN-013
 generated_at: "2026-03-09"
-status: tracked
+status: resolved
 
 deferred:
   - id: SEC-013-001
     severity: medium
+    status: resolved
+    resolved_by: PLAN-016
     title: "RecursionError not caught in analyze_python"
     files: ["src/skill_scan/ast_analyzer.py:39-42", "src/skill_scan/_ast_helpers.py:89-118"]
     description: |
       _resolve_binop_add and _resolve_int_expr recurse without depth limits.
       RecursionError is not in the except clause of analyze_python().
       Pathological AST trees could crash the scanner.
-    mitigations:
-      - "Local CLI tool — no network exposure"
-      - "CPython parser has built-in nesting limits (~100 levels)"
-      - "max_file_size parameter exists as compensating control"
-    resolution: "Add RecursionError to except clause in analyze_python(), or add max_depth to recursive helpers"
-    target: "Next hardening plan or debt cleanup"
+    resolution: "analyze_python() now catches RecursionError and returns AST-DEPTH INFO finding. MAX_AST_RESOLVE_DEPTH=50 added to _ast_helpers.py."
 
   - id: SEC-013-002
     severity: low
+    status: resolved
+    resolved_by: PLAN-016
     title: "Silent AST parse failure — no user notification"
     files: ["src/skill_scan/ast_analyzer.py:39-42"]
     description: |
       When ast.parse() fails on a .py file, analyze_python returns [].
       User gets no indication AST analysis was skipped (regex still runs).
-    mitigations:
-      - "Regex layer provides defense in depth"
-      - "Behavior is documented and by design (R007)"
-    resolution: "Consider emitting an INFO-level finding when AST parsing fails"
-    target: "Future UX improvement plan"
+    resolution: "analyze_python() now returns an AST-PARSE INFO finding on SyntaxError/ValueError/RecursionError."

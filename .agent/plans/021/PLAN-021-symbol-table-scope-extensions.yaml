@@ -4,7 +4,7 @@ type: implementation
 status: Complete
 created: 2026-03-13
 
-linked_spec: null
+linked_spec: REQUIREMENTS-021.yaml
 
 description: |
   Extend the symbol table builder (build_symbol_table) to track three
@@ -57,7 +57,7 @@ utilities_audit:
     - query: "Test file headroom"
       found: "test_ast_symbol_table_edge.py: 184/250 (best overflow), test_ast_split_detector_join.py: 165/250, test_ast_symbol_table.py: 245/250 (full)"
     - query: "Extension points for subscript, scope, class"
-      found: "_handle_subscript_assign ~line 166, _resolve_subscript_lookup ~line 164, build_symbol_table FunctionDef loop ~line 47"
+      found: "_handle_subscript_assign ~line 166, _resolve_subscript_lookup in _ast_split_resolve.py ~line 133, build_symbol_table FunctionDef loop ~line 47"
   categories:
     error_handling:
       needed: false
@@ -244,11 +244,11 @@ parts:
     verify_group: class-scope
     requirements_covered: [R010, R-IMP005, R-EFF005, R-EFF007, R-ADV001]
     approach:
-      - step: "Add ast.Attribute resolution to _resolve_operand and _resolve_formatted_value"
+      - step: "Add ast.Attribute resolution to resolve_operand and resolve_expr"
         files:
-          - src/skill_scan/_ast_split_detector.py
+          - src/skill_scan/_ast_split_resolve.py
         notes: >
-          In _resolve_operand (~line 108) and _resolve_formatted_value (~line 150),
+          In resolve_operand (~line 37) and resolve_expr (~line 104) in _ast_split_resolve.py,
           add handling for ast.Attribute: when node is ast.Attribute with Name value,
           construct 'Name.attr' and do _scoped_lookup. For self.attr inside class
           methods, the key 'ClassName.attr' is at module level so _scoped_lookup's
@@ -318,6 +318,7 @@ allowed_files:
   - "tests/unit/test_ast_split_detector*.py"
   - "tests/unit/rule_helpers.py"
   - ".agent/status/debt.yaml"
+  - "CLAUDE.md"
 
 forbidden:
   - "src/skill_scan/content_scanner.py"
