@@ -10,11 +10,8 @@ import ast
 
 import pytest
 
-from skill_scan._ast_split_detector import (
-    _DYNAMIC_IMPORT_NAMES,
-    _EXEC_NAMES,
-    detect_split_evasion,
-)
+from skill_scan._ast_split_detector import detect_split_evasion
+from skill_scan._ast_split_match import _DYNAMIC_IMPORT_NAMES, _EXEC_NAMES
 from skill_scan._ast_symbol_table import build_symbol_table
 from skill_scan.models import Finding, Severity
 

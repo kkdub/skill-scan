@@ -5,6 +5,16 @@ from __future__ import annotations
 import ast
 
 
+def _resolve_call_fn_name(func: ast.expr, alias_map: dict[str, str]) -> str | None:
+    """Resolve a call's function name via alias map (Name or Attribute)."""
+    if isinstance(func, ast.Name):
+        return alias_map.get(func.id, func.id)
+    if isinstance(func, ast.Attribute) and isinstance(func.value, ast.Name):
+        base = alias_map.get(func.value.id, func.value.id)
+        return f"{base}.{func.attr}"
+    return None
+
+
 def _resolve_map_join(
     call: ast.Call,
     sep: str,

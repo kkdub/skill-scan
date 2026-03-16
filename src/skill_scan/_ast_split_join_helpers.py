@@ -14,6 +14,7 @@ from skill_scan._ast_split_helpers import (
     _scoped_lookup,
 )
 from skill_scan._ast_split_map_helpers import (
+    _resolve_call_fn_name,
     _resolve_map_chr,
     _resolve_map_join,
 )
@@ -168,14 +169,9 @@ def _resolve_comprehension_chr(
 ) -> str | None:
     """Resolve ``chr(x) for x in [int, ...]`` comprehension pattern."""
     # Verify the element is a chr() call with the loop variable as argument
-    if not (
-        isinstance(elt, ast.Call)
-        and isinstance(elt.func, ast.Name)
-        and len(elt.args) == 1
-        and not elt.keywords
-    ):
+    if not (isinstance(elt, ast.Call) and len(elt.args) == 1 and not elt.keywords):
         return None
-    fn_name = (alias_map or {}).get(elt.func.id, elt.func.id)
+    fn_name = _resolve_call_fn_name(elt.func, alias_map or {})
     if fn_name not in ("chr", "builtins.chr"):
         return None
     arg = elt.args[0]
