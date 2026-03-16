@@ -82,6 +82,7 @@ def _resolve_comprehension_join(
     symbol_table: dict[str, str],
     scope: str,
     *,
+    alias_map: dict[str, str] | None = None,
     int_list_table: dict[str, list[int]] | None = None,
     int_list_scope: str = "",
 ) -> str | None:
@@ -91,8 +92,11 @@ def _resolve_comprehension_join(
     comp = node.generators[0]
     if comp.ifs or not isinstance(comp.target, ast.Name):
         return None
+    am = alias_map or {}
     if isinstance(comp.iter, ast.List | ast.Tuple):
-        return _resolve_direct_iter(node.elt, comp.target.id, comp.iter.elts, sep, symbol_table, scope)
+        return _resolve_direct_iter(
+            node.elt, comp.target.id, comp.iter.elts, sep, symbol_table, scope, alias_map=am
+        )
     if isinstance(comp.iter, ast.Name) and int_list_table:
         return _resolve_tracked_iter(
             node.elt,
@@ -101,6 +105,7 @@ def _resolve_comprehension_join(
             sep,
             int_list_table,
             scope,
+            alias_map=am,
             int_list_scope=int_list_scope,
         )
     return None
@@ -113,10 +118,12 @@ def _resolve_direct_iter(
     sep: str,
     symbol_table: dict[str, str],
     scope: str,
+    *,
+    alias_map: dict[str, str] | None = None,
 ) -> str | None:
     """Resolve comprehension with direct List/Tuple iteration source."""
     # Try chr(x) pattern first: chr(c) for c in [101, 118, ...]
-    chr_result = _resolve_comprehension_chr(elt, target_id, iter_elts, sep)
+    chr_result = _resolve_comprehension_chr(elt, target_id, iter_elts, sep, alias_map=alias_map)
     if chr_result is not None:
         return chr_result
     # Identity pattern: x for x in ['ev', 'al']
@@ -135,6 +142,7 @@ def _resolve_tracked_iter(
     int_list_table: dict[str, list[int]],
     scope: str,
     *,
+    alias_map: dict[str, str] | None = None,
     int_list_scope: str = "",
 ) -> str | None:
     """Resolve comprehension with tracked int-list variable as iteration source."""
@@ -147,21 +155,28 @@ def _resolve_tracked_iter(
     if not int_list:
         return None
     synthetic: list[ast.expr] = [ast.Constant(value=v) for v in int_list]
-    return _resolve_comprehension_chr(elt, target_id, synthetic, sep)
+    return _resolve_comprehension_chr(elt, target_id, synthetic, sep, alias_map=alias_map)
 
 
 def _resolve_comprehension_chr(
-    elt: ast.expr, target_id: str, iter_elts: list[ast.expr], sep: str
+    elt: ast.expr,
+    target_id: str,
+    iter_elts: list[ast.expr],
+    sep: str,
+    *,
+    alias_map: dict[str, str] | None = None,
 ) -> str | None:
     """Resolve ``chr(x) for x in [int, ...]`` comprehension pattern."""
     # Verify the element is a chr() call with the loop variable as argument
     if not (
         isinstance(elt, ast.Call)
         and isinstance(elt.func, ast.Name)
-        and elt.func.id == "chr"
         and len(elt.args) == 1
         and not elt.keywords
     ):
+        return None
+    fn_name = (alias_map or {}).get(elt.func.id, elt.func.id)
+    if fn_name not in ("chr", "builtins.chr"):
         return None
     arg = elt.args[0]
     if not (isinstance(arg, ast.Name) and arg.id == target_id):
@@ -240,6 +255,7 @@ def _resolve_join_call(
             sep,
             symbol_table,
             scope,
+            alias_map=alias_map,
             int_list_table=int_list_table,
             int_list_scope=int_list_scope,
         )

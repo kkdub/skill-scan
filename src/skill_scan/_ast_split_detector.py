@@ -16,6 +16,7 @@ from skill_scan._ast_split_resolve import (
     _resolve_replace_chain,
     resolve_binop_chain,
     resolve_call,
+    resolve_call_return,
     resolve_fstring,
     resolve_percent_format,
 )
@@ -85,7 +86,7 @@ def detect_split_evasion(
             findings.append(dd)
             continue
         il_scope = il_scope_map.get(id(node), "")
-        resolved = _try_resolve_split(
+        pair = _try_resolve_split(
             node,
             symbol_table,
             scope,
@@ -93,9 +94,10 @@ def detect_split_evasion(
             int_list_table=int_list_table,
             int_list_scope=il_scope,
         )
-        if resolved is None:
+        if pair is None:
             continue
-        finding = _check_dangerous(resolved, file_path, node)
+        resolved, label = pair
+        finding = _check_dangerous(resolved, file_path, node, label=label)
         if finding is not None:
             findings.append(finding)
     return findings
@@ -178,8 +180,12 @@ def _try_resolve_split(
     *,
     int_list_table: dict[str, list[int]] | None = None,
     int_list_scope: str = "",
-) -> str | None:
-    """Try each resolver; forwards *int_list_table* to resolve_call."""
+) -> tuple[str, str] | None:
+    """Try each resolver; returns (resolved, label) or None.
+
+    Label is 'call-return' when resolution came from call-return tracking,
+    'split variable' otherwise.
+    """
     for pred, resolver in _RESOLVERS:
         if not pred(node):
             continue
@@ -189,11 +195,22 @@ def _try_resolve_split(
             kw["int_list_scope"] = int_list_scope
         result = resolver(node, symbol_table, scope, **kw)
         if result is not None:
-            return result
+            label = "split variable"
+            if resolver is resolve_call and isinstance(node, ast.Call):
+                cr = resolve_call_return(node, symbol_table, scope)
+                if cr == result:
+                    label = "call-return"
+            return result, label
     return None
 
 
-def _check_dangerous(resolved: str, file_path: str, node: ast.AST) -> Finding | None:
+def _check_dangerous(
+    resolved: str,
+    file_path: str,
+    node: ast.AST,
+    *,
+    label: str = "split variable",
+) -> Finding | None:
     """Return a Finding for a dangerous assembled name, or None if safe."""
     entry = _NAME_RULE.get(resolved)
     if entry is not None:
@@ -203,8 +220,8 @@ def _check_dangerous(resolved: str, file_path: str, node: ast.AST) -> Finding | 
             severity=severity,
             file=file_path,
             line=getattr(node, "lineno", None),
-            matched_text=f"split variable evasion building '{resolved}'",
-            description=f"{desc_prefix} -- variables reassembled to build '{resolved}' via AST",
+            matched_text=f"{label} evasion building '{resolved}'",
+            description=f"{desc_prefix} -- {label} resolves to '{resolved}' via AST",
         )
     # Bridge to decoder for base64/hex/url encoded payloads
     for payload in extract_encoded_strings(resolved):
