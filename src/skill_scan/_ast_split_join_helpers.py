@@ -13,6 +13,10 @@ from skill_scan._ast_split_helpers import (
     _resolve_join_elements,
     _scoped_lookup,
 )
+from skill_scan._ast_split_map_helpers import (
+    _resolve_map_chr,
+    _resolve_map_join,
+)
 
 
 def _collect_int_list_assigns(tree: ast.Module) -> dict[str, list[int]]:
@@ -28,21 +32,22 @@ def _collect_int_list_assigns(tree: ast.Module) -> dict[str, list[int]]:
         elif isinstance(node, ast.ClassDef):
             for stmt in node.body:
                 if isinstance(stmt, ast.FunctionDef | ast.AsyncFunctionDef):
-                    _collect_int_lists_from_body(stmt.body, node.name, result)
+                    _collect_int_lists_from_body(stmt.body, f"{node.name}.{stmt.name}", result)
     return result
 
 
 def _collect_int_lists_from_body(body: list[ast.stmt], scope: str, result: dict[str, list[int]]) -> None:
-    """Collect integer-list assignments, recursing into control-flow blocks."""
+    """Collect assignments; int-lists get values, others get [] shadow marker."""
     for stmt in body:
-        # Track single-target assignments of all-int lists/tuples
         if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1:
-            target = stmt.targets[0]
-            if isinstance(target, ast.Name) and isinstance(stmt.value, ast.List | ast.Tuple):
-                ints = _extract_int_list(stmt.value.elts)
-                if ints is not None:
-                    result[f"{scope}.{target.id}" if scope else target.id] = ints
-        # Recurse into control-flow sub-bodies (if/for/while/with/try)
+            tgt = stmt.targets[0]
+            if isinstance(tgt, ast.Name):
+                key = f"{scope}.{tgt.id}" if scope else tgt.id
+                if isinstance(stmt.value, ast.List | ast.Tuple):
+                    ints = _extract_int_list(stmt.value.elts)
+                    result[key] = ints if ints is not None else []
+                else:
+                    result[key] = []
         for child_body in _sub_bodies(stmt):
             _collect_int_lists_from_body(child_body, scope, result)
 
@@ -71,18 +76,6 @@ def _extract_int_list(elts: list[ast.expr]) -> list[int] | None:
     return values
 
 
-def _resolve_generator_join(
-    gen: ast.GeneratorExp,
-    sep: str,
-    symbol_table: dict[str, str],
-    scope: str,
-    *,
-    int_list_table: dict[str, list[int]] | None = None,
-) -> str | None:
-    """Resolve ``p for p in ['ev', 'al']`` or ``chr(c) for c in [ints]`` inside join."""
-    return _resolve_comprehension_join(gen, sep, symbol_table, scope, int_list_table=int_list_table)
-
-
 def _resolve_comprehension_join(
     node: ast.GeneratorExp | ast.ListComp,
     sep: str,
@@ -90,20 +83,26 @@ def _resolve_comprehension_join(
     scope: str,
     *,
     int_list_table: dict[str, list[int]] | None = None,
+    int_list_scope: str = "",
 ) -> str | None:
     """Resolve generator or list comprehension inside join to a string."""
-    # Only handle simple single-generator comprehensions without filters
     if len(node.generators) != 1:
         return None
     comp = node.generators[0]
     if comp.ifs or not isinstance(comp.target, ast.Name):
         return None
-    # Direct list/tuple iteration source
     if isinstance(comp.iter, ast.List | ast.Tuple):
         return _resolve_direct_iter(node.elt, comp.target.id, comp.iter.elts, sep, symbol_table, scope)
-    # Tracked int-list variable as iteration source
     if isinstance(comp.iter, ast.Name) and int_list_table:
-        return _resolve_tracked_iter(node.elt, comp.target.id, comp.iter.id, sep, int_list_table, scope)
+        return _resolve_tracked_iter(
+            node.elt,
+            comp.target.id,
+            comp.iter.id,
+            sep,
+            int_list_table,
+            scope,
+            int_list_scope=int_list_scope,
+        )
     return None
 
 
@@ -135,15 +134,18 @@ def _resolve_tracked_iter(
     sep: str,
     int_list_table: dict[str, list[int]],
     scope: str,
+    *,
+    int_list_scope: str = "",
 ) -> str | None:
     """Resolve comprehension with tracked int-list variable as iteration source."""
-    # Scoped lookup: try function.varname first, then fall back to global
-    int_list = int_list_table.get(f"{scope}.{iter_name}") if scope else None
+    ls = int_list_scope or scope
+    int_list = int_list_table.get(f"{ls}.{iter_name}") if ls else None
+    if int_list is not None and not int_list:
+        return None  # Shadow marker: locally bound but not an int list
     if int_list is None:
         int_list = int_list_table.get(iter_name)
-    if int_list is None:
+    if not int_list:
         return None
-    # Synthesize AST Constant nodes from the tracked int values
     synthetic: list[ast.expr] = [ast.Constant(value=v) for v in int_list]
     return _resolve_comprehension_chr(elt, target_id, synthetic, sep)
 
@@ -165,56 +167,6 @@ def _resolve_comprehension_chr(
     if not (isinstance(arg, ast.Name) and arg.id == target_id):
         return None
     return _resolve_map_chr(iter_elts, sep)
-
-
-def _resolve_map_join(
-    call: ast.Call,
-    sep: str,
-    alias_map: dict[str, str],
-) -> str | None:
-    """Resolve ``map(chr, [ints])`` or ``map(str, [strs])`` inside join."""
-    from skill_scan._ast_helpers import get_call_name
-
-    if get_call_name(call, alias_map) != "map" or len(call.args) != 2:
-        return None
-    func_arg = call.args[0]
-    if not isinstance(func_arg, ast.Name):
-        return None
-    # Resolve aliased function names (e.g., c = chr; map(c, ...))
-    fn_name = alias_map.get(func_arg.id, func_arg.id)
-    iter_arg = call.args[1]
-    if not isinstance(iter_arg, ast.List | ast.Tuple):
-        return None
-    # Dispatch to chr or str resolver based on mapped function name
-    if fn_name == "chr":
-        return _resolve_map_chr(iter_arg.elts, sep)
-    if fn_name == "str":
-        return _resolve_map_str(iter_arg.elts, sep)
-    return None
-
-
-def _resolve_map_chr(elts: list[ast.expr], sep: str) -> str | None:
-    """Convert list of int literals to characters, joined by sep."""
-    # Each int must be a valid Unicode codepoint
-    parts: list[str] = []
-    for elt in elts:
-        if not isinstance(elt, ast.Constant) or not isinstance(elt.value, int):
-            return None
-        if not (0 <= elt.value <= 0x10FFFF):
-            return None
-        parts.append(chr(elt.value))
-    return sep.join(parts)
-
-
-def _resolve_map_str(elts: list[ast.expr], sep: str) -> str | None:
-    """Pass through list of string literals, joined by sep."""
-    # Parallel to _resolve_map_chr but for str identity mapping
-    parts: list[str] = []
-    for elt in elts:
-        if not isinstance(elt, ast.Constant) or not isinstance(elt.value, str):
-            return None
-        parts.append(elt.value)
-    return sep.join(parts)
 
 
 def _is_str_join_call(node: ast.Call) -> bool:
@@ -271,21 +223,26 @@ def _resolve_join_call(
     alias_map: dict[str, str] | None = None,
     *,
     int_list_table: dict[str, list[int]] | None = None,
+    int_list_scope: str = "",
 ) -> str | None:
     """Resolve ''.join(...) with list/tuple, generator, reversed, or map(chr/str) arguments."""
     if not _is_str_join_call(node):
         return None
-    # Type narrowing: _is_str_join_call guarantees Attribute with Constant value
-    assert isinstance(node.func, ast.Attribute) and isinstance(node.func.value, ast.Constant)
+    if not (isinstance(node.func, ast.Attribute) and isinstance(node.func.value, ast.Constant)):
+        return None  # pragma: no cover — _is_str_join_call guarantees this
     sep = str(node.func.value.value)
     arg = node.args[0]
-    # Direct list/tuple: ''.join(['e', 'v', 'a', 'l'])
     if isinstance(arg, ast.List | ast.Tuple):
         return _resolve_join_elements(arg.elts, sep, symbol_table, scope)
-    # Generator/listcomp: ''.join(chr(c) for c in [ints])
     if isinstance(arg, ast.GeneratorExp | ast.ListComp):
-        return _resolve_comprehension_join(arg, sep, symbol_table, scope, int_list_table=int_list_table)
-    # Call: reversed() or map(chr/str, [...])
+        return _resolve_comprehension_join(
+            arg,
+            sep,
+            symbol_table,
+            scope,
+            int_list_table=int_list_table,
+            int_list_scope=int_list_scope,
+        )
     if isinstance(arg, ast.Call):
         rev = _resolve_reversed_join(arg, sep, symbol_table, scope)
         if rev is not None:

@@ -54,7 +54,8 @@ src/skill_scan/           # Production source code
   _ast_split_bytes.py     # Bytes-constructor resolution
   _ast_split_chr.py       # chr/ord/int resolution
   _ast_split_reduce.py    # reduce/operator concat resolution
-  _ast_split_join_helpers.py # Generator/map/comprehension join resolution; _collect_int_list_assigns pre-pass
+  _ast_split_join_helpers.py # Generator/comprehension join resolution; _collect_int_list_assigns pre-pass
+  _ast_split_map_helpers.py  # map(chr/str, [...]) resolution for join patterns
   _ast_kwargs_detector.py # Kwargs unpacking detector (detect_kwargs_unpacking)
   decoder.py              # Facade: EncodedPayload, extract/decode
   _decoder_helpers.py     # Base64/hex extraction and decode

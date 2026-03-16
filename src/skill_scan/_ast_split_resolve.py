@@ -155,13 +155,21 @@ def resolve_call(
     *,
     alias_map: dict[str, str] | None = None,
     int_list_table: dict[str, list[int]] | None = None,
+    int_list_scope: str = "",
 ) -> str | None:
     """Resolve Call nodes: join, format, bytes-constructor, reduce, or call-return.
 
     Registry-compatible wrapper that chains all Call sub-resolvers.
     """
     am = alias_map or {}
-    result = _resolve_join_call(node, symbol_table, scope, am, int_list_table=int_list_table)
+    result = _resolve_join_call(
+        node,
+        symbol_table,
+        scope,
+        am,
+        int_list_table=int_list_table,
+        int_list_scope=int_list_scope,
+    )
     if result is None:
         result = _resolve_format_call(node, symbol_table, scope)
     if result is not None:

@@ -244,9 +244,9 @@ def _eval_constant_expr(node: ast.expr) -> object:
         return node.value
     if isinstance(node, ast.UnaryOp) and isinstance(node.operand, ast.Constant):
         val = node.operand.value
-        if isinstance(node.op, ast.USub) and isinstance(val, int | float):
+        if isinstance(node.op, ast.USub) and isinstance(val, int | float | complex):
             return -val
-        if isinstance(node.op, ast.UAdd) and isinstance(val, int | float):
+        if isinstance(node.op, ast.UAdd) and isinstance(val, int | float | complex):
             return +val
     return _UNRESOLVABLE
 

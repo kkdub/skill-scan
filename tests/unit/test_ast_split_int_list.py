@@ -53,22 +53,22 @@ class TestCollectIntListAssigns:
         assert result["f.codes"] == [101, 118]
 
     def test_class_method_scoped(self) -> None:
-        """Class method assignment is scoped with class name."""
+        """Class method assignment is scoped with ClassName.method."""
         tree = _PARSE("class C:\n  def m(self):\n    codes = [101]")
         result = _collect_int_list_assigns(tree)
-        assert "C.codes" in result
+        assert "C.m.codes" in result
 
-    def test_mixed_type_list_not_tracked(self) -> None:
-        """Mixed list [int, str] is conservatively ignored."""
+    def test_mixed_type_list_shadow_marker(self) -> None:
+        """Mixed list [int, str] gets [] shadow marker (prevents global fallback)."""
         tree = _PARSE("codes = [101, 'hello']")
         result = _collect_int_list_assigns(tree)
-        assert "codes" not in result
+        assert result["codes"] == []
 
-    def test_string_list_not_tracked(self) -> None:
-        """String list is not tracked by int-list collector."""
+    def test_string_list_shadow_marker(self) -> None:
+        """String list gets [] shadow marker (prevents global fallback)."""
         tree = _PARSE("parts = ['ev', 'al']")
         result = _collect_int_list_assigns(tree)
-        assert "parts" not in result
+        assert result["parts"] == []
 
     def test_empty_list_tracked(self) -> None:
         """Empty list is technically all-int (vacuously true)."""
