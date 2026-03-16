@@ -90,7 +90,7 @@ Key patterns and invariants. For detailed module-level docs, see `.agent/ARCHITE
 - Deferred imports in `_ast_symbol_table.py` break circular deps — don't reorganize without checking import chains
 
 **Known debt**:
-- DEBT-025-DICT-MERGING — dict merging (`{**base, 'shell': True}`, `opts | {'shell': True}`) not handled by kwargs detector
+- DEBT-025-DICT-UNION — dict union operator (`opts | {'shell': True}`, `opts |= {'shell': True}`) not handled by kwargs detector; PEP 448 spread dicts (`{**base, ...}`) are conservatively treated as unresolvable
 - DEBT-024-TRACKED-COMPREHENSION — tracked variable as comprehension iterable needs symbol table extension for non-string values
 
 ## Tips

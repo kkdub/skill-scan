@@ -612,6 +612,35 @@ def _try_resolve_split(node, symbol_table, scope, alias_map=None):
 
 > Trap: predicates are ordered from most-specific to least-specific (e.g. `_is_replace` before `_is_call`). A more-general predicate placed first will shadow the specific resolver because `_is_call` matches `.replace()` call nodes too.
 
+## Boolean-Value Pre-Pass for Symbol-Table Gaps
+
+When a detector needs to check non-string constant values (booleans, integers) that the main symbol table cannot store (`dict[str, str]` converts everything to strings), use a focused AST pre-pass to collect those values separately. Keep the pre-pass module-scope only and convert values to strings for uniform comparison.
+
+```python
+def _collect_dict_assigns(tree: ast.Module) -> dict[str, dict[str, str]]:
+    """Pre-pass: collect dict variable assignments from module-level statements.
+
+    Unlike the symbol table, tracks ALL constant values (including booleans),
+    converting them to strings for uniform comparison via str(value.value).
+    """
+    result: dict[str, dict[str, str]] = {}
+    for stmt in tree.body:
+        if not isinstance(stmt, ast.Assign) or len(stmt.targets) != 1:
+            continue
+        target = stmt.targets[0]
+        if isinstance(target, ast.Name) and isinstance(stmt.value, ast.Dict):
+            extracted = _extract_dict_literal(stmt.value)  # str(True) == 'True'
+            if extracted:
+                result[target.id] = extracted
+    return result
+
+# Matching: compare stored string against str(expected_value)
+def _kwarg_matches(resolved: dict[str, str], key: str, value: object) -> bool:
+    return key in resolved and str(resolved[key]) == str(value)
+```
+
+> Trap: the main symbol table uses `dict[str, str]` and stores `True` as `'True'`. When the detector table holds `value is True` (a Python bool), always compare via `str(value)` on both sides — never use `==` between bool and string directly.
+
 ## Facade Re-export Pattern
 
 When splitting a large module into sibling files, keep the original file as a facade: it retains the orchestrator/entry-point functions and types, then re-exports all names from sibling files at the BOTTOM. This preserves every existing import path and mock.patch target.

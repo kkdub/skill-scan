@@ -1,0 +1,319 @@
+id: "PLAN-025"
+title: "Detect dangerous **kwargs unpacking"
+type: implementation
+status: Complete
+created: 2026-03-14
+linked_spec: null
+
+description: |
+  Detect dangerous **kwargs unpacking patterns where a dict containing unsafe
+  keyword arguments (e.g. shell=True) is unpacked into a sensitive function call
+  (e.g. subprocess.run('ls', **opts)). Resolves DEBT-024-KWARGS-UNPACKING.
+
+  No existing tool handles this well: Bandit misses it (kw.arg is None for **),
+  Semgrep detects ** syntax but can't resolve dict contents, Pysa requires manual
+  model annotations. We leverage the existing symbol table's dict-key tracking
+  (composite keys like 'opts[shell]') to resolve dict contents statically.
+
+  Table-driven design: a _DANGEROUS_KWARGS lookup defines which (function, key,
+  value) combinations are dangerous. New entries are config-only additions.
+
+  Deferred: dict merging patterns ({**base, 'shell': True}, opts | {'shell': True}).
+
+requirements:
+  file: null
+  ids:
+    - R001  # Detect subprocess.*(**opts) where opts contains shell=True (symbol table tracked)
+    - R002  # Detect subprocess.*(**{'shell': True, ...}) — inline dict literal unpacking
+    - R003  # Detect dicts built via subscript assignment (opts['shell'] = True)
+    - R004  # Detect dicts built via dict literal (opts = {'shell': True})
+    - R005  # Emit EXEC-002 CRITICAL (same rule as existing subprocess shell=True)
+    - R006  # Table-driven _DANGEROUS_KWARGS — new combos are config-only additions
+    - R007  # No false positives on safe kwargs passthrough, non-targeted functions
+    - R008  # Support aliased imports via existing alias_map (import subprocess as sp)
+    - R-IMP001  # New module _ast_kwargs_detector.py (capacity: _ast_detectors.py at 294/300)
+    - R-IMP002  # Integrate alongside detect_split_evasion in analyze_python() (not via _DETECTORS)
+    - R-IMP003  # Use existing get_call_name() and build_alias_map() for function resolution
+    - R-EFF001  # Positive test fixtures (min 4: dict literal, subscript-built, inline dict, aliased import)
+    - R-EFF002  # Negative test fixtures (min 3: safe passthrough, non-subprocess, safe dict keys)
+  uncovered: []
+
+utilities_audit:
+  status: complete
+  search_performed:
+    - query: "grep is_subprocess_shell_true src/skill_scan/_ast_helpers.py"
+      found: "is_subprocess_shell_true() at line 63 — checks kw.arg == 'shell' in node.keywords; misses **kwargs where kw.arg is None"
+    - query: "grep _detect_unsafe_calls src/skill_scan/_ast_detectors.py"
+      found: "_detect_unsafe_calls() at line 61 — only consumer of is_subprocess_shell_true; emits EXEC-002 for shell=True"
+    - query: "wc -l src/skill_scan/_ast_detectors.py"
+      found: "294 lines — at capacity (300 limit), new detector must go in own module"
+    - query: "grep get_call_name src/skill_scan/_ast_helpers.py"
+      found: "get_call_name(node, alias_map) resolves aliased calls — reusable for kwargs detector"
+    - query: "grep 'composite key' CLAUDE.md"
+      found: "Symbol table stores dict entries as 'varname[key]' composite keys — reusable for resolving dict contents"
+    - query: "read ast_analyzer.py analyze_python()"
+      found: "detect_split_evasion called separately from _DETECTORS loop — established pattern for symbol-table-dependent detectors"
+  categories:
+    error_handling:
+      needed: false
+    validation:
+      needed: false
+    logging:
+      needed: false
+    types:
+      needed: false
+    configuration:
+      needed: false
+    http_client:
+      needed: false
+    symbol_table:
+      needed: true
+      exists: "src/skill_scan/_ast_symbol_table.py"
+      gaps: "None — existing composite key tracking (d['key'] = 'val') covers dict subscript and dict literal patterns"
+      action: use
+    call_resolution:
+      needed: true
+      exists: "src/skill_scan/_ast_helpers.py (get_call_name, build_alias_map)"
+      gaps: "None — existing utilities handle aliased imports"
+      action: use
+  infrastructure_parts: []
+
+environment:
+  status: assessed
+  build:
+    tool: make
+    install_cmd: "make install"
+    check_cmd: "make check"
+    prerequisites: ["Python 3.13"]
+  runtime_services: []
+  changes:
+    new_dependencies: []
+    env_vars: []
+    schema_changes: []
+    ci_changes: []
+    build_changes: []
+
+parts:
+  - id: a
+    title: "Kwargs detector module + dangerous-kwargs table"
+    status: Done
+    requirements_covered: [R001, R002, R003, R004, R005, R006, R007, R008, R-IMP001, R-IMP003]
+    verify_group: kwargs-detection
+    approach:
+      - step: "Define _DANGEROUS_KWARGS table"
+        files: [src/skill_scan/_ast_kwargs_detector.py]
+        notes: |
+          Table maps function name prefixes to dangerous (key, value) pairs.
+          Initial entry: 'subprocess.' prefix -> ('shell', True) -> EXEC-002 CRITICAL.
+          Use same _make_finding helper from _ast_detectors.py. Function matching
+          should use startswith() on the resolved call name (via get_call_name + alias_map).
+      - step: "Implement detect_kwargs_unpacking(tree, file_path, alias_map, symbol_table)"
+        files: [src/skill_scan/_ast_kwargs_detector.py]
+        notes: |
+          Walk ast.Call nodes. For each, check node.keywords for entries where kw.arg is None
+          (these are ** unpacked). For each such kw.value:
+          1. If ast.Dict literal: extract keys/values directly from AST
+          2. If ast.Name: look up in symbol table using composite key pattern ('varname[key]')
+          Resolve the call name via get_call_name(node, alias_map). Check resolved dict
+          contents against _DANGEROUS_KWARGS table. Emit finding if match found.
+      - step: "Handle dict literal and symbol-table-tracked dicts"
+        files: [src/skill_scan/_ast_kwargs_detector.py]
+        notes: |
+          For inline dict: iterate node.keys/values, extract constant key-value pairs.
+          For tracked name: enumerate symbol table entries matching 'varname[*]' pattern
+          to reconstruct known dict contents. Only check constant values (ast.Constant).
+    criteria:
+      - "_ast_kwargs_detector.py exists as a new module under src/skill_scan/"
+      - "Module is under 300 lines"
+      - "_DANGEROUS_KWARGS table defines at least subprocess.* + shell=True entry"
+      - "detect_kwargs_unpacking() accepts (tree, file_path, alias_map, symbol_table) signature"
+      - "Inline dict literal **{'shell': True} resolved directly from AST"
+      - "Symbol-table-tracked dict resolved via composite key lookup (varname[key] pattern)"
+      - "get_call_name() used for function name resolution (handles aliases)"
+      - "Emits EXEC-002 CRITICAL finding with descriptive matched_text"
+
+  - id: b
+    title: "Integration in ast_analyzer.py + facade re-exports"
+    status: Done
+    depends_on: [a]
+    requirements_covered: [R-IMP002]
+    verify_group: kwargs-detection
+    approach:
+      - step: "Call detect_kwargs_unpacking() in analyze_python()"
+        files: [src/skill_scan/ast_analyzer.py]
+        notes: |
+          Add call alongside detect_split_evasion() — same pattern: runs after
+          _DETECTORS loop, receives alias_map and symbol_table. Extend the try block.
+          Do NOT add to _DETECTORS tuple (different signature — needs symbol_table).
+      - step: "Add facade re-exports"
+        files: [src/skill_scan/ast_analyzer.py]
+        notes: |
+          Re-export detect_kwargs_unpacking and _DANGEROUS_KWARGS from
+          _ast_kwargs_detector using the 'x as x' explicit re-export pattern.
+    criteria:
+      - "analyze_python() calls detect_kwargs_unpacking() alongside detect_split_evasion()"
+      - "detect_kwargs_unpacking is NOT in _DETECTORS tuple (runs separately)"
+      - "Findings from kwargs detection flow through to analyze_python() return value"
+      - "ast_analyzer.py re-exports detect_kwargs_unpacking and _DANGEROUS_KWARGS"
+
+  - id: c
+    title: "Test fixtures + tests"
+    status: Done
+    depends_on: [a, b]
+    requirements_covered: [R-EFF001, R-EFF002]
+    approach:
+      - step: "Create positive test fixtures"
+        files:
+          - tests/fixtures/split_evasion/pos_kwargs_dict_literal.py
+          - tests/fixtures/split_evasion/pos_kwargs_subscript_built.py
+          - tests/fixtures/split_evasion/pos_kwargs_inline_dict.py
+          - tests/fixtures/split_evasion/pos_kwargs_aliased_import.py
+        notes: |
+          Each fixture contains a subprocess call with **kwargs unpacking that should
+          trigger EXEC-002. Use the existing fixture naming convention (pos_ prefix).
+          Include ruff noqa comments if needed for intentional unsafe patterns.
+      - step: "Create negative test fixtures"
+        files:
+          - tests/fixtures/split_evasion/neg_kwargs_safe_passthrough.py
+          - tests/fixtures/split_evasion/neg_kwargs_non_subprocess.py
+          - tests/fixtures/split_evasion/neg_kwargs_safe_keys.py
+        notes: |
+          Fixtures that should NOT trigger. safe_passthrough: function with **kwargs
+          parameter forwarding. non_subprocess: dict unpacking into a safe function.
+          safe_keys: subprocess with dict that has no dangerous keys.
+      - step: "Write unit tests"
+        files: [tests/unit/test_ast_kwargs_detector.py]
+        notes: |
+          Test detect_kwargs_unpacking() directly. Test each positive fixture produces
+          EXEC-002 finding. Test each negative fixture produces no findings. Test
+          _DANGEROUS_KWARGS table structure. Follow existing test patterns in
+          test_ast_split_detector.py for fixture-based testing.
+    criteria:
+      - "At least 4 positive fixtures exist (dict literal, subscript-built, inline dict, aliased import)"
+      - "At least 3 negative fixtures exist (safe passthrough, non-subprocess, safe keys)"
+      - "All positive fixtures produce EXEC-002 findings"
+      - "All negative fixtures produce no EXEC-002 findings"
+      - "make check passes (all tests green, linting clean)"
+
+  - id: d
+    title: "Debt bookkeeping"
+    status: Done
+    depends_on: [c]
+    requirements_covered: []
+    approach:
+      - step: "Update debt.yaml"
+        files: [.agent/status/debt.yaml]
+        notes: |
+          Close DEBT-024-KWARGS-UNPACKING (move to resolved comments at top).
+          Add new entry for dict-merging deferral (DEBT-025-DICT-MERGING).
+      - step: "Update CLAUDE.md architecture notes"
+        files: [CLAUDE.md]
+        notes: |
+          Add _ast_kwargs_detector.py to project structure section.
+          Add architecture notes for detect_kwargs_unpacking(), _DANGEROUS_KWARGS table,
+          and the integration pattern (runs alongside detect_split_evasion).
+    criteria:
+      - "DEBT-024-KWARGS-UNPACKING marked resolved in debt.yaml with 'Resolved by PLAN-025' comment"
+      - "New DEBT-025-DICT-MERGING entry added for deferred dict merging patterns"
+      - "CLAUDE.md project structure includes _ast_kwargs_detector.py"
+      - "CLAUDE.md architecture notes describe detect_kwargs_unpacking and _DANGEROUS_KWARGS"
+
+acceptance_scenarios: []
+
+allowed_files:
+  - "src/skill_scan/_ast_kwargs_detector.py"
+  - "src/skill_scan/ast_analyzer.py"
+  - "tests/**"
+  - ".agent/status/debt.yaml"
+  - "CLAUDE.md"
+
+forbidden:
+  - "src/skill_scan/_ast_detectors.py"
+  - "src/skill_scan/_ast_helpers.py"
+  - "config/production/**"
+  - ".env*"
+
+acceptance_criteria:
+  - "All requirements have status: done"
+  - "All parts have status: Done"
+  - "All tests pass"
+  - "make check green"
+
+stop_condition: |
+  When all requirements are verified and all parts are complete.
+
+work_log:
+  - part: a
+    status: Done
+    verified: true (grouped with b)
+    iterations: 1
+    files: [_ast_kwargs_detector.py, ast_analyzer.py]
+    notes: "Symbol table only stores strings — added _collect_dict_assigns() AST pre-pass for boolean values"
+  - part: b
+    status: Done
+    verified: true (grouped with a)
+    iterations: 0
+    notes: "Integration already done by part a build-and-test"
+  - part: c
+    status: Done
+    verified: true
+    iterations: 1
+    files: [7 fixture files, test_ast_kwargs_fixtures.py]
+  - part: d
+    status: Done
+    verified: true
+    iterations: 1
+    files: [debt.yaml, CLAUDE.md]
+  - part: docs
+    date: 2026-03-15
+    type: docs
+    note: "CLAUDE.md updated with _ast_kwargs_detector.py in project structure and architecture notes"
+  - part: docs
+    date: 2026-03-15
+    type: docs
+    note: "Documenter verification pass: CLAUDE.md confirmed accurate (63 pos/19 neg fixture count, all architecture notes match implementation); README.md updated to mention dangerous **kwargs unpacking in AST features bullet; CODE-PATTERNS.md Section 2 extended with Boolean-Value Pre-Pass pattern"
+
+evidence:
+  tests_passing: 2891
+  all_corpus_fixtures_detected: true
+  file_counts:
+    _ast_kwargs_detector.py: 205/300
+    ast_analyzer.py: 117/300
+  docs_updated:
+    - CLAUDE.md: project structure and architecture notes (verified accurate by documenter)
+    - debt.yaml: DEBT-024-KWARGS-UNPACKING resolved, DEBT-025-DICT-MERGING added
+    - README.md: AST features bullet updated with **kwargs unpacking mention
+    - CODE-PATTERNS.md: Boolean-Value Pre-Pass pattern added to Section 2
+
+handoff:
+  stopped_at: "all parts complete, documentation verified and finalized"
+  current_state: "All 4 parts Done and verified. CLAUDE.md, debt.yaml, README.md, and CODE-PATTERNS.md updated. Documenter verification pass complete."
+  next_steps: ["Run end-of-plan gates", "PR"]
+  blockers: []
+  scope:
+    files:
+      - src/skill_scan/_ast_kwargs_detector.py
+      - src/skill_scan/ast_analyzer.py
+    functions: [detect_kwargs_unpacking, _collect_dict_assigns, _extract_dict_literal, _lookup_symbol_table_dict, _check_kwargs]
+    components: [kwargs_detector, ast_analyzer]
+  decisions:
+    - "Integration pattern B: detect_kwargs_unpacking runs alongside detect_split_evasion in analyze_python(), not via _DETECTORS tuple (needs symbol_table)"
+    - "Rule ID EXEC-002 (same as existing subprocess shell=True — same vulnerability class)"
+    - "New module _ast_kwargs_detector.py (capacity constraint: _ast_detectors.py at 294/300)"
+    - "Dict merging deferred to DEBT-025-DICT-MERGING ({**base, 'shell': True}, opts | {'shell': True})"
+    - "Symbol table dict[str,str] cannot track boolean values — _collect_dict_assigns AST pre-pass handles this gap"
+  open_questions: []
+  cross_part_knowledge:
+    - "_ast_kwargs_detector.py at 205/300 — ample room for future _DANGEROUS_KWARGS entries"
+    - "ast_analyzer.py at 117/300 — healthy headroom"
+  active_signals: []
+
+errors: []
+
+notes: |
+  Research context: No existing security tool handles kwargs unpacking well.
+  - Bandit: checks kw.arg == 'shell' — None for ** unpacking, so completely missed
+  - Semgrep: detects ** syntax but can't resolve dict contents
+  - CodeQL: has dataflow but no existing queries for dangerous kwargs keys
+  - Pysa: requires manual .pysa model annotations declaring kwargs sinks
+  Our advantage: symbol table already tracks dict contents via composite keys.
