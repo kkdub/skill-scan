@@ -1,0 +1,71 @@
+# REQUIREMENTS-026: Kwargs Detector Debt Cleanup
+# Covers DEBT-025-DICT-UNION and DEBT-025-SHELL-INT-TRUTHY
+
+- id: R001
+  description: >
+    Dict union assignment (opts = opts | {'shell': True}) is detected when both
+    operands are resolvable dicts and the merged result contains a dangerous entry.
+  verify: test
+  contract:
+    given: "Python source with `opts = base | {'shell': True}` followed by `subprocess.run(**opts)`"
+    when: "analyze_python() or detect_kwargs_unpacking() is called"
+    then: "At least one EXEC-002 finding is produced"
+
+- id: R002
+  description: >
+    Dict augmented union (opts |= {'shell': True}) is detected when the LHS is a
+    tracked dict variable and the RHS is a resolvable dict literal or tracked dict.
+  verify: test
+  contract:
+    given: "Python source with `opts = {}; opts |= {'shell': True}` followed by `subprocess.run(**opts)`"
+    when: "analyze_python() or detect_kwargs_unpacking() is called"
+    then: "At least one EXEC-002 finding is produced"
+
+- id: R003
+  description: >
+    When either operand of a dict union cannot be resolved, the result is treated
+    as unresolvable — no finding is emitted and no false positive occurs.
+  verify: test
+  contract:
+    given: "Python source with `opts = unknown | {'shell': True}` followed by `subprocess.run(**opts)`"
+    when: "detect_kwargs_unpacking() is called"
+    then: "Zero EXEC-002 findings are produced"
+
+- id: R004
+  description: >
+    Integer truthy values match boolean table entries. subprocess.run('ls', **{'shell': 1})
+    produces an EXEC-002 finding because integer 1 is truthy and the table entry value
+    is boolean True.
+  verify: test
+  contract:
+    given: "Python source with `subprocess.run(['ls'], **{'shell': 1})`"
+    when: "detect_kwargs_unpacking() is called"
+    then: "Exactly one EXEC-002 finding is produced"
+
+- id: R005
+  description: >
+    Integer falsy values do not match boolean True table entries.
+    subprocess.run('ls', **{'shell': 0}) produces no finding.
+  verify: test
+  contract:
+    given: "Python source with `subprocess.run(['ls'], **{'shell': 0})`"
+    when: "detect_kwargs_unpacking() is called"
+    then: "Zero EXEC-002 findings are produced"
+
+- id: R006
+  description: >
+    Truthy normalization only applies when the _DANGEROUS_KWARGS table entry value
+    is a bool. Non-boolean table entries continue to use exact string comparison.
+  verify: test
+  contract:
+    given: "A _DANGEROUS_KWARGS entry with a non-boolean value"
+    when: "_kwarg_matches is called with a truthy-but-not-exact-match value"
+    then: "No match occurs"
+
+- id: R-IMP001
+  description: "_ast_kwargs_detector.py stays within the 300-line project limit"
+  verify: inspect
+
+- id: R-IMP002
+  description: "All existing tests pass unchanged after changes"
+  verify: test

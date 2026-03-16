@@ -1,0 +1,272 @@
+id: "PLAN-026"
+title: "Kwargs detector debt cleanup: dict union + truthy matching"
+type: implementation
+status: Approved
+created: 2026-03-15
+
+description: |
+  Resolve two low-severity effectiveness debt items from PLAN-025 in the kwargs
+  unpacking detector (_ast_kwargs_detector.py):
+
+  1. DEBT-025-DICT-UNION — detect dangerous kwargs passed via PEP 584 dict union
+     operators (opts | {'shell': True} and opts |= {'shell': True}).
+
+  2. DEBT-025-SHELL-INT-TRUTHY — detect integer truthy values (e.g. shell=1) when
+     the _DANGEROUS_KWARGS table entry is boolean-typed.
+
+  Both changes are additive — no existing behavior is altered. The public API
+  (detect_kwargs_unpacking signature, _DANGEROUS_KWARGS table format) is unchanged.
+
+requirements:
+  file: REQUIREMENTS-026.yaml
+  ids:
+    - R001  # Dict union assignment detection
+    - R002  # Dict augmented union detection
+    - R003  # Unresolvable operand conservative handling
+    - R004  # Integer truthy matches boolean table entry
+    - R005  # Integer falsy does not match
+    - R006  # Truthy normalization scoped to bool entries only
+    - R-IMP001  # 300-line file limit
+    - R-IMP002  # Existing tests pass
+  uncovered: []
+
+utilities_audit:
+  status: complete
+  search_performed:
+    - query: "grep for _collect_dict_assigns, _collect_from_body, _kwarg_matches, _extract_dict_literal across *.py"
+      found: "All are internal to _ast_kwargs_detector.py — zero external callers"
+    - query: "grep for AugAssign, BitOr in src/"
+      found: "_ast_symbol_table_helpers.py handles AugAssign(Add) only — no overlap with BitOr"
+    - query: "dependency-mapper on _ast_kwargs_detector.py"
+      found: "No importers, no mock sites, no circular risks"
+  categories:
+    error_handling:
+      needed: false
+    validation:
+      needed: false
+    logging:
+      needed: false
+    types:
+      needed: false
+    configuration:
+      needed: false
+    http_client:
+      needed: false
+  infrastructure_parts: []
+
+environment:
+  status: assessed
+  build:
+    tool: make
+    install_cmd: "make install"
+    check_cmd: "make check"
+    prerequisites: ["Python 3.13"]
+  runtime_services: []
+  changes:
+    new_dependencies: []
+    env_vars: []
+    schema_changes: []
+    ci_changes: []
+    build_changes: []
+
+change_surface:
+  modules:
+    - path: src/skill_scan/_ast_kwargs_detector.py
+      exports: []
+      imported_by: []
+      mocked_by: []
+      key_signatures:
+        - "def detect_kwargs_unpacking(tree: ast.Module, file_path: str, alias_map: dict[str, str], symbol_table: dict[str, str], *, _nodes: list[ast.AST] | None = None) -> list[Finding]"
+  directory_tree:
+    tests/fixtures/split_evasion/:
+      - pos_kwargs_aliased_import.py
+      - pos_kwargs_dict_literal.py
+      - pos_kwargs_inline_dict.py
+      - pos_kwargs_subscript_built.py
+      - neg_kwargs_non_subprocess.py
+      - neg_kwargs_safe_keys.py
+      - neg_kwargs_safe_passthrough.py
+
+# Skeleton: skipped (brownfield single-layer — modifying one module of existing system)
+
+parts:
+  - id: a
+    title: "Dict union detection in _collect_dict_assigns"
+    status: Done
+    verify_group: kwargs-debt
+    requirements_covered: [R001, R002, R003, R-IMP001]
+    approach:
+      - step: "Handle Assign with BinOp(BitOr) in _collect_from_body"
+        files: [src/skill_scan/_ast_kwargs_detector.py]
+        notes: >
+          Add a branch in _collect_from_body for ast.Assign where value is
+          ast.BinOp(op=BitOr). Resolve both operands: left via already-collected
+          result dict or _extract_dict_literal, right via _extract_dict_literal.
+          If both resolve, merge (right wins on conflicts, matching Python semantics).
+          If either is unresolvable, skip the assignment (conservative).
+      - step: "Handle AugAssign(BitOr) in _collect_from_body"
+        files: [src/skill_scan/_ast_kwargs_detector.py]
+        notes: >
+          Add a branch for ast.AugAssign where op is BitOr. Look up the target
+          variable in result dict, resolve the RHS via _extract_dict_literal or
+          result lookup. If both resolve, merge into the existing entry. If
+          unresolvable, remove the variable from tracking (conservative — it may
+          have been overwritten with unknown values).
+      - step: "Add corpus fixtures for dict union"
+        files:
+          - tests/fixtures/split_evasion/pos_kwargs_dict_union.py
+          - tests/fixtures/split_evasion/neg_kwargs_dict_union_unresolvable.py
+        notes: >
+          Positive fixture: opts = {}; opts = opts | {'shell': True}; subprocess.run(**opts).
+          Also include opts |= variant. Negative fixture: opts = unknown | {'shell': True}
+          and {**base, 'shell': True} (already handled, but good to include).
+    criteria:
+      - "opts = opts | {'shell': True} followed by subprocess.run(**opts) produces EXEC-002"
+      - "opts |= {'shell': True} followed by subprocess.run(**opts) produces EXEC-002"
+      - "Unresolvable operand (unknown | {'shell': True}) produces zero findings"
+      - "PEP 448 spread dicts ({**base, 'shell': True}) still produce zero findings (regression)"
+      - "_ast_kwargs_detector.py is at or below 300 lines"
+
+  - id: b
+    title: "Truthy value matching for boolean table entries"
+    status: Done
+    depends_on: [a]
+    verify_group: kwargs-debt
+    requirements_covered: [R004, R005, R006, R-IMP002]
+    approach:
+      - step: "Add truthy normalization to _kwarg_matches"
+        files: [src/skill_scan/_ast_kwargs_detector.py]
+        notes: >
+          When the table value is isinstance(value, bool), compare using Python
+          truthiness instead of exact string match. For True: resolved value must
+          be truthy (not in {'0', 'False', 'None', '', 'false'}). For False: resolved
+          value must be falsy (in that set). When value is not bool, keep existing
+          exact str() comparison.
+      - step: "Add corpus fixtures for truthy matching"
+        files:
+          - tests/fixtures/split_evasion/pos_kwargs_shell_int_truthy.py
+          - tests/fixtures/split_evasion/neg_kwargs_shell_int_falsy.py
+        notes: >
+          Positive: subprocess.run(['ls'], **{'shell': 1}). Negative:
+          subprocess.run(['ls'], **{'shell': 0}).
+    criteria:
+      - "subprocess.run(**{'shell': 1}) produces EXEC-002"
+      - "subprocess.run(**{'shell': 0}) produces zero findings"
+      - "_kwarg_matches with non-boolean table value uses exact string comparison (no truthy normalization)"
+      - "All existing kwargs tests pass unchanged"
+
+acceptance_scenarios:
+  - scenario: "Dict union operator delivers dangerous kwarg to subprocess"
+    invoke: "analyze_python() on code with opts |= {'shell': True}; subprocess.run(**opts)"
+    expect: "At least one EXEC-002 finding with 'shell' in matched_text"
+    test_file: tests/unit/test_ast_kwargs_truthy.py
+    status: passing
+
+  - scenario: "Integer truthy shell value detected"
+    invoke: "analyze_python() on code with subprocess.run(['ls'], **{'shell': 1})"
+    expect: "At least one EXEC-002 finding"
+    test_file: tests/unit/test_ast_kwargs_truthy.py
+    status: passing
+
+allowed_files:
+  - "src/skill_scan/_ast_kwargs_detector.py"
+  - "tests/unit/test_ast_kwargs_*.py"
+  - "tests/unit/kwargs_test_helpers.py"
+  - "tests/fixtures/split_evasion/pos_kwargs_*.py"
+  - "tests/fixtures/split_evasion/neg_kwargs_*.py"
+
+forbidden:
+  - "config/production/**"
+  - ".env*"
+
+backwards_compatibility:
+  required: true
+  scope: "detect_kwargs_unpacking() signature, _DANGEROUS_KWARGS table format"
+  notes: "Both changes are additive detection — new patterns caught, no existing behavior altered"
+
+acceptance_criteria:
+  - "All requirements have status: done"
+  - "All parts have status: Done"
+  - "All tests pass"
+  - "All acceptance scenarios have status: passing"
+  - "DEBT-025-DICT-UNION and DEBT-025-SHELL-INT-TRUTHY removed from debt.yaml"
+
+stop_condition: |
+  When all requirements are verified, all parts complete, and both debt items
+  are resolved in debt.yaml.
+
+work_log:
+  - part: a
+    status: Done
+    files_modified:
+      - src/skill_scan/_ast_kwargs_detector.py
+      - tests/unit/test_ast_kwargs_dict_union.py
+      - tests/fixtures/split_evasion/pos_kwargs_dict_union.py
+      - tests/fixtures/split_evasion/neg_kwargs_dict_union_unresolvable.py
+    discoveries:
+      - "Empty dict literal fix: changed `if extracted:` to `if extracted is not None:` for union chains starting from empty dicts"
+      - "Negative integers are AST UnaryOp(USub, Constant), not Constant — _extract_dict_literal correctly skips"
+    signals: []
+  - part: b
+    status: Done
+    files_modified:
+      - src/skill_scan/_ast_kwargs_detector.py
+      - tests/unit/test_ast_kwargs_truthy.py
+      - tests/fixtures/split_evasion/pos_kwargs_shell_int_truthy.py
+      - tests/fixtures/split_evasion/neg_kwargs_shell_int_falsy.py
+    discoveries:
+      - "isinstance(True, int) pitfall confirmed — bool check must precede int check"
+      - "File landed at exactly 300 lines after docstring trimming"
+    signals: []
+  - part: docs
+    date: 2026-03-15
+    type: docs
+    status: Done
+    files_modified:
+      - CLAUDE.md
+      - .agent/standards/CODE-PATTERNS.md
+      - .agent/ARCHITECTURE-REFERENCE.md
+      - .agent/plans/026/PLAN-026-kwargs-debt-cleanup.yaml
+    note: "Removed DEBT-025-DICT-UNION from CLAUDE.md known debt; updated Boolean-Value Pre-Pass pattern in CODE-PATTERNS.md to reflect dict union tracking and truthy matching; updated ARCHITECTURE-REFERENCE.md kwargs section and Known Limitations; plan handoff and evidence written"
+    signals: []
+evidence:
+  - type: manual_verification
+    command: "Read src/skill_scan/_ast_kwargs_detector.py"
+    result: "File is exactly 300 lines; _collect_from_body handles BinOp(BitOr) and AugAssign(BitOr) via _track_union/_track_aug_union; _kwarg_matches uses _FALSY_STRINGS for bool truthy semantics; bool check precedes int check"
+  - type: manual_verification
+    command: "Read .agent/status/debt.yaml"
+    result: "DEBT-025-DICT-UNION and DEBT-025-SHELL-INT-TRUTHY absent from file; header comment records resolution by PLAN-026"
+
+handoff:
+  stopped_at: "Documentation complete — all docs updated to reflect PLAN-026 implementation"
+  current_state: "Both debt items resolved and documented. Implementation in _ast_kwargs_detector.py is final. All docs updated."
+  next_steps:
+    - "Commit and open PR for PLAN-026"
+  blockers: []
+  scope:
+    files:
+      - src/skill_scan/_ast_kwargs_detector.py
+      - tests/unit/test_ast_kwargs_detector.py
+      - tests/unit/test_ast_kwargs_dict_union.py
+      - tests/unit/test_ast_kwargs_truthy.py
+      - tests/unit/kwargs_test_helpers.py
+    functions:
+      - _collect_from_body
+      - _kwarg_matches
+      - _track_union
+      - _track_aug_union
+    components:
+      - kwargs unpacking detector
+  decisions:
+    - "PEP 448 spread dicts remain unresolvable by design — documented in CLAUDE.md and ARCHITECTURE-REFERENCE.md as a non-debt constraint"
+    - "bool check precedes int check in _kwarg_matches due to isinstance(True, int) being True in Python"
+    - "if extracted is not None: used in _track_assign to allow empty-dict union chain starting points"
+  open_questions: []
+  cross_part_knowledge: []
+  active_signals: []
+
+errors: []
+
+notes: |
+  Resolves DEBT-025-DICT-UNION and DEBT-025-SHELL-INT-TRUTHY from .agent/status/debt.yaml.
+  Both originated from PLAN-025 (kwargs unpacking detection).

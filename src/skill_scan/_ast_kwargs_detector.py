@@ -1,14 +1,8 @@
 """Kwargs unpacking detector -- detect dangerous keyword arguments via ** unpacking.
 
 Detects patterns like subprocess.run(**opts) where opts contains shell=True,
-or subprocess.run(**{'shell': True}). Table-driven: new dangerous combinations
-are config-only additions to _DANGEROUS_KWARGS.
-
-Scope-aware: uses _build_scope_map to resolve function-local dicts before
-falling back to module-level assignments, matching the pattern established
-by detect_split_evasion.
-
-Pure functions: no I/O, no logging, no side effects.
+or subprocess.run(**{'shell': True}). Table-driven via _DANGEROUS_KWARGS.
+Scope-aware via _build_scope_map. Pure functions: no I/O, no side effects.
 """
 
 from __future__ import annotations
@@ -21,12 +15,8 @@ from skill_scan._ast_split_detector import _build_scope_map
 from skill_scan.models import Finding, Severity
 
 # ---------------------------------------------------------------------------
-# Dangerous kwargs table
-# ---------------------------------------------------------------------------
-# Maps function-name prefix to a list of (kwarg_key, kwarg_value, rule_id,
-# severity, description_prefix) tuples.  The call name (resolved via
-# get_call_name + alias_map) is checked with startswith() against each prefix.
-#
+# Dangerous kwargs table -- maps function-name prefix to
+# (kwarg_key, kwarg_value, rule_id, severity, description_prefix) tuples.
 # To add a new dangerous combo, append an entry -- no code changes needed.
 # ---------------------------------------------------------------------------
 
@@ -170,16 +160,28 @@ def _collect_dict_assigns(tree: ast.Module) -> dict[str, dict[str, str]]:
 def _collect_from_body(body: list[ast.stmt], scope: str, result: dict[str, dict[str, str]]) -> None:
     """Collect dict assignments from a body, keyed with *scope* prefix."""
     for stmt in body:
-        if not isinstance(stmt, ast.Assign) or len(stmt.targets) != 1:
-            continue
-        target = stmt.targets[0]
-        if isinstance(target, ast.Name) and isinstance(stmt.value, ast.Dict):
-            extracted = _extract_dict_literal(stmt.value)
-            if extracted:
-                key = f"{scope}.{target.id}" if scope else target.id
-                result[key] = extracted
-        elif isinstance(target, ast.Subscript):
-            _track_subscript_assign(target, stmt.value, result, scope)
+        if isinstance(stmt, ast.AugAssign) and isinstance(stmt.op, ast.BitOr):
+            _track_aug_union(stmt, result, scope)
+        elif isinstance(stmt, ast.Assign) and len(stmt.targets) == 1:
+            _track_assign(stmt.targets[0], stmt.value, result, scope)
+
+
+def _track_assign(
+    target: ast.expr,
+    value: ast.expr,
+    result: dict[str, dict[str, str]],
+    scope: str,
+) -> None:
+    """Dispatch a single-target Assign to the appropriate tracker."""
+    if isinstance(target, ast.Name) and isinstance(value, ast.BinOp) and isinstance(value.op, ast.BitOr):
+        _track_union(target, value, result, scope)
+    elif isinstance(target, ast.Name) and isinstance(value, ast.Dict):
+        extracted = _extract_dict_literal(value)
+        if extracted is not None:
+            key = f"{scope}.{target.id}" if scope else target.id
+            result[key] = extracted
+    elif isinstance(target, ast.Subscript):
+        _track_subscript_assign(target, value, result, scope)
 
 
 def _track_subscript_assign(
@@ -203,6 +205,49 @@ def _track_subscript_assign(
     result[var_name][target.slice.value] = str(value.value)
 
 
+def _resolve_dict_operand(
+    node: ast.expr,
+    result: dict[str, dict[str, str]],
+    scope: str,
+) -> dict[str, str] | None:
+    """Resolve one operand of a dict union to a concrete dict, or None."""
+    if isinstance(node, ast.Dict):
+        return _extract_dict_literal(node)
+    if isinstance(node, ast.Name):
+        key = f"{scope}.{node.id}" if scope else node.id
+        return result.get(key)
+    return None
+
+
+def _track_union(
+    target: ast.Name,
+    binop: ast.BinOp,
+    result: dict[str, dict[str, str]],
+    scope: str,
+) -> None:
+    """Track ``x = a | b`` where both operands are resolvable dicts."""
+    left = _resolve_dict_operand(binop.left, result, scope)
+    right = _resolve_dict_operand(binop.right, result, scope)
+    if left is not None and right is not None:
+        key = f"{scope}.{target.id}" if scope else target.id
+        result[key] = {**left, **right}
+
+
+def _track_aug_union(stmt: ast.AugAssign, result: dict[str, dict[str, str]], scope: str) -> None:
+    """Track ``x |= rhs`` -- merge into existing tracked dict or drop."""
+    if not isinstance(stmt.target, ast.Name):
+        return
+    key = f"{scope}.{stmt.target.id}" if scope else stmt.target.id
+    existing = result.get(key)
+    if existing is None:
+        return
+    rhs = _resolve_dict_operand(stmt.value, result, scope)
+    if rhs is None:
+        del result[key]
+        return
+    result[key] = {**existing, **rhs}
+
+
 def _extract_dict_literal(node: ast.Dict) -> dict[str, str] | None:
     """Extract constant key-value pairs from an inline ast.Dict.
 
@@ -223,11 +268,7 @@ def _extract_dict_literal(node: ast.Dict) -> dict[str, str] | None:
 
 
 def _lookup_symbol_table_dict(var_name: str, symbol_table: dict[str, str]) -> dict[str, str]:
-    """Reconstruct a dict from symbol table composite keys.
-
-    The symbol table stores dict entries as ``'varname[key]'`` composite keys.
-    This function enumerates all matching entries and reconstructs the dict.
-    """
+    """Reconstruct a dict from ``'varname[key]'`` composite keys in symbol table."""
     prefix = f"{var_name}["
     result: dict[str, str] = {}
     for st_key, st_value in symbol_table.items():
@@ -237,6 +278,9 @@ def _lookup_symbol_table_dict(var_name: str, symbol_table: dict[str, str]) -> di
     return result
 
 
+_FALSY_STRINGS: frozenset[str] = frozenset({"0", "False", "None", "", "false"})
+
+
 def _kwarg_matches(
     resolved: dict[str, str],
     key: str,
@@ -244,9 +288,13 @@ def _kwarg_matches(
 ) -> bool:
     """Check whether *resolved* contains a matching (key, value) pair.
 
-    The symbol table stores all values as strings, so boolean ``True`` is
-    compared against the string ``'True'``.
+    When *value* is ``bool``, uses truthiness (not exact string match).
+    Note: ``isinstance(True, int)`` is True, so bool check comes first.
     """
     if key not in resolved:
         return False
-    return str(resolved[key]) == str(value)
+    resolved_val = str(resolved[key])
+    if isinstance(value, bool):
+        is_falsy = resolved_val in _FALSY_STRINGS
+        return (not is_falsy) if value else is_falsy
+    return resolved_val == str(value)

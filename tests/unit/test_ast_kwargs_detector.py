@@ -6,33 +6,10 @@ dicts (subscript and literal init), aliased imports, and safe-case negatives.
 
 from __future__ import annotations
 
-import ast
-import textwrap
+from skill_scan._ast_kwargs_detector import _DANGEROUS_KWARGS
+from skill_scan.models import Severity
 
-from skill_scan._ast_kwargs_detector import (
-    _DANGEROUS_KWARGS,
-    detect_kwargs_unpacking,
-)
-from skill_scan._ast_helpers import build_alias_map
-from skill_scan._ast_symbol_table import build_symbol_table
-from skill_scan.ast_analyzer import analyze_python
-from skill_scan.models import Finding, Severity
-
-_PARSE = ast.parse
-_FILE = "test.py"
-
-
-def _detect(code: str) -> list[Finding]:
-    """Helper: parse code, build symbol table, run kwargs detector."""
-    tree = _PARSE(textwrap.dedent(code))
-    alias_map = build_alias_map(tree)
-    st = build_symbol_table(tree)
-    return detect_kwargs_unpacking(tree, _FILE, alias_map, st)
-
-
-def _detect_full(code: str) -> list[Finding]:
-    """Helper: run full analyze_python pipeline."""
-    return analyze_python(textwrap.dedent(code), _FILE)
+from tests.unit.kwargs_test_helpers import _FILE, detect as _detect, detect_full as _detect_full
 
 
 # ---------------------------------------------------------------------------

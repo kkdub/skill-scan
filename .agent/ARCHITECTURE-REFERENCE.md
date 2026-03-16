@@ -73,7 +73,8 @@ Detailed module-level documentation for skill-scan internals. For key patterns a
 
 - `detect_kwargs_unpacking()` detects dangerous keyword arguments via `**` unpacking (e.g. `subprocess.run(**opts)` where `opts={'shell': True}`)
 - `_DANGEROUS_KWARGS` — table-driven config mapping function-name prefixes to `(kwarg_key, kwarg_value, rule_id, severity, description_prefix)` tuples; extend by adding entries
-- `_collect_dict_assigns(tree)` — pre-pass collecting module-level dict assignments; tracks all constant value types converted to strings
+- `_collect_dict_assigns(tree)` — pre-pass collecting dict assignments from module, function, and class-method scope; tracks all constant value types (including booleans and integers) converted to strings; handles dict union operators (`|`, `|=`) via `_track_union` / `_track_aug_union`; unresolvable operands drop the variable conservatively
+- `_kwarg_matches(resolved, key, value)` — uses truthiness semantics when `value` is `bool` (allows integer truthy matches like `shell=1`); falls back to exact `str()` comparison for non-bool table entries; `_FALSY_STRINGS` frozenset drives the falsy check
 
 ## Decoder
 
@@ -90,8 +91,8 @@ Detailed module-level documentation for skill-scan internals. For key patterns a
 ## Known Limitations
 
 - Return-value tracking: method returning via `self.attr` is NOT tracked (conservative gap); `_resolve_call_assignments` handles module-level `x = func()` only; only same-module calls resolved
-- DEBT-025-DICT-MERGING — dict merging patterns (`{**base, 'shell': True}`, `opts | {'shell': True}`) not handled by kwargs detector's `_collect_dict_assigns`
 - DEBT-024-TRACKED-COMPREHENSION — `''.join(chr(c) for c in codes)` where `codes` is a tracked variable requires symbol table extension to support non-string values
+- PEP 448 spread dicts (`{**base, 'shell': True}`) in kwargs unpacking are unresolvable by design (conservative; spread ordering can override extracted keys)
 
 ## Evasion Corpus
 
