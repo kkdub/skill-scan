@@ -42,6 +42,17 @@
   blocker: "Same pattern as DEBT-027-CHR-ALIAS (now fixed in _resolve_comprehension_chr); needs the same 'in (chr, builtins.chr)' check."
   resolution: "Change fn_name == 'chr' to fn_name in ('chr', 'builtins.chr') in _resolve_map_join, matching _resolve_comprehension_chr."
 
+- id: DEBT-045-CALL-RETURN-LABEL-PROPAGATION
+  description: "Call-return label only applies when the resolved Call node matches resolve_call_return; for mixed patterns like a()+b() (binop) or f'{a()}{b()}' (fstring), leaf call-return resolutions still get labeled 'split variable'"
+  type: effectiveness
+  severity: low
+  plan: none
+  files:
+    - src/skill_scan/_ast_split_detector.py:175-196
+    - src/skill_scan/_ast_split_resolve.py
+  blocker: "Requires resolvers to return (value, label) tuples or track whether any leaf resolution used call-return; changes the resolver signature contract across all _RESOLVERS entries."
+  resolution: "Have resolvers return (value, source_label) tuples instead of bare strings. Update _RESOLVERS type alias and all callers. Alternatively, add a thread-local or context flag that resolve_call_return sets when it contributes to a resolution."
+
 - id: DEBT-027-INTLIST-AUGMENTED
   description: "codes += [more_ints] and codes.extend([ints]) not tracked by _collect_int_list_assigns; attacker can split int list across multiple statements to evade"
   type: effectiveness
