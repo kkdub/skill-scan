@@ -10,6 +10,7 @@ from __future__ import annotations
 import ast
 
 from skill_scan._ast_split_detector import detect_split_evasion
+from skill_scan._ast_split_int_list_helpers import _SHADOW
 from skill_scan._ast_split_join_helpers import _collect_int_list_assigns
 from skill_scan._ast_symbol_table import build_symbol_table
 from skill_scan.ast_analyzer import analyze_python
@@ -59,16 +60,16 @@ class TestCollectIntListAssigns:
         assert "C.m.codes" in result
 
     def test_mixed_type_list_shadow_marker(self) -> None:
-        """Mixed list [int, str] gets [] shadow marker (prevents global fallback)."""
+        """Mixed list [int, str] gets _SHADOW sentinel (prevents global fallback)."""
         tree = _PARSE("codes = [101, 'hello']")
         result = _collect_int_list_assigns(tree)
-        assert result["codes"] == []
+        assert result["codes"] is _SHADOW
 
     def test_string_list_shadow_marker(self) -> None:
-        """String list gets [] shadow marker (prevents global fallback)."""
+        """String list gets _SHADOW sentinel (prevents global fallback)."""
         tree = _PARSE("parts = ['ev', 'al']")
         result = _collect_int_list_assigns(tree)
-        assert result["parts"] == []
+        assert result["parts"] is _SHADOW
 
     def test_empty_list_tracked(self) -> None:
         """Empty list is technically all-int (vacuously true)."""
@@ -261,6 +262,30 @@ class TestPlan027Acceptance:
         expect: EXEC-002 finding (resolves to 'eval')
         """
         code = "codes = [101, 118, 97, 108]\nx = ''.join(chr(c) for c in codes)"
+        findings = analyze_python(code, _FILE)
+        exec002 = [f for f in findings if f.rule_id == "EXEC-002"]
+        assert len(exec002) >= 1
+
+    def test_plus_equals_list_reassembly_detected_e2e(self) -> None:
+        """Split int list via += reassembly detected end-to-end (acceptance).
+
+        invoke: analyze_python() on: codes = [101, 118]; codes += [97, 108];
+                x = ''.join(chr(c) for c in codes)
+        expect: At least one EXEC-002 finding (resolves to 'eval')
+        """
+        code = "codes = [101, 118]\ncodes += [97, 108]\nx = ''.join(chr(c) for c in codes)"
+        findings = analyze_python(code, _FILE)
+        exec002 = [f for f in findings if f.rule_id == "EXEC-002"]
+        assert len(exec002) >= 1
+
+    def test_extend_method_reassembly_detected_e2e(self) -> None:
+        """Split int list via .extend() reassembly detected end-to-end (acceptance).
+
+        invoke: analyze_python() on: codes = [101, 118]; codes.extend([97, 108]);
+                x = ''.join(chr(c) for c in codes)
+        expect: At least one EXEC-002 finding (resolves to 'eval')
+        """
+        code = "codes = [101, 118]\ncodes.extend([97, 108])\nx = ''.join(chr(c) for c in codes)"
         findings = analyze_python(code, _FILE)
         exec002 = [f for f in findings if f.rule_id == "EXEC-002"]
         assert len(exec002) >= 1

@@ -646,28 +646,38 @@ Dict union operators (`x = a | b`, `x |= rhs`) are tracked in `_collect_from_bod
 
 ## Integer-List Pre-Pass for Comprehension Resolution
 
-When a resolver needs to handle `chr(c) for c in tracked_var` where `tracked_var` is a module-level or function-level list of integers, collect those assignments in a parallel pre-pass (`dict[str, list[int]]`) and thread the table through the call chain as an optional kwarg. Only track all-integer lists (conservative: reject mixed-type lists). Synthesize `ast.Constant` nodes from the stored int values to reuse existing `_resolve_comprehension_chr`.
+When a resolver needs to handle `chr(c) for c in tracked_var` where `tracked_var` is a module-level or function-level list of integers, collect those assignments — and their `+=`/`.extend()` mutations — in a parallel pre-pass (`dict[str, list[int]]`) and thread the table through the call chain as an optional kwarg. Only track all-integer lists (conservative: reject mixed-type lists). Use the `_SHADOW` sentinel (identity-checked via `is`) to mark variables that were assigned a non-int-list value, distinguishing them from legitimate empty lists (`codes = []`). Synthesize `ast.Constant` nodes from the stored int values to reuse existing `_resolve_comprehension_chr`.
 
 ```python
-def _collect_int_list_assigns(tree: ast.Module) -> dict[str, list[int]]:
-    result: dict[str, list[int]] = {}
-    _collect_int_lists_from_body(tree.body, "", result)
-    for node in tree.body:
-        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
-            _collect_int_lists_from_body(node.body, node.name, result)
-    return result
+# _ast_split_int_list_helpers.py
+_SHADOW: list[int] = []  # identity sentinel — never mutate
 
-def _resolve_tracked_iter(elt, target_id, iter_name, sep, int_list_table, scope):
-    int_list = int_list_table.get(f"{scope}.{iter_name}") if scope else None
-    if int_list is None:
-        int_list = int_list_table.get(iter_name)
-    if int_list is None:
-        return None
-    synthetic = [ast.Constant(value=v) for v in int_list]
-    return _resolve_comprehension_chr(elt, target_id, synthetic, sep)
+def _handle_int_list_stmt(stmt, scope, result):
+    """Dispatch: Assign | AugAssign(+=) | Expr(call.extend) -> update result."""
+    if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1:
+        _handle_assign(stmt, scope, result)
+    elif isinstance(stmt, ast.AugAssign) and isinstance(stmt.op, ast.Add):
+        if isinstance(stmt.target, ast.Name):
+            _extend_tracked(stmt.target.id, stmt.value, scope, result)
+    elif isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Call):
+        _handle_extend_call(stmt.value, scope, result)
+
+def _extend_tracked(name, value, scope, result):
+    """Extend tracked entry or convert to _SHADOW; ignore unknown variables."""
+    key = f"{scope}.{name}" if scope else name
+    if key not in result:
+        return  # unknown variable — conservative no-op
+    existing = result[key]
+    if existing is _SHADOW:
+        return  # already shadowed
+    if not isinstance(value, ast.List | ast.Tuple):
+        result[key] = _SHADOW
+        return
+    ints = _extract_int_list(value.elts)
+    result[key] = (existing + ints) if ints is not None else _SHADOW
 ```
 
-> Trap: `_extract_int_list` must return `None` on any non-integer element — one float or string in the list poisons the entire assignment (conservative). Do not infer types from mixed lists.
+> Trap: compare shadow markers by identity (`existing is _SHADOW`), not equality — a legitimate empty list (`codes = []`) is `== _SHADOW` but is NOT `is _SHADOW`. Using equality would prevent tracking variables that start empty and grow via `+=`.
 
 ## Facade Re-export Pattern
 

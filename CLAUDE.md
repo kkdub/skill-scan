@@ -55,6 +55,7 @@ src/skill_scan/           # Production source code
   _ast_split_chr.py       # chr/ord/int resolution
   _ast_split_reduce.py    # reduce/operator concat resolution
   _ast_split_join_helpers.py # Generator/comprehension join resolution; _collect_int_list_assigns pre-pass
+  _ast_split_int_list_helpers.py # Int-list mutation tracking (_SHADOW sentinel, _handle_int_list_stmt, _handle_assign, _handle_extend_call, _extend_tracked)
   _ast_split_map_helpers.py  # map(chr/str, [...]) resolution for join patterns
   _ast_kwargs_detector.py # Kwargs unpacking detector (detect_kwargs_unpacking)
   decoder.py              # Facade: EncodedPayload, extract/decode
@@ -81,7 +82,7 @@ Key patterns and invariants. For detailed module-level docs, see `.agent/ARCHITE
 - Tree-level detectors needing the full symbol table (`detect_split_evasion`, `detect_kwargs_unpacking`) go in `analyze_python()` directly, not in `_DETECTORS`
 - `_NAME_RULE` / `_DECORATOR_RULE` — lookup tables mapping dangerous names to `(rule_id, severity, prefix)`; use when one detector emits different rule IDs per name
 - `_DANGEROUS_KWARGS` — table-driven config for kwargs detector; extend by adding entries, no code changes needed
-- `_collect_int_list_assigns(tree)` in `_ast_split_join_helpers.py` — parallel pre-pass collecting `Name = [int, ...]` assignments; built in `analyze_python()` and threaded to `detect_split_evasion` via `int_list_table` kwarg
+- `_collect_int_list_assigns(tree)` in `_ast_split_join_helpers.py` — parallel pre-pass collecting `Name = [int, ...]` assignments AND tracking `+=`/`.extend()` mutations; built in `analyze_python()` and threaded to `detect_split_evasion` via `int_list_table` kwarg; mutation helpers live in `_ast_split_int_list_helpers.py`
 
 **Invariants**:
 - Bare `# noqa` does NOT suppress — security scanner requires explicit rule IDs (`# noqa: RULE-ID`)
@@ -92,6 +93,7 @@ Key patterns and invariants. For detailed module-level docs, see `.agent/ARCHITE
 - Deferred imports in `_ast_symbol_table.py` break circular deps — don't reorganize without checking import chains
 - `_extract_dict_literal` returns `dict[str, object]` (raw Python constants, not `str()`); `_kwarg_matches` uses native Python truthiness for `bool` table entries and `str()` equality for non-bool entries — `int(0)` is falsy, `str("0")` is truthy
 - `_eval_constant_expr` in `_ast_kwargs_detector.py` resolves `ast.Constant` and `ast.UnaryOp(USub|UAdd, Constant)` to Python values (handles negative int/float literals); returns `_UNRESOLVABLE` sentinel on failure
+- `_SHADOW` in `_ast_split_int_list_helpers.py` is a module-level sentinel `list[int]` that marks shadowed (non-int-list) variables in the int-list pre-pass; always compare by identity (`existing is _SHADOW`), never by equality — a legitimate empty list (`codes = []`) must not be confused with a shadow marker
 
 **Known debt**:
 - PEP 448 spread dicts (`{**base, ...}`) in kwargs are conservatively treated as unresolvable (no tracking planned)

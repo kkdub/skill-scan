@@ -13,7 +13,8 @@
 # Resolved by PLAN-025: DEBT-024-KWARGS-UNPACKING (detect_kwargs_unpacking + _DANGEROUS_KWARGS table)
 # Resolved by PLAN-026: DEBT-025-DICT-UNION, DEBT-025-SHELL-INT-TRUTHY
 # Resolved by PLAN-027: DEBT-026-CHAINED-UNION, DEBT-026-STRING-TRUTHINESS, DEBT-024-TRACKED-COMPREHENSION
-# Resolved by fix: DEBT-022-CALL-RETURN-DESCRIPTION, DEBT-021-SCOPE-ATTRIBUTION-ASSERTION, DEBT-027-CHR-ALIAS
+# Resolved by fix: DEBT-022-CALL-RETURN-DESCRIPTION, DEBT-021-SCOPE-ATTRIBUTION-ASSERTION, DEBT-027-CHR-ALIAS, DEBT-027-MAP-CHR-BUILTINS-ALIAS
+# Resolved by PLAN-028 Part C: DEBT-027-INTLIST-AUGMENTED (red-team confirmed; empty-list sentinel fix)
 
 # --- Structural / Maintenance Debt ---
 # Resolved by fix branch: DEBT-TYPE-IGNORE-CONFIG (TypedDict for config kwargs), DEBT-021-SCOPE-DECL-CONTROLFLOW (for/while/with/try)
@@ -32,15 +33,6 @@
 
 # --- PLAN-027 Red-Team Debt ---
 
-- id: DEBT-027-MAP-CHR-BUILTINS-ALIAS
-  description: "_resolve_map_join compares fn_name == 'chr' but alias_map resolves 'from builtins import chr as c' to 'builtins.chr'; map(c, [ints]) evades when chr is import-aliased"
-  type: effectiveness
-  severity: low
-  plan: PLAN-027
-  files:
-    - src/skill_scan/_ast_split_map_helpers.py:25
-  blocker: "Same pattern as DEBT-027-CHR-ALIAS (now fixed in _resolve_comprehension_chr); needs the same 'in (chr, builtins.chr)' check."
-  resolution: "Change fn_name == 'chr' to fn_name in ('chr', 'builtins.chr') in _resolve_map_join, matching _resolve_comprehension_chr."
 
 - id: DEBT-045-CALL-RETURN-LABEL-PROPAGATION
   description: "Call-return label only applies when the resolved Call node matches resolve_call_return; for mixed patterns like a()+b() (binop) or f'{a()}{b()}' (fstring), leaf call-return resolutions still get labeled 'split variable'"
@@ -53,12 +45,53 @@
   blocker: "Requires resolvers to return (value, label) tuples or track whether any leaf resolution used call-return; changes the resolver signature contract across all _RESOLVERS entries."
   resolution: "Have resolvers return (value, source_label) tuples instead of bare strings. Update _RESOLVERS type alias and all callers. Alternatively, add a thread-local or context flag that resolve_call_return sets when it contributes to a resolution."
 
-- id: DEBT-027-INTLIST-AUGMENTED
-  description: "codes += [more_ints] and codes.extend([ints]) not tracked by _collect_int_list_assigns; attacker can split int list across multiple statements to evade"
+- id: DEBT-028-INTLIST-CLASS-BODY
+  description: "_collect_int_list_assigns does not walk class-level statements (only methods); class C: codes = [ints]; codes += [more] is untracked"
   type: effectiveness
   severity: low
-  plan: PLAN-027
+  plan: none
+  files:
+    - src/skill_scan/_ast_split_join_helpers.py:30-37
+  blocker: "Class-level scope prefix differs from method scope (C vs C.method); adding class body walk requires scope naming decision and testing."
+  resolution: "In _collect_int_list_assigns, add class body walk with scope=class_name for direct class-level statements."
+
+- id: DEBT-027-INTLIST-CONCAT
+  description: "codes = a + b where a and b are tracked int-lists not resolved by _collect_int_list_assigns; requires cross-variable resolution in the pre-pass"
+  type: effectiveness
+  severity: low
+  plan: none
   files:
     - src/skill_scan/_ast_split_join_helpers.py
-  blocker: "AugAssign and method-call tracking require extending the pre-pass to handle incremental list mutations, adding complexity beyond the conservative first-pass design."
-  resolution: "Extend _collect_int_lists_from_body to handle AugAssign(+=) when target is already in int_list_table and the value is an all-int list — extend the tracked list."
+  blocker: "Requires looking up both operands in the int_list_table during assignment processing — adds cross-variable dependency tracking to the pre-pass."
+  resolution: "In _collect_int_lists_from_body, handle Assign where value is BinOp(Add) with both operands as Name nodes already in the table — concatenate their tracked lists."
+
+- id: DEBT-028-INTLIST-GLOBAL-NONLOCAL
+  description: "_extend_tracked writes to scope-qualified key; global/nonlocal declarations not followed, so mutations inside functions with global/nonlocal codes never update the actual binding"
+  type: effectiveness
+  severity: low
+  plan: none
+  files:
+    - src/skill_scan/_ast_split_int_list_helpers.py:65-69
+  blocker: "Requires scope chain tracking to resolve global/nonlocal declarations to their target scope key before writing."
+  resolution: "In _extend_tracked, accept a scope_declarations parameter (or the full scope chain); when the name has a global/nonlocal binding, resolve the key to the target scope before lookup/write."
+
+- id: DEBT-028-INTLIST-BRANCH-MERGE
+  description: "_collect_int_list_assigns walks both if/else branches sequentially, merging mutations from mutually exclusive paths into one list — produces impossible combined values and potential false positives"
+  type: effectiveness
+  severity: low
+  plan: none
+  files:
+    - src/skill_scan/_ast_split_join_helpers.py
+    - src/skill_scan/_ast_split_int_list_helpers.py
+  blocker: "Requires branch-aware traversal (snapshot-and-merge or shadow-on-branch) to avoid combining mutations from mutually exclusive paths; significant complexity for the pre-pass collector."
+  resolution: "Snapshot the int_list_table before each branch, walk the branch, then merge results conservatively (shadow any key that differs between branches)."
+
+- id: DEBT-027-INTLIST-EXTEND-VAR
+  description: "codes.extend(a) where a is a tracked int-list variable is silently ignored; only literal list/tuple args are handled by _handle_extend_call"
+  type: effectiveness
+  severity: low
+  plan: none
+  files:
+    - src/skill_scan/_ast_split_int_list_helpers.py:54-62
+  blocker: "Requires looking up the argument Name in the int_list_table during .extend() processing — adds cross-variable dependency tracking to the pre-pass (same as DEBT-027-INTLIST-CONCAT)."
+  resolution: "In _handle_extend_call, when the arg is ast.Name, look it up in result table and concatenate if found and not _SHADOW."

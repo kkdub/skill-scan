@@ -60,7 +60,8 @@ Detailed module-level documentation for skill-scan internals. For key patterns a
 - `_ast_split_bytes.py` — resolves `bytearray(b'...').decode()`, `str(b'...', 'utf-8')`, `codecs.decode(b'...', 'utf-8')`; gates on literal bytes arguments only
 - `_ast_split_reduce.py` — resolves `functools.reduce(lambda a,b: a+b, [...])` and `functools.reduce(operator.add/concat, [...])`
 - `_ast_split_helpers.py` — format/%-format resolution; `_scoped_lookup`, `_resolve_join_elements`, `_resolve_subscript_expr`, `_resolve_slice_expr`; `_PERCENT_SPEC_RE` matches all standard %-specifiers with `(?<!%)` lookbehind
-- `_ast_split_join_helpers.py` — `_resolve_join_call()` dispatches to list/tuple, comprehension, reversed, or map resolvers; `map()` limited to `chr()` and `str()` only; `_collect_int_list_assigns(tree)` pre-pass collects `Name = [int, ...]` assignments (module/function/class-method scope) as `dict[str, list[int]]`; `_resolve_comprehension_join()` accepts `int_list_table` kwarg and resolves `chr(c) for c in tracked_var` via `_resolve_tracked_iter()`
+- `_ast_split_join_helpers.py` — `_resolve_join_call()` dispatches to list/tuple, comprehension, reversed, or map resolvers; `map()` limited to `chr()` and `str()` only; `_collect_int_list_assigns(tree)` pre-pass collects `Name = [int, ...]` assignments AND tracks `+=`/`.extend()` mutations (module/function/class-method scope) as `dict[str, list[int]]`; delegates statement dispatch to `_handle_int_list_stmt` from `_ast_split_int_list_helpers`; `_resolve_comprehension_join()` accepts `int_list_table` kwarg and resolves `chr(c) for c in tracked_var` via `_resolve_tracked_iter()`
+- `_ast_split_int_list_helpers.py` — int-list mutation tracking helpers extracted from `_ast_split_join_helpers`; exposes `_SHADOW` sentinel and `_handle_int_list_stmt(stmt, scope, result)` dispatch entry point; `_handle_assign` tracks `Name = [int, ...]` (stores `_SHADOW` for non-int-list values); `_handle_extend_call` handles `name.extend([...])` calls; `_extend_tracked` handles both `+=` and `.extend()` mutations — ignores unknown variables, converts to `_SHADOW` on mixed-type or non-literal arg, concatenates on all-int literal; `_extract_int_list(elts)` returns `list[int] | None`; identity check `existing is _SHADOW` distinguishes shadow markers from legitimate empty lists
 
 ## Dynamic Dispatch Detection
 
@@ -95,7 +96,10 @@ Detailed module-level documentation for skill-scan internals. For key patterns a
 
 - Return-value tracking: method returning via `self.attr` is NOT tracked (conservative gap); `_resolve_call_assignments` handles module-level `x = func()` only; only same-module calls resolved
 - PEP 448 spread dicts (`{**base, 'shell': True}`) in kwargs unpacking are unresolvable by design (conservative; spread ordering can override extracted keys)
-- `_collect_int_list_assigns` tracks only all-integer lists/tuples (conservative); mixed-type lists (`[101, 'x']`) are not tracked
+- `_collect_int_list_assigns` tracks only all-integer lists/tuples (conservative); mixed-type lists (`[101, 'x']`) and non-literal arguments to `+=` or `.extend()` convert the variable to `_SHADOW` (unresolvable)
+- `_collect_int_list_assigns` does not walk class-level statements (only class methods); `class C: codes = [ints]; codes += [more]` at class body scope is untracked (DEBT-028-INTLIST-CLASS-BODY)
+- `codes = a + b` (int-list concatenation via BinOp) is not tracked in the pre-pass; requires cross-variable resolution (DEBT-027-INTLIST-CONCAT)
+- `codes.extend(a)` where `a` is a tracked variable (not a literal) is ignored conservatively (DEBT-027-INTLIST-EXTEND-VAR)
 
 ## Evasion Corpus
 

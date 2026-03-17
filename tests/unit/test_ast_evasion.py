@@ -191,6 +191,11 @@ class TestMapChrInJoin:
         findings = analyze_python(code, _FILE)
         assert any("exec" in f.matched_text for f in findings)
 
+    def test_join_map_chr_builtins_alias(self) -> None:
+        code = "from builtins import chr as c\nx = ''.join(map(c, [101,118,97,108]))\n"
+        findings = analyze_python(code, _FILE)
+        assert any("eval" in f.matched_text for f in findings)
+
 
 class TestVeryLongStringConcatFP:
     """Regression: very long repeated concat should not be a false positive.

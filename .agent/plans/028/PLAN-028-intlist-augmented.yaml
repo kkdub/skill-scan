@@ -1,0 +1,252 @@
+id: "PLAN-028"
+title: "Track augmented int-list mutations in split-evasion pre-pass"
+type: implementation
+status: Done
+created: 2026-03-16
+
+linked_spec: null
+
+description: |
+  Extend _collect_int_list_assigns pre-pass to track AugAssign (codes += [ints])
+  and .extend([ints]) method calls. Currently attackers can split int lists across
+  multiple statements to evade join-based split detection. Resolves DEBT-027-INTLIST-AUGMENTED.
+
+requirements:
+  file: null
+  ids:
+    - R001    # AugAssign (codes += [ints]) extends tracked int-list
+    - R002    # .extend() calls (codes.extend([ints])) extend tracked int-list
+    - R-IMP001  # Mutations with non-int elements convert entry to shadow marker []
+    - R-IMP002  # Mutations on shadowed or unknown variables are safe (no false positives)
+    - R-EFF001  # Red-team corpus patterns plus_equals_list and extend_method produce EXEC-002
+  uncovered: []
+
+utilities_audit:
+  status: complete
+  search_performed:
+    - query: "grep _extract_int_list _ast_split_join_helpers.py"
+      found: "_extract_int_list(elts) already exists — extracts list[int] from AST elements, returns None on non-int"
+    - query: "grep _collect_int_lists_from_body _ast_split_join_helpers.py"
+      found: "Walks body statements handling ast.Assign; recurses into control-flow via _sub_bodies"
+    - query: "wc -l _ast_split_join_helpers.py test_ast_split_int_list.py"
+      found: "Source: 263 lines, Tests: 266 lines — both near 300-line limit"
+  categories:
+    error_handling:
+      needed: false
+    validation:
+      needed: false
+    logging:
+      needed: false
+    types:
+      needed: false
+    configuration:
+      needed: false
+    http_client:
+      needed: false
+  infrastructure_parts: []
+
+environment:
+  status: assessed
+  build:
+    tool: make
+    install_cmd: "make install"
+    check_cmd: "make check"
+    prerequisites: ["Python 3.13"]
+  runtime_services: []
+  changes:
+    new_dependencies: []
+    env_vars: []
+    schema_changes: []
+    ci_changes: []
+    build_changes: []
+
+parts:
+  - id: a
+    title: "Extend _collect_int_lists_from_body for AugAssign and .extend()"
+    status: Done
+    requirements_covered: [R001, R002, R-IMP001, R-IMP002]
+    approach:
+      - step: "Add AugAssign handling to _collect_int_lists_from_body"
+        files: [src/skill_scan/_ast_split_join_helpers.py]
+        notes: |
+          Handle ast.AugAssign where op is ast.Add and target is ast.Name.
+          Look up key in result dict. If present and non-empty, extract ints
+          from value via _extract_int_list and extend. If ints is None (mixed types),
+          convert to shadow marker []. If key not in result, ignore (conservative).
+      - step: "Add .extend() call handling to _collect_int_lists_from_body"
+        files: [src/skill_scan/_ast_split_join_helpers.py]
+        notes: |
+          Handle ast.Expr where value is ast.Call with func being
+          ast.Attribute(value=ast.Name, attr='extend') and one List/Tuple arg.
+          Same lookup-and-extend logic as AugAssign. Reuse _extract_int_list.
+    criteria:
+      - "codes = [101, 118]; codes += [97, 108] produces {codes: [101, 118, 97, 108]} in table"
+      - "codes = [101]; codes.extend([118, 97]) produces {codes: [101, 118, 97]} in table"
+      - "codes = [101]; codes += ['x'] converts entry to shadow marker []"
+      - "codes = ['a']; codes += [97] keeps entry as shadow marker []"
+      - "AugAssign/extend on unknown variable (not in table) is ignored"
+      - "Function-scoped: def f(): codes = [101]; codes += [118] produces {f.codes: [101, 118]}"
+      - "Class-method-scoped: .extend() inside class method tracks with ClassName.method prefix"
+      - "_ast_split_join_helpers.py stays under 300 lines"
+
+  - id: b
+    title: "Tests and end-to-end detection verification"
+    status: Done
+    depends_on: [a]
+    requirements_covered: [R001, R002, R-IMP001, R-IMP002, R-EFF001]
+    approach:
+      - step: "Add unit tests for pre-pass AugAssign and .extend() handling"
+        files: [tests/unit/test_ast_split_int_list.py]
+        notes: |
+          Test _collect_int_list_assigns directly for both mutation patterns,
+          shadow behavior, and unknown-variable safety. If file would exceed
+          300 lines, create tests/unit/test_ast_split_int_list_augmented.py.
+      - step: "Add end-to-end detection tests for red-team corpus patterns"
+        files: [tests/unit/test_ast_split_int_list.py]
+        notes: |
+          Use existing _detect() helper. Verify plus_equals_list and
+          extend_method patterns from corpus produce EXEC-002 findings.
+    criteria:
+      - "Unit tests cover: AugAssign extend, .extend() extend, mixed-type shadow, unknown-variable no-op"
+      - "End-to-end tests: plus_equals_list pattern produces EXEC-002"
+      - "End-to-end tests: extend_method pattern produces EXEC-002"
+      - "make check passes"
+      - "No test file exceeds 300 lines"
+
+  - id: c
+    title: "Red-team augmented int-list tracking"
+    status: Done
+    depends_on: [b]
+    requirements_covered: [R-EFF001]
+    approach:
+      - step: "Generate adversarial inputs targeting AugAssign and .extend() tracking"
+        files: [corpus/red-team/]
+        notes: |
+          Target edge cases: nested AugAssign in control flow, multiple += chains,
+          .extend() inside loops, mixed mutation sequences (assign then +=),
+          AugAssign with Tuple not List, .extend() with generator arg.
+      - step: "Triage findings and resolve must-fix evasions"
+        files: [src/skill_scan/_ast_split_join_helpers.py]
+        notes: |
+          Only evasions within the AugAssign/extend feature scope are must-fix.
+          Evasions in other subsystems (e.g., map helpers, general split resolver)
+          are filed as should-fix debt. Generator args to .extend() are out of
+          scope for the implementation — red-team targets them as adversarial
+          inputs to confirm they don't cause crashes, not to require resolution.
+    criteria:
+      - "Red-team corpus generated with adversarial patterns for augmented int-list tracking"
+      - "Must-fix evasions within AugAssign/extend scope (if any) resolved"
+      - "Should-fix evasions filed as debt entries"
+      - "make check passes after any fixes"
+      - "DEBT-027-INTLIST-AUGMENTED removed from .agent/status/debt.yaml"
+
+acceptance_scenarios:
+  - scenario: "Split int list via += reassembly detected end-to-end"
+    invoke: "analyze_python() on: codes = [101, 118]; codes += [97, 108]; x = ''.join(chr(c) for c in codes)"
+    expect: "At least one EXEC-002 finding (resolves to 'eval')"
+    test_file: tests/unit/test_ast_split_int_list.py
+    status: passing
+  - scenario: "Split int list via .extend() reassembly detected end-to-end"
+    invoke: "analyze_python() on: codes = [101, 118]; codes.extend([97, 108]); x = ''.join(chr(c) for c in codes)"
+    expect: "At least one EXEC-002 finding (resolves to 'eval')"
+    test_file: tests/unit/test_ast_split_int_list.py
+    status: passing
+
+allowed_files:
+  - "src/skill_scan/_ast_split_join_helpers.py"
+  - "src/skill_scan/_ast_split_*.py"  # Red-team may require fixes in sibling split modules
+  - "tests/unit/test_ast_split_int_list*.py"
+  - "corpus/red-team/**"
+  - ".agent/status/debt.yaml"
+
+forbidden:
+  - "config/production/**"
+  - ".env*"
+
+acceptance_criteria:
+  - "All requirements have status: done"
+  - "All parts have status: Done"
+  - "All tests pass"
+  - "All acceptance scenarios have status: passing"
+
+stop_condition: |
+  When all acceptance criteria are met: requirements done, parts done, tests passing,
+  acceptance scenarios passing, and DEBT-027-INTLIST-AUGMENTED removed from debt.yaml.
+
+work_log:
+  - part: a
+    status: Done
+    summary: "AugAssign and .extend() tracking added. Extracted _ast_split_int_list_helpers.py (69 lines). 23 new tests. 8/8 criteria verified."
+    files_modified:
+      - src/skill_scan/_ast_split_join_helpers.py
+      - src/skill_scan/_ast_split_int_list_helpers.py
+      - tests/unit/test_ast_split_int_list_mutations.py
+    requirements_done: [R001, R002, R-IMP001, R-IMP002]
+  - part: b
+    status: Done
+    summary: "2 acceptance scenario tests added. E2E detection verified for += and .extend() patterns producing EXEC-002. 5/5 criteria."
+    files_modified:
+      - tests/unit/test_ast_split_int_list.py
+    requirements_done: [R-EFF001]
+  - part: c
+    status: Done
+    summary: "Red-team corpus (7 adversarial files). Fixed empty-list _SHADOW sentinel evasion. Filed DEBT-028-INTLIST-CLASS-BODY. Removed DEBT-027. 12 regression tests. 5/5 criteria."
+    files_modified:
+      - src/skill_scan/_ast_split_int_list_helpers.py
+      - src/skill_scan/_ast_split_join_helpers.py
+      - .agent/status/debt.yaml
+      - corpus/red-team/augmented_int_list/
+      - tests/unit/test_ast_split_int_list_mutations.py
+    requirements_done: []
+  - part: docs
+    status: Done
+    summary: "Documentation updated: _ast_split_int_list_helpers.py added to CLAUDE.md Project Structure and Architecture Notes invariants; ARCHITECTURE-REFERENCE.md Split-Evasion Sub-modules section updated with new module and _SHADOW sentinel; Known Limitations updated with DEBT-028/027 entries. Plan status set to Done."
+    files_modified:
+      - CLAUDE.md
+      - .agent/ARCHITECTURE-REFERENCE.md
+      - .agent/plans/028/PLAN-028-intlist-augmented.yaml
+    requirements_done: []
+
+evidence:
+  - part: a
+    tests: "3028 passed, 1 xfailed"
+    criteria: "8/8"
+    fix_iterations: 0
+  - part: b
+    tests: "3030 passed, 1 xfailed"
+    criteria: "5/5"
+    fix_iterations: 0
+  - part: c
+    tests: "3042 passed, 1 xfailed"
+    criteria: "5/5"
+    fix_iterations: 0
+  - part: docs
+    type: manual_verification
+    result: "CLAUDE.md and ARCHITECTURE-REFERENCE.md updated; plan status set to Done"
+
+handoff:
+  stopped_at: "Plan complete. All documentation updated."
+  current_state: "All parts complete. All requirements done. Gates passed. Documentation updated. Plan closed."
+  next_steps: ["Commit and PR"]
+  blockers: []
+  scope:
+    files:
+      - src/skill_scan/_ast_split_int_list_helpers.py
+      - src/skill_scan/_ast_split_join_helpers.py
+      - tests/unit/test_ast_split_int_list_mutations.py
+      - tests/unit/test_ast_split_int_list.py
+      - corpus/red-team/augmented_int_list/
+      - .agent/status/debt.yaml
+    functions: ["_handle_int_list_stmt", "_handle_assign", "_handle_extend_call", "_extend_tracked", "_SHADOW"]
+    components: ["int-list pre-pass"]
+  decisions:
+    - "Extracted int-list helpers to _ast_split_int_list_helpers.py to keep join_helpers under 300 lines"
+    - "Introduced _SHADOW sentinel object to distinguish empty lists from shadow markers"
+    - "Filed DEBT-028-INTLIST-CLASS-BODY for class-level int-list tracking gap"
+  open_questions: []
+  cross_part_knowledge:
+    - "_extend_tracked uses identity check (is _SHADOW) not equality for shadow detection"
+    - "test_ast_split_int_list.py at 290/300 lines — no room for more tests there"
+  active_signals: []
+
+errors: []
