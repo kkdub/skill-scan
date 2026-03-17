@@ -26,55 +26,56 @@ def _detect(code: str, label: str) -> None:
     print(f"    int_list_table: {ilt}")
 
 
-print("=== multiple_plusequals_chains patterns ===")
+if __name__ == "__main__":
+    print("=== multiple_plusequals_chains patterns ===")
 
-_detect(
-    "codes = [101]\ncodes += [118]\ncodes += [97]\ncodes += [108]\nx = ''.join(chr(c) for c in codes)",
-    "Pattern 1: Long += chain"
-)
+    _detect(
+        "codes = [101]\ncodes += [118]\ncodes += [97]\ncodes += [108]\nx = ''.join(chr(c) for c in codes)",
+        "Pattern 1: Long += chain"
+    )
 
-_detect(
-    "def chain_func():\n    c = [101]\n    c += [120]\n    c += [101]\n    c += [99]\n    x = ''.join(chr(i) for i in c)",
-    "Pattern 2: += chain in function"
-)
+    _detect(
+        "def chain_func():\n    c = [101]\n    c += [120]\n    c += [101]\n    c += [99]\n    x = ''.join(chr(i) for i in c)",
+        "Pattern 2: += chain in function"
+    )
 
-_detect(
-    "codes2 = [101]\ncodes2 += (118, 97, 108)\nx2 = ''.join(chr(c) for c in codes2)",
-    "Pattern 4: += with tuple RHS"
-)
+    _detect(
+        "codes2 = [101]\ncodes2 += (118, 97, 108)\nx2 = ''.join(chr(c) for c in codes2)",
+        "Pattern 4: += with tuple RHS"
+    )
 
-_detect(
-    "def five_step():\n    data = []\n    data += [95]\n    data += [95]\n    data += [105]\n    data += [109]\n    data += [112]\n    data += [111]\n    data += [114]\n    data += [116]\n    data += [95]\n    data += [95]\n    x = ''.join(chr(c) for c in data)",
-    "Pattern 5: __import__ via += chain"
-)
+    _detect(
+        "def five_step():\n    data = []\n    data += [95]\n    data += [95]\n    data += [105]\n    data += [109]\n    data += [112]\n    data += [111]\n    data += [114]\n    data += [116]\n    data += [95]\n    data += [95]\n    x = ''.join(chr(c) for c in data)",
+        "Pattern 5: __import__ via += chain"
+    )
 
-print("\n=== edge_cases patterns ===")
+    print("\n=== edge_cases patterns ===")
 
-_detect(
-    "class Evasion:\n    codes = [101, 118]\n    codes += [97, 108]\n    x = ''.join(chr(c) for c in codes)",
-    "Pattern 4: class-scoped +="
-)
+    _detect(
+        "class Evasion:\n    codes = [101, 118]\n    codes += [97, 108]\n    x = ''.join(chr(c) for c in codes)",
+        "Pattern 4: class-scoped +="
+    )
 
-_detect(
-    "codes4 = [101, 118, 97, 108]\ncodes4 *= 1\nx4 = ''.join(chr(c) for c in codes4)",
-    "Pattern 7: *= (non-Add op)"
-)
+    _detect(
+        "codes4 = [101, 118, 97, 108]\ncodes4 *= 1\nx4 = ''.join(chr(c) for c in codes4)",
+        "Pattern 7: *= (non-Add op)"
+    )
 
-print("\n=== mixed_mutation: should NOT detect ===")
+    print("\n=== mixed_mutation: should NOT detect ===")
 
-_detect(
-    "codes3 = [101, 118]\ncodes3 += [97, 108]\ncodes3 = [104, 105]\nx3 = ''.join(chr(c) for c in codes3)",
-    "Pattern 4: reassign after += (safe)"
-)
+    _detect(
+        "codes3 = [101, 118]\ncodes3 += [97, 108]\ncodes3 = [104, 105]\nx3 = ''.join(chr(c) for c in codes3)",
+        "Pattern 4: reassign after += (safe)"
+    )
 
-_detect(
-    "def shadow_after_mutation():\n    codes = [101, 118]\n    codes += [97, 108]\n    codes = 'hello'\n    x = ''.join(chr(c) for c in codes)",
-    "Pattern 5: shadow with string"
-)
+    _detect(
+        "def shadow_after_mutation():\n    codes = [101, 118]\n    codes += [97, 108]\n    codes = 'hello'\n    x = ''.join(chr(c) for c in codes)",
+        "Pattern 5: shadow with string"
+    )
 
-print("\n=== extend_generator_arg (out of scope) ===")
+    print("\n=== extend_generator_arg (out of scope) ===")
 
-_detect(
-    "codes = [101, 118]\ncodes.extend(x for x in [97, 108])\nx = ''.join(chr(c) for c in codes)",
-    "Pattern 1: Generator arg (expect no crash)"
-)
+    _detect(
+        "codes = [101, 118]\ncodes.extend(x for x in [97, 108])\nx = ''.join(chr(c) for c in codes)",
+        "Pattern 1: Generator arg (expect no crash)"
+    )

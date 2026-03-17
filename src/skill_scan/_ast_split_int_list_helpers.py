@@ -57,9 +57,7 @@ def _handle_extend_call(call: ast.Call, scope: str, result: dict[str, list[int]]
         return
     if not (isinstance(call.func.value, ast.Name) and len(call.args) == 1 and not call.keywords):
         return
-    arg = call.args[0]
-    if isinstance(arg, ast.List | ast.Tuple):
-        _extend_tracked(call.func.value.id, arg, scope, result)
+    _extend_tracked(call.func.value.id, call.args[0], scope, result)
 
 
 def _extend_tracked(name: str, value: ast.expr, scope: str, result: dict[str, list[int]]) -> None:

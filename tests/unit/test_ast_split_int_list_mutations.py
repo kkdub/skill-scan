@@ -61,14 +61,14 @@ class TestAugAssignExtend:
         assert result == {}
 
     def test_augassign_non_int_shadows(self) -> None:
-        """codes = [101]; codes += ['x'] converts entry to shadow marker []."""
+        """codes = [101]; codes += ['x'] converts entry to shadow marker."""
         result = _collect("codes = [101]\ncodes += ['x']")
-        assert result == {"codes": []}
+        assert result["codes"] is _SHADOW
 
     def test_augassign_already_shadowed_stays(self) -> None:
-        """codes = ['a']; codes += [97] keeps entry as shadow marker []."""
+        """codes = ['a']; codes += [97] keeps entry as shadow marker."""
         result = _collect("codes = ['a']\ncodes += [97]")
-        assert result == {"codes": []}
+        assert result["codes"] is _SHADOW
 
     def test_augassign_with_tuple(self) -> None:
         """codes += (97, 108) also works (tuple RHS)."""
@@ -83,7 +83,7 @@ class TestAugAssignExtend:
     def test_augassign_non_list_rhs_shadows(self) -> None:
         """codes += some_var (not a literal list) shadows the entry."""
         result = _collect("codes = [101]\ncodes += other")
-        assert result == {"codes": []}
+        assert result["codes"] is _SHADOW
 
     def test_augassign_in_if_block(self) -> None:
         """AugAssign inside control flow (if block) is tracked."""
@@ -123,17 +123,17 @@ class TestExtendCall:
     def test_extend_non_int_shadows(self) -> None:
         """codes.extend(['x']) converts entry to shadow marker."""
         result = _collect("codes = [101]\ncodes.extend(['x'])")
-        assert result == {"codes": []}
+        assert result["codes"] is _SHADOW
 
     def test_extend_with_tuple_arg(self) -> None:
         """codes.extend((97, 108)) works with tuple argument."""
         result = _collect("codes = [101]\ncodes.extend((97, 108))")
         assert result == {"codes": [101, 97, 108]}
 
-    def test_extend_non_list_arg_ignored(self) -> None:
-        """.extend(some_var) is ignored (not a literal list/tuple)."""
+    def test_extend_non_list_arg_shadows(self) -> None:
+        """.extend(some_var) shadows tracked entry (unresolvable mutation)."""
         result = _collect("codes = [101]\ncodes.extend(other)")
-        assert result == {"codes": [101]}
+        assert result["codes"] is _SHADOW
 
     def test_extend_with_keywords_ignored(self) -> None:
         """.extend() with keyword args is ignored (not valid Python but safe)."""
@@ -157,15 +157,13 @@ class TestMutationDetection:
         """codes = [101, 118]; codes += [97, 108]; join(chr) -> EXEC-002."""
         code = "codes = [101, 118]\ncodes += [97, 108]\nx = ''.join(chr(c) for c in codes)"
         findings = _detect(code)
-        assert len(findings) >= 1
-        assert findings[0].rule_id == "EXEC-002"
+        assert any(f.rule_id == "EXEC-002" for f in findings)
 
     def test_extend_resolves_to_exec002(self) -> None:
         """codes.extend([...]) result resolves through chr comprehension."""
         code = "codes = [101, 118]\ncodes.extend([97, 108])\nx = ''.join(chr(c) for c in codes)"
         findings = _detect(code)
-        assert len(findings) >= 1
-        assert findings[0].rule_id == "EXEC-002"
+        assert any(f.rule_id == "EXEC-002" for f in findings)
 
     def test_shadowed_mutation_no_false_positive(self) -> None:
         """Non-int mutation prevents resolution (no false positive)."""
@@ -176,8 +174,7 @@ class TestMutationDetection:
         """Multiple mutations chain: codes = [101]; codes += [118]; codes.extend([97, 108])."""
         code = "codes = [101]\ncodes += [118]\ncodes.extend([97, 108])\nx = ''.join(chr(c) for c in codes)"
         findings = _detect(code)
-        assert len(findings) >= 1
-        assert findings[0].rule_id == "EXEC-002"
+        assert any(f.rule_id == "EXEC-002" for f in findings)
 
 
 # -- R-EFF001: Red-team regression (empty-list init, sentinel fix) ----------
@@ -260,11 +257,11 @@ class TestAdversarialAugmented:
         result = _collect(code)
         assert result["codes"] == [101, 118, 97, 108]
 
-    def test_extend_generator_arg_no_crash(self) -> None:
-        """codes.extend(x for x in [...]) does not crash; value unchanged."""
+    def test_extend_generator_arg_shadows(self) -> None:
+        """codes.extend(x for x in [...]) shadows (unresolvable arg)."""
         code = "codes = [101, 118]\ncodes.extend(x for x in [97, 108])"
         result = _collect(code)
-        assert result["codes"] == [101, 118]  # generator ignored
+        assert result["codes"] is _SHADOW
 
     def test_reassign_after_mutation_overrides(self) -> None:
         """Reassignment after += overrides the mutated value."""

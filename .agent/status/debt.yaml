@@ -65,6 +65,27 @@
   blocker: "Requires looking up both operands in the int_list_table during assignment processing — adds cross-variable dependency tracking to the pre-pass."
   resolution: "In _collect_int_lists_from_body, handle Assign where value is BinOp(Add) with both operands as Name nodes already in the table — concatenate their tracked lists."
 
+- id: DEBT-028-INTLIST-GLOBAL-NONLOCAL
+  description: "_extend_tracked writes to scope-qualified key; global/nonlocal declarations not followed, so mutations inside functions with global/nonlocal codes never update the actual binding"
+  type: effectiveness
+  severity: low
+  plan: none
+  files:
+    - src/skill_scan/_ast_split_int_list_helpers.py:65-69
+  blocker: "Requires scope chain tracking to resolve global/nonlocal declarations to their target scope key before writing."
+  resolution: "In _extend_tracked, accept a scope_declarations parameter (or the full scope chain); when the name has a global/nonlocal binding, resolve the key to the target scope before lookup/write."
+
+- id: DEBT-028-INTLIST-BRANCH-MERGE
+  description: "_collect_int_list_assigns walks both if/else branches sequentially, merging mutations from mutually exclusive paths into one list — produces impossible combined values and potential false positives"
+  type: effectiveness
+  severity: low
+  plan: none
+  files:
+    - src/skill_scan/_ast_split_join_helpers.py
+    - src/skill_scan/_ast_split_int_list_helpers.py
+  blocker: "Requires branch-aware traversal (snapshot-and-merge or shadow-on-branch) to avoid combining mutations from mutually exclusive paths; significant complexity for the pre-pass collector."
+  resolution: "Snapshot the int_list_table before each branch, walk the branch, then merge results conservatively (shadow any key that differs between branches)."
+
 - id: DEBT-027-INTLIST-EXTEND-VAR
   description: "codes.extend(a) where a is a tracked int-list variable is silently ignored; only literal list/tuple args are handled by _handle_extend_call"
   type: effectiveness
