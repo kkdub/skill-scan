@@ -13,6 +13,10 @@ from skill_scan._ast_split_helpers import (
     _resolve_join_elements,
     _scoped_lookup,
 )
+from skill_scan._ast_split_int_list_helpers import (
+    _SHADOW,
+    _handle_int_list_stmt,
+)
 from skill_scan._ast_split_map_helpers import (
     _resolve_call_fn_name,
     _resolve_map_chr,
@@ -21,15 +25,12 @@ from skill_scan._ast_split_map_helpers import (
 
 
 def _collect_int_list_assigns(tree: ast.Module) -> dict[str, list[int]]:
-    """Pre-pass: collect Name = [int, ...] assignments from all scopes."""
+    """Pre-pass: collect and track int-list assignments and mutations (+=, .extend()) from all scopes."""
     result: dict[str, list[int]] = {}
-    # Module-level assignments (no scope prefix)
     _collect_int_lists_from_body(tree.body, "", result)
     for node in tree.body:
-        # Function-level assignments (scoped by function name)
         if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
             _collect_int_lists_from_body(node.body, node.name, result)
-        # Class method assignments (scoped by class name)
         elif isinstance(node, ast.ClassDef):
             for stmt in node.body:
                 if isinstance(stmt, ast.FunctionDef | ast.AsyncFunctionDef):
@@ -38,43 +39,21 @@ def _collect_int_list_assigns(tree: ast.Module) -> dict[str, list[int]]:
 
 
 def _collect_int_lists_from_body(body: list[ast.stmt], scope: str, result: dict[str, list[int]]) -> None:
-    """Collect assignments; int-lists get values, others get [] shadow marker."""
+    """Collect assignments; int-lists get values, others get _SHADOW sentinel."""
     for stmt in body:
-        if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1:
-            tgt = stmt.targets[0]
-            if isinstance(tgt, ast.Name):
-                key = f"{scope}.{tgt.id}" if scope else tgt.id
-                if isinstance(stmt.value, ast.List | ast.Tuple):
-                    ints = _extract_int_list(stmt.value.elts)
-                    result[key] = ints if ints is not None else []
-                else:
-                    result[key] = []
+        _handle_int_list_stmt(stmt, scope, result)
         for child_body in _sub_bodies(stmt):
             _collect_int_lists_from_body(child_body, scope, result)
 
 
 def _sub_bodies(stmt: ast.stmt) -> list[list[ast.stmt]]:
-    """Yield child body lists from control-flow nodes."""
-    # Only recurse into known control-flow nodes, not function/class defs
+    """Return child body lists from control-flow nodes (not function/class defs)."""
     if not isinstance(stmt, ast.If | ast.For | ast.While | ast.AsyncFor | ast.With | ast.AsyncWith | ast.Try):
         return []
-    # Collect body, orelse, finalbody attributes (varies by node type)
     bodies = [getattr(stmt, a) for a in ("body", "orelse", "finalbody") if hasattr(stmt, a)]
-    # Try handlers have their own body lists
     for handler in getattr(stmt, "handlers", ()):
         bodies.append(handler.body)
     return bodies
-
-
-def _extract_int_list(elts: list[ast.expr]) -> list[int] | None:
-    """Extract a list of int constants, or None if any element is non-int."""
-    # Strict all-or-nothing: one non-int element rejects the whole list
-    values: list[int] = []
-    for elt in elts:
-        if not isinstance(elt, ast.Constant) or not isinstance(elt.value, int):
-            return None
-        values.append(elt.value)
-    return values
 
 
 def _resolve_comprehension_join(
@@ -149,11 +128,11 @@ def _resolve_tracked_iter(
     """Resolve comprehension with tracked int-list variable as iteration source."""
     ls = int_list_scope or scope
     int_list = int_list_table.get(f"{ls}.{iter_name}") if ls else None
-    if int_list is not None and not int_list:
+    if int_list is _SHADOW:
         return None  # Shadow marker: locally bound but not an int list
     if int_list is None:
         int_list = int_list_table.get(iter_name)
-    if not int_list:
+    if int_list is _SHADOW or not int_list:
         return None
     synthetic: list[ast.expr] = [ast.Constant(value=v) for v in int_list]
     return _resolve_comprehension_chr(elt, target_id, synthetic, sep, alias_map=alias_map)
