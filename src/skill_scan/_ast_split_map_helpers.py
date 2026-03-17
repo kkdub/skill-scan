@@ -32,7 +32,7 @@ def _resolve_map_join(
     iter_arg = call.args[1]
     if not isinstance(iter_arg, ast.List | ast.Tuple):
         return None
-    if fn_name == "chr":
+    if fn_name in ("chr", "builtins.chr"):
         return _resolve_map_chr(iter_arg.elts, sep)
     if fn_name == "str":
         return _resolve_map_str(iter_arg.elts, sep)
