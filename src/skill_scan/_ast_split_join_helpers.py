@@ -238,5 +238,11 @@ def _resolve_join_call(
         rev = _resolve_reversed_join(arg, sep, symbol_table, scope)
         if rev is not None:
             return rev
-        return _resolve_map_join(arg, sep, alias_map or {})
+        return _resolve_map_join(
+            arg,
+            sep,
+            alias_map or {},
+            int_list_table=int_list_table,
+            int_list_scope=int_list_scope,
+        )
     return None

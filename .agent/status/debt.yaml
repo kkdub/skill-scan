@@ -96,6 +96,16 @@
   blocker: "File is at the project's max line limit. No code changes needed now, but the next resolver addition will breach the limit."
   resolution: "Extract _is_case_method/_resolve_case_method_chain (~48 lines) or _is_replace_call/_resolve_replace_chain (~62 lines) to a new _ast_split_case.py or _ast_split_replace.py sibling module. Follow existing facade re-export pattern."
 
+- id: DEBT-030-NC-FALSE-POSITIVE
+  description: "'nc' in _NETWORK_TOOLS is a 2-char string; any program literally named 'nc' in subprocess list-args triggers EXFIL-001 false positive"
+  type: security
+  severity: low
+  plan: PLAN-030
+  files:
+    - src/skill_scan/_ast_exfil_detector.py:18
+  blocker: "Mitigated by first-element-only check (only the executable name matters), but 'nc' is ambiguous — could be netcat or an unrelated tool. Fixing requires context-aware disambiguation or user-configurable allowlists."
+  resolution: "Consider requiring 'nc' to appear with network-related flags (-e, -l, -p) before flagging, or add a configurable allowlist for known-safe tool names."
+
 - id: DEBT-027-INTLIST-EXTEND-VAR
   description: "codes.extend(a) where a is a tracked int-list variable is silently ignored; only literal list/tuple args are handled by _handle_extend_call"
   type: effectiveness

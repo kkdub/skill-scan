@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import ast
 
+from skill_scan._ast_exfil_detector import _detect_subprocess_list_exfil as _detect_subprocess_list_exfil
 from skill_scan._ast_helpers import build_alias_map
 from skill_scan._ast_kwargs_detector import detect_kwargs_unpacking as detect_kwargs_unpacking
 from skill_scan._ast_split_detector import detect_split_evasion as detect_split_evasion
@@ -108,6 +109,10 @@ from skill_scan._ast_rot13 import (  # noqa: E402
 from skill_scan._ast_kwargs_detector import (  # noqa: E402
     _DANGEROUS_KWARGS as _DANGEROUS_KWARGS,
 )
+from skill_scan._ast_exfil_detector import (  # noqa: E402
+    _NETWORK_TOOLS as _NETWORK_TOOLS,
+    _SUBPROCESS_CALLS as _SUBPROCESS_CALLS,
+)
 
 _DETECTORS = (
     _detect_unsafe_calls,
@@ -118,4 +123,5 @@ _DETECTORS = (
     _detect_decorator_evasion,
     _detect_rot13_codec,
     _detect_rot13_maketrans,
+    _detect_subprocess_list_exfil,
 )

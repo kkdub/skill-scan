@@ -59,8 +59,11 @@ class TestFormatCall:
         """R-IMP008: variable.format() must NOT trigger (not a string constant receiver)."""
         assert len(_detect("x = 'ev{}'\nx.format('al')")) == 0
 
-    def test_format_with_keyword_args_no_finding(self) -> None:
-        assert len(_detect("'{name}'.format(name='eval')")) == 0
+    def test_format_with_keyword_args_resolves(self) -> None:
+        findings = _detect("'{name}'.format(name='eval')")
+        assert len(findings) == 1
+        assert findings[0].rule_id == "EXEC-002"
+        assert "eval" in findings[0].matched_text
 
     def test_format_unresolvable_arg_no_finding(self) -> None:
         assert len(_detect("a = 'ev'\nc = '{}{}'.format(a, unknown)")) == 0

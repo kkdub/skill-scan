@@ -107,10 +107,12 @@ class TestSliceResolution:
         code = "s = 'xxevalxx'\ni = 2\nname = s[i:6] + ''"
         assert len(_detect(code)) == 0
 
-    def test_negative_step_rejected(self) -> None:
-        """Negative step slices are rejected to prevent false positives."""
+    def test_negative_step_reversal_detected(self) -> None:
+        """Negative step slices resolve string reversal (e.g. s[::-1])."""
         code = "s = 'lave'\nname = s[::-1] + ''"
-        assert len(_detect(code)) == 0
+        findings = _detect(code)
+        assert len(findings) >= 1
+        assert findings[0].rule_id == "EXEC-002"
 
     def test_positive_step_allowed(self) -> None:
         code = "s = 'eval'\nname = s[0:4:1] + ''"

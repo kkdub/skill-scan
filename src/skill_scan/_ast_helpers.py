@@ -21,23 +21,47 @@ MAX_AST_RESOLVE_DEPTH = 50
 def build_alias_map(tree: ast.Module) -> dict[str, str]:
     """Build alias -> canonical module name mapping from Import/ImportFrom nodes.
 
-    Walks module-level statements only (not nested scopes) for:
+    Walks module-level statements and recurses into ast.Try blocks for:
       - ``import codecs as c``  -> {'c': 'codecs'}
       - ``import os``           -> {'os': 'os'}
       - ``from os import path`` -> {'path': 'os.path'}
       - ``from os import path as p`` -> {'p': 'os.path'}
     """
     alias_map: dict[str, str] = {}
-    for node in tree.body:
-        if isinstance(node, ast.Import):
-            for alias in node.names:
-                local_name = alias.asname if alias.asname else alias.name
-                alias_map[local_name] = alias.name
-        elif isinstance(node, ast.ImportFrom) and node.module:
-            for alias in node.names:
-                local_name = alias.asname if alias.asname else alias.name
-                alias_map[local_name] = f"{node.module}.{alias.name}"
+    _collect_imports(tree.body, alias_map)
     return alias_map
+
+
+def _collect_imports(body: list[ast.stmt], alias_map: dict[str, str]) -> None:
+    """Collect Import/ImportFrom from a body list, recursing into ast.Try blocks."""
+    for node in body:
+        if isinstance(node, ast.Import):
+            _record_import(node, alias_map)
+        elif isinstance(node, ast.ImportFrom) and node.module:
+            _record_import_from(node, alias_map)
+        elif isinstance(node, ast.Try):
+            for sub_body in _try_bodies(node):
+                _collect_imports(sub_body, alias_map)
+
+
+def _record_import(node: ast.Import, alias_map: dict[str, str]) -> None:
+    """Record aliases from an ``import`` statement."""
+    for alias in node.names:
+        alias_map[alias.asname or alias.name] = alias.name
+
+
+def _record_import_from(node: ast.ImportFrom, alias_map: dict[str, str]) -> None:
+    """Record aliases from a ``from ... import`` statement."""
+    for alias in node.names:
+        alias_map[alias.asname or alias.name] = f"{node.module}.{alias.name}"
+
+
+def _try_bodies(node: ast.Try) -> list[list[ast.stmt]]:
+    """Return all body lists from a Try node (body, handlers, orelse, finalbody)."""
+    bodies: list[list[ast.stmt]] = [node.body, node.orelse, node.finalbody]
+    for handler in node.handlers:
+        bodies.append(handler.body)
+    return bodies
 
 
 def get_call_name(node: ast.Call, alias_map: dict[str, str] | None = None) -> str:

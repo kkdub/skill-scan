@@ -21,6 +21,7 @@ from skill_scan._ast_split_resolve import (
     resolve_call_return,
     resolve_fstring,
     resolve_percent_format,
+    resolve_subscript,
 )
 from skill_scan.models import Finding
 
@@ -54,12 +55,17 @@ def _is_case(n: ast.AST) -> bool:
     return isinstance(n, ast.Call) and _is_case_method(n)
 
 
+def _is_subscript(n: ast.AST) -> bool:
+    return isinstance(n, ast.Subscript)
+
+
 _RESOLVERS: tuple[tuple[_Predicate, _Resolver], ...] = (
     (_is_binop_add, resolve_binop_chain),
     (_is_binop_mod, resolve_percent_format),
     (_is_fstr, resolve_fstring),
     (_is_replace, _resolve_replace_chain),
     (_is_case, _resolve_case_method_chain),
+    (_is_subscript, resolve_subscript),
     (_is_call, resolve_call),
 )
 

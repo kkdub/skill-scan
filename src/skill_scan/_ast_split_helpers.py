@@ -1,7 +1,11 @@
-"""AST split helpers -- str.format() and %-format resolution.
+"""AST split helpers -- str.format() / %-format / slice resolution.
 
-Resolves ``'template'.format(a, b)`` and ``'%s%s' % (a, b)`` patterns.
-Gates on string-constant receivers/LHS to avoid false positives.
+Resolves ``'template'.format(a, b)``, ``'{x}'.format(x='val')``, and
+``'%s%s' % (a, b)`` patterns. Also resolves slice expressions like
+``s[2:6]`` and ``s[::-1]`` (string reversal). Gates on string-constant
+receivers and LHS operands to avoid false positives.
+
+AT LINE LIMIT: 297/300
 """
 
 from __future__ import annotations
@@ -19,11 +23,33 @@ def _scoped_lookup(name: str, symbol_table: dict[str, str], scope: str) -> str |
     return symbol_table.get(name)
 
 
-# Matches {} or {0}, {1}, etc. (simple positional placeholders only)
-_FORMAT_PLACEHOLDER_RE = re.compile(r"\{(\d*)\}")
+# Matches {}, {0}, {1}, {name}, etc. (positional and keyword placeholders)
+_FORMAT_PLACEHOLDER_RE = re.compile(r"\{(\w*)\}")
 
 # Matches standard %-specifiers (negative lookbehind excludes escaped %% sequences)
 _PERCENT_SPEC_RE = re.compile(r"(?<!%)%[sdfrxoegcai]")
+
+
+def _resolve_format_keywords(
+    keywords: list[ast.keyword], symbol_table: dict[str, str], scope: str
+) -> dict[str, str] | None:
+    """Resolve keyword args to a string dict. Returns None if any are unresolvable.
+
+    Caller must ensure no **splat keywords are present (kw.arg is not None).
+    """
+    result: dict[str, str] = {}
+    for kw in keywords:
+        v = _resolve_single_expr(kw.value, symbol_table, scope)
+        if v is None:
+            return None
+        assert kw.arg is not None  # guaranteed by _has_splat_kwarg pre-check
+        result[kw.arg] = v
+    return result
+
+
+def _has_splat_kwarg(keywords: list[ast.keyword]) -> bool:
+    """Return True if any keyword is a **kwargs splat (kw.arg is None)."""
+    return any(kw.arg is None for kw in keywords)
 
 
 def _resolve_format_call(
@@ -31,30 +57,25 @@ def _resolve_format_call(
     symbol_table: dict[str, str],
     scope: str,
 ) -> str | None:
-    """Resolve ``'template'.format(a, b)`` to a string.
+    """Resolve ``'t'.format(a)`` or ``'{x}'.format(x='v')`` to a string.
 
-    Gates on:
-    - func is an Attribute with attr == 'format'
-    - receiver (func.value) is a string Constant
-    - all positional args resolve via symbol table
-
-    Returns the formatted string, or None if unresolvable.
+    Gates: func.attr=='format', receiver is str Constant, all args resolve,
+    **kwargs (kw.arg is None) rejected.
     """
     if not isinstance(node.func, ast.Attribute) or node.func.attr != "format":
         return None
-    if not isinstance(node.func.value, ast.Constant):
+    val = node.func.value
+    if not isinstance(val, ast.Constant) or not isinstance(val.value, str):
         return None
-    if not isinstance(node.func.value.value, str):
+    if _has_splat_kwarg(node.keywords):
         return None
-    if node.keywords:
-        return None  # keyword args not supported
-
-    template = node.func.value.value
     resolved_args = _resolve_expr_list(node.args, symbol_table, scope)
     if resolved_args is None:
         return None
-
-    return _substitute_format(template, resolved_args)
+    kwargs = _resolve_format_keywords(node.keywords, symbol_table, scope) if node.keywords else None
+    if node.keywords and kwargs is None:
+        return None
+    return _substitute_format(val.value, resolved_args, kwargs=kwargs)
 
 
 def _resolve_expr_list(
@@ -73,27 +94,12 @@ def _resolve_expr_list(
 
 
 def _resolve_single_expr(expr: ast.expr, symbol_table: dict[str, str], scope: str) -> str | None:
-    """Resolve one expression node to a string value.
-
-    Handles ast.Constant(str) directly; delegates Name, Attribute,
-    Subscript, and Call to resolve_expr() (deferred import to avoid
-    circular dependency since _ast_split_resolve imports from us).
-    """
+    """Resolve one expression to a string (Constant or via resolve_expr)."""
     if isinstance(expr, ast.Constant) and isinstance(expr.value, str):
         return expr.value
-    # resolve_expr handles Name, Attribute, Subscript, and Call
-    from skill_scan._ast_split_resolve import resolve_expr
+    from skill_scan._ast_split_resolve import resolve_expr  # deferred: circular dep
 
     return resolve_expr(expr, symbol_table, scope)
-
-
-def _resolve_subscript_key(slice_val: object) -> str | None:
-    """Convert subscript slice (str key or non-negative int) to composite key suffix."""
-    if isinstance(slice_val, str):
-        return slice_val
-    if isinstance(slice_val, int) and slice_val >= 0:
-        return str(slice_val)
-    return None
 
 
 def _resolve_subscript_expr(
@@ -104,27 +110,29 @@ def _resolve_subscript_expr(
     """Resolve ast.Subscript to string via composite key lookup or slice extraction."""
     if not isinstance(node.value, ast.Name):
         return None
-    # Handle ast.Slice nodes (e.g. s[2:6], s[2:], s[:4])
     if isinstance(node.slice, ast.Slice):
         return _resolve_slice_expr(node.value.id, node.slice, symbol_table, scope)
     if not isinstance(node.slice, ast.Constant):
         return None
-    key = _resolve_subscript_key(node.slice.value)
+    sv = node.slice.value
+    key = sv if isinstance(sv, str) else (str(sv) if isinstance(sv, int) and sv >= 0 else None)
     if key is None:
         return None
     return _scoped_lookup(f"{node.value.id}[{key}]", symbol_table, scope)
 
 
 def _extract_slice_int(node: ast.expr | None) -> tuple[bool, int | None]:
-    """Extract an integer from an optional slice bound.
+    """Extract int from optional slice bound; handles -N via UnaryOp(USub).
 
-    Returns (ok, value) where ok is False if the bound is non-Constant or
-    non-int (reject the slice). When node is None the bound is open-ended.
+    Returns (ok, value); ok=False rejects the slice. None means open-ended.
     """
     if node is None:
         return True, None
     if isinstance(node, ast.Constant) and isinstance(node.value, int):
         return True, node.value
+    if isinstance(node, ast.UnaryOp) and isinstance(node.op, ast.USub):
+        if isinstance(node.operand, ast.Constant) and isinstance(node.operand.value, int):
+            return True, -node.operand.value
     return False, None
 
 
@@ -134,15 +142,12 @@ def _resolve_slice_expr(
     symbol_table: dict[str, str],
     scope: str,
 ) -> str | None:
-    """Resolve a string slice (e.g. s[2:6]) to the extracted substring.
+    """Resolve a string slice (e.g. s[2:6], s[::-1]) to the extracted substring.
 
-    Requirements:
-    - Variable must be tracked in the symbol table
-    - Start and stop (when present) must be integer Constants
-    - Step must be None or a positive-int Constant (negative step rejected)
+    Variable must be tracked; bounds must be int Constants; step=0 rejected.
     """
     ok_step, step = _extract_slice_int(slc.step)
-    if not ok_step or (step is not None and step <= 0):
+    if not ok_step or (step is not None and step == 0):
         return None
     ok_lo, start = _extract_slice_int(slc.lower)
     if not ok_lo:
@@ -157,38 +162,54 @@ def _resolve_slice_expr(
     return full_str[start:stop:step]
 
 
-def _substitute_format(template: str, args: list[str]) -> str | None:
-    """Substitute {} and {N} placeholders with resolved args.
+def _classify_placeholders(placeholders: list[re.Match[str]]) -> tuple[bool, bool, bool]:
+    """Classify placeholder types: (has_auto, has_numeric, has_named)."""
+    has_auto = has_numeric = has_named = False
+    for m in placeholders:
+        field = m.group(1)
+        if field == "":
+            has_auto = True
+        elif field.isdigit():
+            has_numeric = True
+        else:
+            has_named = True
+    return has_auto, has_numeric, has_named
 
-    Auto-numbering ({} {} {}) uses sequential indices.
-    Explicit numbering ({0} {1}) uses the specified index.
-    Mixed numbering is rejected (returns None).
-    """
+
+def _resolve_field(
+    field: str, auto_idx: int, args: list[str], kwargs: dict[str, str] | None
+) -> tuple[str | None, int]:
+    """Resolve a single placeholder field. Returns (value, new_auto_idx)."""
+    if field == "":
+        if auto_idx >= len(args):
+            return None, auto_idx
+        return args[auto_idx], auto_idx + 1
+    if field.isdigit():
+        idx = int(field)
+        return (args[idx] if idx < len(args) else None), auto_idx
+    return (kwargs[field] if kwargs and field in kwargs else None), auto_idx
+
+
+def _substitute_format(template: str, args: list[str], *, kwargs: dict[str, str] | None = None) -> str | None:
+    """Substitute {}, {N}, and {name} placeholders with resolved args/kwargs."""
     placeholders = list(_FORMAT_PLACEHOLDER_RE.finditer(template))
     if not placeholders:
-        return None  # no placeholders to substitute
-
-    has_auto = any(m.group(1) == "" for m in placeholders)
-    has_explicit = any(m.group(1) != "" for m in placeholders)
-    if has_auto and has_explicit:
-        return None  # mixed numbering not supported
-
+        return None
+    has_auto, has_numeric, has_named = _classify_placeholders(placeholders)
+    if (has_auto or has_numeric) and has_named:
+        return None
+    if has_auto and has_numeric:
+        return None
     parts: list[str] = []
     last_end = 0
     auto_idx = 0
-
     for match in placeholders:
         parts.append(template[last_end : match.start()])
-        if match.group(1) == "":
-            idx = auto_idx
-            auto_idx += 1
-        else:
-            idx = int(match.group(1))
-        if idx >= len(args):
-            return None  # index out of range
-        parts.append(args[idx])
+        val, auto_idx = _resolve_field(match.group(1), auto_idx, args, kwargs)
+        if val is None:
+            return None
+        parts.append(val)
         last_end = match.end()
-
     parts.append(template[last_end:])
     return "".join(parts)
 
@@ -200,19 +221,12 @@ def _resolve_percent_format(
 ) -> str | None:
     """Resolve ``'%s%s' % (a, b)`` to a string.
 
-    Gates on:
-    - op is Mod
-    - LHS (left) is a string Constant (not integer -- avoids ``10 % 3``)
-    - RHS (right) is a Tuple with resolvable elements
-    - number of %s placeholders matches tuple length
-
-    Returns the formatted string, or None if unresolvable.
+    Gates: op is Mod, LHS is str Constant (not int), RHS is Tuple,
+    placeholder count matches tuple length. Returns None if unresolvable.
     """
     if not isinstance(node.op, ast.Mod):
         return None
-    if not isinstance(node.left, ast.Constant):
-        return None
-    if not isinstance(node.left.value, str):
+    if not isinstance(node.left, ast.Constant) or not isinstance(node.left.value, str):
         return None
 
     template = node.left.value
@@ -251,11 +265,7 @@ def _resolve_single_percent(
 
 
 def _substitute_percent(template: str, values: list[str]) -> str | None:
-    """Substitute %-specifier placeholders with values in order.
-
-    Returns None when len(values) > placeholder count (over-provisioning defense).
-    Uses manual match iteration to avoid re.sub backslash interpretation.
-    """
+    """Substitute %-specifier placeholders with values in order."""
     placeholders = list(_PERCENT_SPEC_RE.finditer(template))
     if len(values) > len(placeholders):
         return None  # over-provisioned: more args than placeholders

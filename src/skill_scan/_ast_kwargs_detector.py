@@ -2,6 +2,9 @@
 
 Detects subprocess.run(**opts) where opts contains shell=True (or any truthy value).
 Table-driven via _DANGEROUS_KWARGS.  Scope-aware via _build_scope_map.
+
+Dict-collection helpers live in ``_ast_kwargs_dict_tracker`` and are re-exported
+here for backward compatibility.
 """
 
 from __future__ import annotations
@@ -10,10 +13,34 @@ import ast
 
 from skill_scan._ast_detectors import _make_finding
 from skill_scan._ast_helpers import get_call_name
+from skill_scan._ast_kwargs_dict_tracker import (
+    _UNRESOLVABLE,
+    _collect_dict_assigns,
+    _collect_from_body,
+    _eval_constant_expr,
+    _extract_dict_literal,
+    _resolve_dict_operand,
+    _track_assign,
+    _track_aug_union,
+    _track_subscript_assign,
+    _track_union,
+)
 from skill_scan._ast_split_detector import _build_scope_map
 from skill_scan.models import Finding, Severity
 
-_UNRESOLVABLE = object()  # sentinel for _eval_constant_expr failure
+# Re-export extracted symbols for backward compatibility with existing tests.
+__all__ = [
+    "_UNRESOLVABLE",
+    "_collect_dict_assigns",
+    "_collect_from_body",
+    "_eval_constant_expr",
+    "_extract_dict_literal",
+    "_resolve_dict_operand",
+    "_track_assign",
+    "_track_aug_union",
+    "_track_subscript_assign",
+    "_track_union",
+]
 
 # Dangerous kwargs table: prefix -> (key, value, rule_id, severity, desc_prefix).
 _DangerousEntry = tuple[str, object, str, Severity, str]
@@ -116,156 +143,6 @@ def _resolve_kwargs_dict(
             return st_result
         return dict_assigns.get(node.id)
     return None
-
-
-def _collect_dict_assigns(tree: ast.Module) -> dict[str, dict[str, object]]:
-    """Pre-pass: collect dict variable assignments from all scopes.
-
-    Tracks raw constant values (preserving native Python types).
-    """
-    result: dict[str, dict[str, object]] = {}
-    _collect_from_body(tree.body, "", result)
-    for node in tree.body:
-        if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
-            _collect_from_body(node.body, node.name, result)
-        elif isinstance(node, ast.ClassDef):
-            for stmt in node.body:
-                if isinstance(stmt, ast.FunctionDef | ast.AsyncFunctionDef):
-                    _collect_from_body(stmt.body, node.name, result)
-    return result
-
-
-def _collect_from_body(body: list[ast.stmt], scope: str, result: dict[str, dict[str, object]]) -> None:
-    """Collect dict assignments from a body, keyed with *scope* prefix."""
-    for stmt in body:
-        if isinstance(stmt, ast.AugAssign) and isinstance(stmt.op, ast.BitOr):
-            _track_aug_union(stmt, result, scope)
-        elif isinstance(stmt, ast.Assign) and len(stmt.targets) == 1:
-            _track_assign(stmt.targets[0], stmt.value, result, scope)
-
-
-def _track_assign(
-    target: ast.expr,
-    value: ast.expr,
-    result: dict[str, dict[str, object]],
-    scope: str,
-) -> None:
-    """Dispatch a single-target Assign to the appropriate tracker."""
-    if isinstance(target, ast.Name) and isinstance(value, ast.BinOp) and isinstance(value.op, ast.BitOr):
-        _track_union(target, value, result, scope)
-    elif isinstance(target, ast.Name) and isinstance(value, ast.Dict):
-        extracted = _extract_dict_literal(value)
-        if extracted is not None:
-            key = f"{scope}.{target.id}" if scope else target.id
-            result[key] = extracted
-    elif isinstance(target, ast.Subscript):
-        _track_subscript_assign(target, value, result, scope)
-
-
-def _track_subscript_assign(
-    target: ast.Subscript,
-    value: ast.expr,
-    result: dict[str, dict[str, object]],
-    scope: str = "",
-) -> None:
-    """Track ``opts['shell'] = True`` -- subscript assignment to tracked dict."""
-    if not isinstance(target.value, ast.Name):
-        return
-    if not (isinstance(target.slice, ast.Constant) and isinstance(target.slice.value, str)):
-        return
-    resolved = _eval_constant_expr(value)
-    if resolved is _UNRESOLVABLE:
-        return
-    var_name = f"{scope}.{target.value.id}" if scope else target.value.id
-    result.setdefault(var_name, {})[target.slice.value] = resolved
-
-
-def _resolve_dict_operand(
-    node: ast.expr,
-    result: dict[str, dict[str, object]],
-    scope: str,
-) -> dict[str, object] | None:
-    """Resolve one operand of a dict union to a concrete dict, or ``None``.
-
-    Recurses into ``ast.BinOp(BitOr)`` for chained unions (``a | b | c``).
-    """
-    if isinstance(node, ast.Dict):
-        return _extract_dict_literal(node)
-    if isinstance(node, ast.Name):
-        key = f"{scope}.{node.id}" if scope else node.id
-        hit = result.get(key)
-        if hit is not None or not scope:
-            return hit
-        return result.get(node.id)
-    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.BitOr):
-        left = _resolve_dict_operand(node.left, result, scope)
-        if left is None:
-            return None
-        right = _resolve_dict_operand(node.right, result, scope)
-        return {**left, **right} if right is not None else None
-    return None
-
-
-def _track_union(
-    target: ast.Name,
-    binop: ast.BinOp,
-    result: dict[str, dict[str, object]],
-    scope: str,
-) -> None:
-    """Track ``x = a | b`` where both operands are resolvable dicts."""
-    left = _resolve_dict_operand(binop.left, result, scope)
-    right = _resolve_dict_operand(binop.right, result, scope)
-    if left is not None and right is not None:
-        key = f"{scope}.{target.id}" if scope else target.id
-        result[key] = {**left, **right}
-
-
-def _track_aug_union(stmt: ast.AugAssign, result: dict[str, dict[str, object]], scope: str) -> None:
-    """Track ``x |= rhs`` -- merge into existing tracked dict or drop."""
-    if not isinstance(stmt.target, ast.Name):
-        return
-    key = f"{scope}.{stmt.target.id}" if scope else stmt.target.id
-    existing = result.get(key)
-    if existing is None:
-        return
-    rhs = _resolve_dict_operand(stmt.value, result, scope)
-    if rhs is not None:
-        result[key] = {**existing, **rhs}
-    else:
-        del result[key]
-
-
-def _eval_constant_expr(node: ast.expr) -> object:
-    """Resolve ast.Constant or UnaryOp(USub|UAdd, Constant) to a value.
-
-    Returns ``_UNRESOLVABLE`` sentinel when the node cannot be evaluated.
-    """
-    if isinstance(node, ast.Constant):
-        return node.value
-    if isinstance(node, ast.UnaryOp) and isinstance(node.operand, ast.Constant):
-        val = node.operand.value
-        if isinstance(node.op, ast.USub) and isinstance(val, int | float | complex):
-            return -val
-        if isinstance(node.op, ast.UAdd) and isinstance(val, int | float | complex):
-            return +val
-    return _UNRESOLVABLE
-
-
-def _extract_dict_literal(node: ast.Dict) -> dict[str, object] | None:
-    """Extract constant key-value pairs from an inline ast.Dict.
-
-    Returns ``None`` if any ``**spread`` is present (avoids false positives).
-    Values are stored as raw Python constants (preserving native types).
-    """
-    if any(k is None for k in node.keys):
-        return None
-    result: dict[str, object] = {}
-    for key_node, value_node in zip(node.keys, node.values, strict=False):
-        if isinstance(key_node, ast.Constant) and isinstance(key_node.value, str):
-            val = _eval_constant_expr(value_node)
-            if val is not _UNRESOLVABLE:
-                result[key_node.value] = val
-    return result
 
 
 def _lookup_symbol_table_dict(var_name: str, symbol_table: dict[str, str]) -> dict[str, object]:

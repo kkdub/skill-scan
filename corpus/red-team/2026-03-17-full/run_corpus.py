@@ -28,7 +28,7 @@ for category in CATEGORIES:
     # Group findings by file path
     by_file: dict[str, list[object]] = defaultdict(list)
     for f in scan_result.findings:
-        by_file[f.file_path].append(f)
+        by_file[f.file].append(f)
 
     # Enumerate all input files (exclude metadata)
     input_files = sorted(
