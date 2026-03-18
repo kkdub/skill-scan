@@ -50,14 +50,16 @@ src/skill_scan/           # Production source code
   _ast_symbol_table_return_helpers.py # Return-value extraction
   _ast_split_detector.py  # Split-evasion detector (detect_split_evasion)
   _ast_split_helpers.py   # Format/%-format resolution helpers
-  _ast_split_resolve.py   # Expression resolution helpers (AT LINE LIMIT: 300/300)
+  _ast_split_resolve.py   # Expression resolution helpers + format_map resolver (285/300)
   _ast_split_bytes.py     # Bytes-constructor resolution
   _ast_split_chr.py       # chr/ord/int resolution
   _ast_split_reduce.py    # reduce/operator concat resolution
   _ast_split_join_helpers.py # Generator/comprehension join resolution; _collect_int_list_assigns pre-pass
   _ast_split_int_list_helpers.py # Int-list mutation tracking (_SHADOW sentinel, _handle_int_list_stmt, _handle_assign, _handle_extend_call, _extend_tracked)
-  _ast_split_map_helpers.py  # map(chr/str, [...]) resolution for join patterns
-  _ast_kwargs_detector.py # Kwargs unpacking detector (detect_kwargs_unpacking)
+  _ast_split_map_helpers.py  # map(chr/str/lambda, [...]) resolution for join patterns
+  _ast_kwargs_detector.py # Kwargs unpacking detector (detect_kwargs_unpacking); re-exports from _ast_kwargs_dict_tracker.py
+  _ast_kwargs_dict_tracker.py # Dict-collection pre-pass + .update() tracking (extracted from _ast_kwargs_detector.py)
+  _ast_exfil_detector.py  # Subprocess list-arg exfil detector (_detect_subprocess_list_exfil)
   decoder.py              # Facade: EncodedPayload, extract/decode
   _decoder_helpers.py     # Base64/hex extraction and decode
   _decoder_url_unicode.py # URL/unicode-escape extraction and decode
@@ -87,6 +89,9 @@ Key patterns and invariants. For detailed module-level docs, see `.agent/ARCHITE
 - `_DANGEROUS_KWARGS` — table-driven config for kwargs detector; extend by adding entries, no code changes needed
 - `_collect_int_list_assigns(tree)` in `_ast_split_join_helpers.py` — parallel pre-pass collecting `Name = [int, ...]` assignments AND tracking `+=`/`.extend()` mutations; built in `analyze_python()` and threaded to `detect_split_evasion` via `int_list_table` kwarg; mutation helpers live in `_ast_split_int_list_helpers.py`
 - `_CASE_METHODS` frozenset + `_is_case_method` / `_resolve_case_method_chain` in `_ast_split_resolve.py` — resolves `.lower()`, `.upper()`, `.title()`, `.swapcase()`, `.capitalize()`, `.casefold()` chains; registered in `_RESOLVERS` before `_is_call` (follows `_is_replace_call` / `_resolve_replace_chain` pattern)
+- `_SUBPROCESS_CALLS` / `_NETWORK_TOOLS` in `_ast_exfil_detector.py` — frozensets defining which subprocess variants and tool names trigger EXFIL-008; extend by adding entries, no code changes needed
+- `_handle_update_call` in `_ast_kwargs_dict_tracker.py` — handles `dict.update({...})` in the kwargs pre-pass; follows same pattern as `_track_aug_union`
+- `_try_bodies(node)` in `_ast_helpers.py` — returns all body lists from a `Try` node (body, handlers, orelse, finalbody); used by `_collect_imports` to recurse into `try/except` blocks
 
 **Invariants**:
 - `normalize_text()` in `normalizer.py` applies NFKC normalization (`unicodedata.normalize('NFKC', text)`) as its FIRST step — this decomposes fullwidth Unicode characters (U+FF41-FF5A) and other compatibility characters before zero-width stripping and whitespace canonicalization
@@ -98,12 +103,18 @@ Key patterns and invariants. For detailed module-level docs, see `.agent/ARCHITE
 - `_make_rot13_finding()` uses `category='obfuscation'` — do NOT reuse `_make_finding` (hardcodes `'malicious-code'`)
 - Deferred imports in `_ast_symbol_table.py` break circular deps — don't reorganize without checking import chains
 - `_extract_dict_literal` returns `dict[str, object]` (raw Python constants, not `str()`); `_kwarg_matches` uses native Python truthiness for `bool` table entries and `str()` equality for non-bool entries — `int(0)` is falsy, `str("0")` is truthy
-- `_eval_constant_expr` in `_ast_kwargs_detector.py` resolves `ast.Constant` and `ast.UnaryOp(USub|UAdd, Constant)` to Python values (handles negative int/float literals); returns `_UNRESOLVABLE` sentinel on failure
+- `_eval_constant_expr` in `_ast_kwargs_dict_tracker.py` resolves `ast.Constant` and `ast.UnaryOp(USub|UAdd, Constant)` to Python values (handles negative int/float literals); returns `_UNRESOLVABLE` sentinel on failure; re-exported from `_ast_kwargs_detector.py`
 - `_SHADOW` in `_ast_split_int_list_helpers.py` is a module-level sentinel `list[int]` that marks shadowed (non-int-list) variables in the int-list pre-pass; always compare by identity (`existing is _SHADOW`), never by equality — a legitimate empty list (`codes = []`) must not be confused with a shadow marker
+- `build_alias_map(tree)` recurses into `ast.Try` blocks via `_collect_imports` → `_try_bodies` — imports inside `try/except/else/finally` are captured; do not flatten `tree.body` iteration without preserving this recursion
+- `_is_lambda_chr(node)` in `_ast_split_map_helpers.py` validates exactly: single positional arg, no vararg, no kwonly args, body is `chr(arg)` with matching param name — do not relax these checks without a test for the edge case
+- `_detect_subprocess_list_exfil` uses `Finding()` directly with `category='data-exfiltration'` — do NOT use `_make_finding` (hardcodes `'malicious-code'`); follows the same constraint as `_make_rot13_finding()`
+- `_resolve_format_map_call` in `_ast_split_resolve.py` is registered in `resolve_call()` after `_resolve_format_call`; format_map resolves `template.format_map(dict_expr)` via `_extract_dict_literal` or symbol table lookup
+- `_resolve_slice_expr` rejects `step == 0` (invalid) but permits `step == -1` (string reversal `[::-1]`) — step guard is `step is not None and step == 0`, not `step <= 0`
 
 **Known debt**:
 - PEP 448 spread dicts (`{**base, ...}`) in kwargs are conservatively treated as unresolvable (no tracking planned)
-- `_ast_split_resolve.py` is at the 300-line limit — any future resolver additions require splitting the file first
+- `_ast_split_resolve.py` is at 285/300 lines — limited room; future resolver additions may require splitting
+- `_ast_split_helpers.py` is at 297/300 lines — near limit; any addition requires offsetting removal first
 
 ## Tips
 

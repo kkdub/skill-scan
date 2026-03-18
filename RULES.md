@@ -6,7 +6,7 @@ Procedural rules are implemented directly in Python modules.
 
 To add a custom rule, copy a section from [template.toml](src/skill_scan/rules/template.toml) into a new `.toml` file or your `--config` file.
 
-**78 rules** across 9 categories.
+**79 rules** across 9 categories.
 
 ## Prompt Injection
 
@@ -76,6 +76,7 @@ To add a custom rule, copy a section from [template.toml](src/skill_scan/rules/t
 | EXFIL-005 | high | Python HTTP client exfiltration — data sent via requests, httpx, urllib, or aiohttp | stable |
 | EXFIL-006 | high | Raw socket and DNS exfiltration — data sent via low-level sockets or DNS queries | stable |
 | EXFIL-007 | medium | Mail and messaging exfiltration — data sent via SMTP, SES, or WebSocket | stable |
+| EXFIL-008 | critical | Subprocess network tool invocation — shell-out to curl, wget, or netcat via subprocess (AST) | stable |
 
 ## Credential Exposure
 
