@@ -184,112 +184,6 @@ def resolve_call(
     return resolve_call_return(node, symbol_table, scope)
 
 
-def _is_replace_call(node: ast.expr) -> bool:
-    """Check if node is a .replace(old, new) call with two positional args."""
-    return (
-        isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Attribute)
-        and node.func.attr == "replace"
-        and len(node.args) == 2
-        and not node.keywords
-    )
-
-
-def _extract_replace_pair(call: ast.Call) -> tuple[str, str] | None:
-    """Extract (old, new) string pair from a .replace() call, or None."""
-    old_arg, new_arg = call.args
-    if (
-        isinstance(old_arg, ast.Constant)
-        and isinstance(old_arg.value, str)
-        and isinstance(new_arg, ast.Constant)
-        and isinstance(new_arg.value, str)
-    ):
-        return (old_arg.value, new_arg.value)
-    return None
-
-
-def _resolve_base_string(node: ast.expr, symbol_table: dict[str, str], scope: str) -> str | None:
-    """Resolve the base expression of a replace chain to a string."""
-    if isinstance(node, ast.Constant) and isinstance(node.value, str):
-        return node.value
-    if isinstance(node, ast.Name):
-        return _scoped_lookup(node.id, symbol_table, scope)
-    return None
-
-
-def _resolve_replace_chain(
-    node: ast.Call,
-    symbol_table: dict[str, str],
-    scope: str,
-    *,
-    alias_map: dict[str, str] | None = None,
-) -> str | None:
-    """Resolve chained .replace(old, new) calls to a final string."""
-    replacements: list[tuple[str, str]] = []
-    cur: ast.expr = node
-    for _ in range(20):  # MAX_REPLACE_DEPTH
-        if not _is_replace_call(cur):
-            break
-        assert isinstance(cur, ast.Call)  # narrowing for mypy
-        pair = _extract_replace_pair(cur)
-        if pair is None:
-            return None
-        replacements.append(pair)
-        assert isinstance(cur.func, ast.Attribute)  # narrowed by _is_replace_call
-        cur = cur.func.value
-    if not replacements:
-        return None
-    base = _resolve_base_string(cur, symbol_table, scope)
-    if base is None:
-        return None
-    # Apply replacements left-to-right (first collected = innermost)
-    for old_val, new_val in reversed(replacements):
-        base = base.replace(old_val, new_val)
-    return base
-
-
-_CASE_METHODS = frozenset({"lower", "upper", "title", "swapcase", "capitalize", "casefold"})
-
-
-def _is_case_method(node: ast.expr) -> bool:
-    """Check if node is a .lower()/.upper()/etc. call with no arguments."""
-    return (
-        isinstance(node, ast.Call)
-        and isinstance(node.func, ast.Attribute)
-        and node.func.attr in _CASE_METHODS
-        and not node.args
-        and not node.keywords
-    )
-
-
-def _resolve_case_method_chain(
-    node: ast.Call,
-    symbol_table: dict[str, str],
-    scope: str,
-    *,
-    alias_map: dict[str, str] | None = None,
-) -> str | None:
-    """Resolve chained .lower()/.upper()/etc. calls to a final string."""
-    methods: list[str] = []
-    cur: ast.expr = node
-    for _ in range(20):  # MAX_REPLACE_DEPTH
-        if not _is_case_method(cur):
-            break
-        assert isinstance(cur, ast.Call) and isinstance(cur.func, ast.Attribute)
-        methods.append(cur.func.attr)
-        cur = cur.func.value
-    if not methods:
-        return None
-    base = _resolve_base_string(cur, symbol_table, scope)
-    if base is None:
-        base = resolve_expr(cur, symbol_table, scope, alias_map=alias_map)
-    if base is None:
-        return None
-    for method_name in reversed(methods):
-        base = getattr(base, method_name)()
-    return base
-
-
 # re-export at BOTTOM -- Facade Re-export Pattern
 from skill_scan._ast_split_bytes import resolve_bytes_constructor as resolve_bytes_constructor  # noqa: E402
 from skill_scan._ast_split_helpers import (  # noqa: E402
@@ -297,4 +191,9 @@ from skill_scan._ast_split_helpers import (  # noqa: E402
     _resolve_percent_format as _resolve_percent_format,
 )
 from skill_scan._ast_split_join_helpers import _resolve_join_call as _resolve_join_call  # noqa: E402
+from skill_scan._ast_split_method_chains import (  # noqa: E402
+    _is_case_method as _is_case_method,
+    _resolve_case_method_chain as _resolve_case_method_chain,
+    _resolve_replace_chain as _resolve_replace_chain,
+)
 from skill_scan._ast_split_reduce import _resolve_reduce_concat as _resolve_reduce_concat  # noqa: E402

@@ -104,6 +104,30 @@ class TestCaseMethodResolution:
         findings = _detect("name = 'EVAL'.lower()\nglobals()[name]('print(1)')")
         assert len(findings) >= 1
 
+    def test_binop_base_with_lower(self) -> None:
+        """('EV' + 'AL').lower() resolves BinOp base through case method."""
+        findings = _detect("x = ('EV' + 'AL').lower()")
+        assert len(findings) >= 1
+        assert findings[0].rule_id == "EXEC-002"
+
+    def test_replace_base_with_lower(self) -> None:
+        """'XVAL'.replace('X', 'E').lower() resolves replace chain base."""
+        findings = _detect("x = 'XVAL'.replace('X', 'E').lower()")
+        assert len(findings) >= 1
+        assert findings[0].rule_id == "EXEC-002"
+
+    def test_join_base_with_lower(self) -> None:
+        """''.join(['EV', 'AL']).lower() resolves join base through case method."""
+        findings = _detect("x = ''.join(['EV', 'AL']).lower()")
+        assert len(findings) >= 1
+        assert findings[0].rule_id == "EXEC-002"
+
+    def test_fstring_base_with_lower(self) -> None:
+        """f'{a}{b}'.lower() resolves f-string base through case method."""
+        findings = _detect("a = 'EV'\nb = 'AL'\nx = f'{a}{b}'.lower()")
+        assert len(findings) >= 1
+        assert findings[0].rule_id == "EXEC-002"
+
 
 # -- R-IMP003: File size constraint -------------------------------------------
 

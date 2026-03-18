@@ -144,9 +144,8 @@ class TestNormalizeText:
         assert normalize_text("__\uff49\uff4d\uff50\uff4f\uff52\uff54__") == "__import__"
 
     def test_nfkc_cjk_compatibility_char(self) -> None:
-        # U+3231 (parenthesized ideograph stock) -> parenthesized form
-        result = normalize_text("\u3231")
-        assert "\u3231" not in result  # decomposed away from compatibility form
+        # U+3231 (parenthesized ideograph stock) -> '(株)' via NFKC
+        assert normalize_text("\u3231") == "(\u682a)"
 
     def test_nfkc_runs_before_zero_width_strip(self) -> None:
         # NFKC first, then zero-width strip: fullwidth + zero-width combined
