@@ -200,3 +200,29 @@ class TestLookupStrDictScopePriority(unittest.TestCase):
         result = _lookup_str_dict("parts", symbol_table, "func")
         assert result is not None
         assert result["a"] == "local_val"
+
+    def test_scoped_excludes_unscoped_keys(self) -> None:
+        """When scoped entries exist, unscoped keys must not leak in."""
+        from skill_scan._ast_split_resolve import _lookup_str_dict
+
+        symbol_table = {
+            "parts[a]": "module_a",
+            "parts[b]": "module_b",
+            "func.parts[a]": "local_a",
+        }
+        result = _lookup_str_dict("parts", symbol_table, "func")
+        assert result is not None
+        assert result == {"a": "local_a"}
+        assert "b" not in result
+
+    def test_falls_back_to_unscoped_when_no_scoped(self) -> None:
+        """When no scoped entries exist, unscoped entries are returned."""
+        from skill_scan._ast_split_resolve import _lookup_str_dict
+
+        symbol_table = {
+            "parts[x]": "val_x",
+            "parts[y]": "val_y",
+        }
+        result = _lookup_str_dict("parts", symbol_table, "func")
+        assert result is not None
+        assert result == {"x": "val_x", "y": "val_y"}

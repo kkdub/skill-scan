@@ -87,7 +87,7 @@ Detailed module-level documentation for skill-scan internals. For key patterns a
 ## Exfil Detector
 
 - `_ast_exfil_detector.py` — node-level detector for subprocess list-arg data exfiltration; registered in `_DETECTORS` in `ast_analyzer.py`; new module was created because `_ast_detectors.py` was at 294/300 lines
-- `_detect_subprocess_list_exfil(node, file_path, *, alias_map)` — emits `EXFIL-001` when a `subprocess.run/call/check_output/check_call/Popen` call has a list as first arg whose first element is a network tool name; uses `get_call_name` for alias resolution; handles `/usr/bin/curl`-style paths via `split('/')[-1]`
+- `_detect_subprocess_list_exfil(node, file_path, *, alias_map)` — emits `EXFIL-008` when a `subprocess.run/call/check_output/check_call/Popen` call has a list as first arg whose first element is a network tool name; uses `get_call_name` for alias resolution; handles `/usr/bin/curl`-style paths via `split('/')[-1]`
 - `_SUBPROCESS_CALLS` — frozenset of recognized subprocess function names (qualified: `subprocess.run`, etc.)
 - `_NETWORK_TOOLS` — frozenset of network tool names that trigger detection: `curl`, `wget`, `nc`, `ncat`, `netcat`
 - Uses `Finding()` directly with `category='data-exfiltration'` — do NOT use `_make_finding` (which hardcodes `'malicious-code'`)

@@ -89,7 +89,7 @@ Key patterns and invariants. For detailed module-level docs, see `.agent/ARCHITE
 - `_DANGEROUS_KWARGS` — table-driven config for kwargs detector; extend by adding entries, no code changes needed
 - `_collect_int_list_assigns(tree)` in `_ast_split_join_helpers.py` — parallel pre-pass collecting `Name = [int, ...]` assignments AND tracking `+=`/`.extend()` mutations; built in `analyze_python()` and threaded to `detect_split_evasion` via `int_list_table` kwarg; mutation helpers live in `_ast_split_int_list_helpers.py`
 - `_CASE_METHODS` frozenset + `_is_case_method` / `_resolve_case_method_chain` in `_ast_split_resolve.py` — resolves `.lower()`, `.upper()`, `.title()`, `.swapcase()`, `.capitalize()`, `.casefold()` chains; registered in `_RESOLVERS` before `_is_call` (follows `_is_replace_call` / `_resolve_replace_chain` pattern)
-- `_SUBPROCESS_CALLS` / `_NETWORK_TOOLS` in `_ast_exfil_detector.py` — frozensets defining which subprocess variants and tool names trigger EXFIL-001; extend by adding entries, no code changes needed
+- `_SUBPROCESS_CALLS` / `_NETWORK_TOOLS` in `_ast_exfil_detector.py` — frozensets defining which subprocess variants and tool names trigger EXFIL-008; extend by adding entries, no code changes needed
 - `_handle_update_call` in `_ast_kwargs_dict_tracker.py` — handles `dict.update({...})` in the kwargs pre-pass; follows same pattern as `_track_aug_union`
 - `_try_bodies(node)` in `_ast_helpers.py` — returns all body lists from a `Try` node (body, handlers, orelse, finalbody); used by `_collect_imports` to recurse into `try/except` blocks
 

@@ -71,6 +71,14 @@ _PROCEDURAL_RULES: list[RuleInfo] = [
         "procedural",
     ),
     RuleInfo(
+        "EXFIL-008",
+        "critical",
+        "data-exfiltration",
+        "Subprocess network tool invocation — shell-out to curl, wget, or netcat via subprocess (AST)",
+        "stable",
+        "procedural",
+    ),
+    RuleInfo(
         "SV-001",
         "medium",
         "schema-validation",

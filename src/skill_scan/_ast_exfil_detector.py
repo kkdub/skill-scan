@@ -27,8 +27,8 @@ _SUBPROCESS_CALLS = frozenset(
 _NETWORK_TOOLS = frozenset({"curl", "wget", "nc", "ncat", "netcat"})
 
 _CATEGORY = "data-exfiltration"
-_RULE_ID = "EXFIL-001"
-_RECOMMENDATION = "Remove or reject commands that silently POST data to external servers"
+_RULE_ID = "EXFIL-008"
+_RECOMMENDATION = "Remove subprocess calls to network tools; use auditable Python HTTP clients instead"
 
 
 def _detect_subprocess_list_exfil(
@@ -73,7 +73,7 @@ def _detect_subprocess_list_exfil(
             file=file_path,
             line=node.lineno,
             matched_text=f"{name}(['{first.value}', ...])",
-            description=f"Subprocess list-arg exfiltration -- {name}() with '{tool_name}' detected via AST",
+            description=f"Subprocess network tool invocation -- {name}() with '{tool_name}' detected via AST",
             recommendation=_RECOMMENDATION,
         )
     ]

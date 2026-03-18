@@ -154,7 +154,7 @@ The container runs as non-root user `scanner`. The scan target is mounted read-o
 |----------|-------|-----------------|
 | Prompt Injection | PI-001 .. PI-009 | Instruction override, safety bypass, role manipulation, homoglyph attacks |
 | Malicious Code | EXEC-001 .. EXEC-010, JSEXEC-001 .. JSEXEC-003 | Remote code execution, eval/exec, obfuscated payloads, unsafe deserialization |
-| Data Exfiltration | EXFIL-001 .. EXFIL-007 | Silent outbound requests, credential harvesting, webhook/C2 callbacks |
+| Data Exfiltration | EXFIL-001 .. EXFIL-008 | Silent outbound requests, credential harvesting, webhook/C2 callbacks, subprocess network tools |
 | Credential Exposure | CRED-001 .. CRED-003 | Hardcoded API keys, plaintext passwords, secrets in LLM context |
 | Supply Chain | SC-001 .. SC-004 | Remote config fetching, unpinned dependencies, ClickFix social engineering |
 | Tool Abuse | TOOL-001 .. TOOL-003 | Destructive file ops, privilege escalation, dangerous command chaining |

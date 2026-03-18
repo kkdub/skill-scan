@@ -216,19 +216,25 @@ def _resolve_dict_arg(node: ast.expr, symbol_table: dict[str, str], scope: str) 
 
 
 def _lookup_str_dict(var_name: str, symbol_table: dict[str, str], scope: str) -> dict[str, str] | None:
-    """Reconstruct a {str: str} dict from composite keys in symbol table."""
+    """Reconstruct a {str: str} dict from composite keys in symbol table.
+
+    Mirrors ``_scoped_lookup`` semantics: if any scoped entries exist, build
+    the mapping exclusively from those; otherwise fall back to unscoped keys.
+    This prevents module-level dict entries from leaking into function-scope
+    lookups when both exist.
+    """
     prefix = f"{var_name}["
     scoped_prefix = f"{scope}.{var_name}[" if scope else None
-    result: dict[str, str] = {}
+    scoped_result: dict[str, str] = {}
+    unscoped_result: dict[str, str] = {}
     for key, val in symbol_table.items():
-        active_prefix = None
-        if scoped_prefix and key.startswith(scoped_prefix):
-            active_prefix = scoped_prefix
-        elif key.startswith(prefix):
-            active_prefix = prefix
-        if active_prefix and key.endswith("]"):
-            dict_key = key[len(active_prefix) : -1]
-            result[dict_key] = val
+        if scoped_prefix and key.startswith(scoped_prefix) and key.endswith("]"):
+            dict_key = key[len(scoped_prefix) : -1]
+            scoped_result[dict_key] = val
+        elif key.startswith(prefix) and key.endswith("]"):
+            dict_key = key[len(prefix) : -1]
+            unscoped_result[dict_key] = val
+    result = scoped_result if scoped_result else unscoped_result
     return result if result else None
 
 
