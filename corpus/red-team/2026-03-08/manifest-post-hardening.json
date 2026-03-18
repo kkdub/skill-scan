@@ -1,0 +1,137 @@
+{
+  "tool": "skill-scan decoder + engine integration",
+  "date": "2026-03-08",
+  "run": "post-hardening",
+  "previous_evasion_rate": "54.1% (40/74)",
+  "current_evasion_rate": "37.8% (28/74)",
+  "total_inputs": 85,
+  "total_detection_inputs": 74,
+  "total_fp_inputs": 11,
+  "fixes_verified": {
+    "padding_manipulation": "67% -> 0% evasion (FIXED)",
+    "encoding_prefix_evasion_data_image": "67% -> 33% evasion (2/4 FIXED, 2 no_boundary remain)",
+    "unicode_homoglyph_b64_zwsp": "100% -> 0% evasion (FIXED)",
+    "hex_variations_spaced": "40% -> 20% evasion (spaced FIXED, line_continue remains)",
+    "base64_whitespace": "100% -> 100% evasion (NOT FIXED - see notes)"
+  },
+  "notes": {
+    "base64_whitespace_not_fixed": "The _decode_base64() whitespace strip only works if the regex first captures the string. The regex [A-Za-z0-9+/]{24,} requires contiguous chars, so spaced/tabbed base64 is never extracted. The newline_split subcategory is actually identical to line_split_base64 (multi-line concat).",
+    "near_max_size_test_bug": "Test case marks should_detect=True but payload is 101.5KB, exceeding MAX_DECODED_SIZE=100KB. Correct behavior is to reject it.",
+    "at_min_length_regex_gap": "base64 of 17 bytes = 23 non-padding chars + 1 pad = 24 total, but regex requires 24 non-padding chars ({24,} applies before ={0,3})"
+  },
+  "requirements_assessment": {
+    "R-EFF001": {
+      "metric": "Base64-encoded PI detection rate on clean single-line base64",
+      "threshold": ">= 90%",
+      "result": "100.0% (33/33)",
+      "status": "PASS"
+    },
+    "R-EFF002": {
+      "metric": "False positive rate on legitimate base64",
+      "threshold": "< 10%",
+      "result": "9.1% (1/11)",
+      "status": "PASS"
+    }
+  },
+  "categories": {
+    "base64_url_safe": {
+      "count": 3,
+      "evaded": 0,
+      "false_positives": 0,
+      "status": "PASS"
+    },
+    "base64_whitespace": {
+      "count": 9,
+      "evaded": 9,
+      "false_positives": 0,
+      "classification": "3 out-of-scope (line_split), 6 genuine (regex limitation)",
+      "status": "REMAINING"
+    },
+    "comment_injection": {
+      "count": 2,
+      "evaded": 2,
+      "false_positives": 0,
+      "classification": "out-of-scope (needs AST)",
+      "status": "OUT_OF_SCOPE"
+    },
+    "encoding_prefix_evasion": {
+      "count": 6,
+      "evaded": 2,
+      "false_positives": 0,
+      "classification": "2 fixed (data_text, image_plus), 2 remain (no_boundary)",
+      "status": "IMPROVED"
+    },
+    "false_positives": {
+      "count": 10,
+      "evaded": 0,
+      "false_positives": 1,
+      "status": "BORDERLINE"
+    },
+    "hex_variations": {
+      "count": 10,
+      "evaded": 2,
+      "false_positives": 0,
+      "classification": "2 fixed (spaced_hex), 2 remain (line_continue = out-of-scope)",
+      "status": "IMPROVED"
+    },
+    "line_split_base64": {
+      "count": 6,
+      "evaded": 6,
+      "false_positives": 0,
+      "classification": "out-of-scope (needs AST)",
+      "status": "OUT_OF_SCOPE"
+    },
+    "mixed_encoding": {
+      "count": 4,
+      "evaded": 2,
+      "false_positives": 0,
+      "classification": "b64_in_hex detected (double decode works), hex_in_b64 evades (bare hex without markers)",
+      "status": "PARTIAL"
+    },
+    "non_quoted_base64": {
+      "count": 8,
+      "evaded": 0,
+      "false_positives": 0,
+      "status": "PASS"
+    },
+    "padding_manipulation": {
+      "count": 9,
+      "evaded": 0,
+      "false_positives": 0,
+      "status": "FIXED"
+    },
+    "partial_encoding": {
+      "count": 2,
+      "evaded": 1,
+      "false_positives": 0,
+      "classification": "out-of-scope (known limitation)",
+      "status": "OUT_OF_SCOPE"
+    },
+    "quoting_styles": {
+      "count": 9,
+      "evaded": 0,
+      "false_positives": 0,
+      "status": "PASS"
+    },
+    "size_boundary": {
+      "count": 3,
+      "evaded": 2,
+      "false_positives": 0,
+      "classification": "1 test bug (near_max_size > 100KB), 1 genuine (at_min_length regex gap)",
+      "status": "MIXED"
+    },
+    "triple_encoding": {
+      "count": 2,
+      "evaded": 2,
+      "false_positives": 0,
+      "classification": "out-of-scope (MAX_DECODE_DEPTH=2 by design)",
+      "status": "OUT_OF_SCOPE"
+    },
+    "unicode_homoglyph_b64": {
+      "count": 2,
+      "evaded": 0,
+      "false_positives": 0,
+      "status": "FIXED"
+    }
+  }
+}
