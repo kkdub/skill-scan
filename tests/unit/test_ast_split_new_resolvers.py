@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import ast
 import pathlib
+import unittest
 
 from skill_scan._ast_split_detector import detect_split_evasion
 from skill_scan._ast_symbol_table import build_symbol_table
@@ -183,3 +184,19 @@ class TestCorpusRedTeam:
         findings = analyze_python(code, "split_reverse.py")
         exec002 = [f for f in findings if f.rule_id == "EXEC-002"]
         assert len(exec002) >= 1
+
+
+class TestLookupStrDictScopePriority(unittest.TestCase):
+    """Scoped entries should shadow unscoped in _lookup_str_dict."""
+
+    def test_scoped_shadows_unscoped(self) -> None:
+        """Function-local dict binding shadows module-level for same key."""
+        from skill_scan._ast_split_resolve import _lookup_str_dict
+
+        symbol_table = {
+            "parts[a]": "module_val",
+            "func.parts[a]": "local_val",
+        }
+        result = _lookup_str_dict("parts", symbol_table, "func")
+        assert result is not None
+        assert result["a"] == "local_val"

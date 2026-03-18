@@ -222,10 +222,10 @@ def _lookup_str_dict(var_name: str, symbol_table: dict[str, str], scope: str) ->
     result: dict[str, str] = {}
     for key, val in symbol_table.items():
         active_prefix = None
-        if key.startswith(prefix):
-            active_prefix = prefix
-        elif scoped_prefix and key.startswith(scoped_prefix):
+        if scoped_prefix and key.startswith(scoped_prefix):
             active_prefix = scoped_prefix
+        elif key.startswith(prefix):
+            active_prefix = prefix
         if active_prefix and key.endswith("]"):
             dict_key = key[len(active_prefix) : -1]
             result[dict_key] = val
