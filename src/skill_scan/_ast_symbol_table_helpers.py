@@ -73,25 +73,26 @@ def _collect_walrus(stmt: ast.stmt, table: dict[str, str | _Ref]) -> None:
 
 
 def _handle_assign(stmt: ast.Assign, table: dict[str, str | _Ref]) -> None:
-    """Handle ast.Assign: simple Name target or tuple/list unpacking."""
-    if len(stmt.targets) != 1:
-        return
-    target = stmt.targets[0]
+    """Handle ast.Assign: simple Name target or tuple/list unpacking.
 
-    if isinstance(target, ast.Tuple | ast.List):
-        _handle_unpack(target, stmt.value, table)
-        return
+    Iterates all targets so that multi-target assignments like
+    ``a = b = 'eval'`` track every target with the same resolved value.
+    """
+    for target in stmt.targets:
+        if isinstance(target, ast.Tuple | ast.List):
+            _handle_unpack(target, stmt.value, table)
+            continue
 
-    if isinstance(target, ast.Subscript):
-        _handle_subscript_assign(target, stmt.value, table)
-        return
+        if isinstance(target, ast.Subscript):
+            _handle_subscript_assign(target, stmt.value, table)
+            continue
 
-    if isinstance(target, ast.Name):
-        # Check if RHS is a dict literal -- track composite keys
-        if isinstance(stmt.value, ast.Dict):
-            _handle_dict_literal(target.id, stmt.value, table)
-        _track_name_assign(target.id, stmt.value, table)
-        return
+        if isinstance(target, ast.Name):
+            # Check if RHS is a dict literal -- track composite keys
+            if isinstance(stmt.value, ast.Dict):
+                _handle_dict_literal(target.id, stmt.value, table)
+            _track_name_assign(target.id, stmt.value, table)
+            continue
 
 
 def _handle_unpack(
@@ -224,21 +225,22 @@ def _collect_scope_declarations(
         nonlocal_names.update(n)
 
     for stmt in body:
-        if isinstance(stmt, ast.Global):
-            global_names.update(stmt.names)
-        elif isinstance(stmt, ast.Nonlocal):
-            nonlocal_names.update(stmt.names)
-        elif isinstance(stmt, ast.If | ast.For | ast.While | ast.AsyncFor):
-            _recurse(stmt.body)
-            _recurse(stmt.orelse)
-        elif isinstance(stmt, ast.With | ast.AsyncWith):
-            _recurse(stmt.body)
-        elif isinstance(stmt, ast.Try):
-            _recurse(stmt.body)
-            for handler in stmt.handlers:
-                _recurse(handler.body)
-            _recurse(stmt.orelse)
-            _recurse(stmt.finalbody)
+        match stmt:
+            case ast.Global():
+                global_names.update(stmt.names)
+            case ast.Nonlocal():
+                nonlocal_names.update(stmt.names)
+            case ast.If() | ast.For() | ast.While() | ast.AsyncFor():
+                _recurse(stmt.body)
+                _recurse(stmt.orelse)
+            case ast.With() | ast.AsyncWith():
+                _recurse(stmt.body)
+            case ast.Try():
+                _recurse(stmt.body)
+                for handler in stmt.handlers:
+                    _recurse(handler.body)
+                _recurse(stmt.orelse)
+                _recurse(stmt.finalbody)
     return global_names, nonlocal_names
 
 

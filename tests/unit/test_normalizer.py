@@ -127,6 +127,46 @@ class TestCanonicalizeWhitespace:
 class TestNormalizeText:
     """Tests for normalize_text — combined normalization pipeline."""
 
+    def test_nfkc_fullwidth_eval(self) -> None:
+        # Fullwidth Latin letters U+FF45 U+FF56 U+FF41 U+FF4C -> 'eval'
+        assert normalize_text("\uff45\uff56\uff41\uff4c") == "eval"
+
+    def test_nfkc_fullwidth_digits(self) -> None:
+        # Fullwidth digits U+FF10-U+FF19 -> ASCII 0-9
+        assert normalize_text("\uff11\uff12\uff13") == "123"
+
+    def test_nfkc_fullwidth_exec(self) -> None:
+        # Fullwidth 'exec' U+FF45 U+FF58 U+FF45 U+FF43
+        assert normalize_text("\uff45\uff58\uff45\uff43") == "exec"
+
+    def test_nfkc_fullwidth_import(self) -> None:
+        # Fullwidth '__import__' with mixed ASCII and fullwidth
+        assert normalize_text("__\uff49\uff4d\uff50\uff4f\uff52\uff54__") == "__import__"
+
+    def test_nfkc_cjk_compatibility_char(self) -> None:
+        # U+3231 (parenthesized ideograph stock) -> '(株)' via NFKC
+        assert normalize_text("\u3231") == "(\u682a)"
+
+    def test_nfkc_runs_before_zero_width_strip(self) -> None:
+        # NFKC first, then zero-width strip: fullwidth + zero-width combined
+        text = "\uff45\u200b\uff56\u200c\uff41\u200d\uff4c"
+        assert normalize_text(text) == "eval"
+
+    def test_nfkc_runs_before_whitespace_canonicalize(self) -> None:
+        # Fullwidth space U+3000 is NFKC-normalized to U+0020 (regular ASCII space)
+        # canonicalize_whitespace is a no-op on it after that
+        text = "\uff45\uff56\uff41\uff4c\u3000()"
+        assert normalize_text(text) == "eval ()"
+
+    def test_nfkc_combined_fullwidth_and_zero_width_and_exotic_space(self) -> None:
+        # All three evasion tactics combined
+        text = "\uff45\u200b\uff56\u200c\uff41\u200d\uff4c\u00a0()"
+        assert normalize_text(text) == "eval ()"
+
+    def test_nfkc_preserves_ascii_unchanged(self) -> None:
+        # NFKC should be a no-op on plain ASCII
+        assert normalize_text("eval(input)") == "eval(input)"
+
     def test_strips_zero_width_and_canonicalizes_whitespace(self) -> None:
         text = "e\u200bval\u00a0(input)"
         assert normalize_text(text) == "eval (input)"

@@ -123,7 +123,7 @@ repos:
         name: Check Spelling
         args:
           - --skip
-          - "*.lock,*.json,src/skill_scan/rules/data/*.toml"
+          - "*.lock,*.json,src/skill_scan/rules/data/*.toml,corpus/red-team/*"
           - --ignore-words-list
           - "ignora,ist,als,alle,deine,covert"
 

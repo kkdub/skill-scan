@@ -1,7 +1,7 @@
 {
   "total": 76,
-  "evaded": 60,
-  "detected": 16,
+  "evaded": 49,
+  "detected": 27,
   "false_positives": 0,
   "errors": 0,
   "by_category": {
@@ -21,15 +21,15 @@
     },
     "conditional": {
       "total": 7,
-      "evaded": 7,
-      "detected": 0,
+      "evaded": 0,
+      "detected": 7,
       "false_pos": 0,
       "errors": 0
     },
     "augmented": {
       "total": 6,
-      "evaded": 6,
-      "detected": 0,
+      "evaded": 4,
+      "detected": 2,
       "false_pos": 0,
       "errors": 0
     },
@@ -70,8 +70,8 @@
     },
     "chr_aliasing": {
       "total": 5,
-      "evaded": 5,
-      "detected": 0,
+      "evaded": 3,
+      "detected": 2,
       "false_pos": 0,
       "errors": 0
     },
@@ -112,60 +112,6 @@
     }
   },
   "evasions": [
-    {
-      "category": "conditional",
-      "name": "if_branch_assignment",
-      "code": "if True:\n    codes = [101, 118, 97, 108]\nx = ''.join(chr(c) for c in codes)",
-      "findings": []
-    },
-    {
-      "category": "conditional",
-      "name": "else_branch_assignment",
-      "code": "if False:\n    codes = [104, 101, 108, 108, 111]\nelse:\n    codes = [101, 118, 97, 108]\nx = ''.join(chr(c) for c in codes)",
-      "findings": []
-    },
-    {
-      "category": "conditional",
-      "name": "for_loop_assignment",
-      "code": "for _ in range(1):\n    codes = [101, 118, 97, 108]\nx = ''.join(chr(c) for c in codes)",
-      "findings": []
-    },
-    {
-      "category": "conditional",
-      "name": "try_except_assignment",
-      "code": "try:\n    codes = [101, 118, 97, 108]\nexcept Exception:\n    pass\nx = ''.join(chr(c) for c in codes)",
-      "findings": []
-    },
-    {
-      "category": "conditional",
-      "name": "while_assignment",
-      "code": "while True:\n    codes = [101, 118, 97, 108]\n    break\nx = ''.join(chr(c) for c in codes)",
-      "findings": []
-    },
-    {
-      "category": "conditional",
-      "name": "with_block_assignment",
-      "code": "import contextlib\nwith contextlib.nullcontext():\n    codes = [101, 118, 97, 108]\nx = ''.join(chr(c) for c in codes)",
-      "findings": []
-    },
-    {
-      "category": "conditional",
-      "name": "if_in_function",
-      "code": "def f():\n    if True:\n        codes = [101, 118, 97, 108]\n    x = ''.join(chr(c) for c in codes)",
-      "findings": []
-    },
-    {
-      "category": "augmented",
-      "name": "plus_equals_list",
-      "code": "codes = [101, 118]\ncodes += [97, 108]\nx = ''.join(chr(c) for c in codes)",
-      "findings": []
-    },
-    {
-      "category": "augmented",
-      "name": "extend_method",
-      "code": "codes = [101, 118]\ncodes.extend([97, 108])\nx = ''.join(chr(c) for c in codes)",
-      "findings": []
-    },
     {
       "category": "augmented",
       "name": "append_one_by_one",
@@ -342,12 +288,6 @@
     },
     {
       "category": "chr_aliasing",
-      "name": "builtins_chr",
-      "code": "import builtins\ncodes = [101, 118, 97, 108]\nx = ''.join(builtins.chr(c) for c in codes)",
-      "findings": []
-    },
-    {
-      "category": "chr_aliasing",
       "name": "chr_via_getattr",
       "code": "import builtins\ncodes = [101, 118, 97, 108]\nmy_chr = getattr(builtins, 'chr')\nx = ''.join(my_chr(c) for c in codes)",
       "findings": []
@@ -356,12 +296,6 @@
       "category": "chr_aliasing",
       "name": "lambda_wrapper",
       "code": "codes = [101, 118, 97, 108]\nto_char = lambda x: chr(x)\nx = ''.join(to_char(c) for c in codes)",
-      "findings": []
-    },
-    {
-      "category": "chr_aliasing",
-      "name": "from_builtins_import_chr",
-      "code": "from builtins import chr as my_chr\ncodes = [101, 118, 97, 108]\nx = ''.join(my_chr(c) for c in codes)",
       "findings": []
     },
     {

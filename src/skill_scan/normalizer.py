@@ -8,6 +8,7 @@ written for the plain form (eval).
 from __future__ import annotations
 
 import re
+import unicodedata
 
 # Zero-width and invisible characters that can break up words to evade detection.
 # U+200B  ZWSP (zero width space)
@@ -71,8 +72,10 @@ def canonicalize_whitespace(text: str) -> str:
 def normalize_text(text: str) -> str:
     """Apply full normalization pipeline to *text*.
 
-    Strips zero-width characters then canonicalizes whitespace. This is
-    the main entry point used by the matching engine.
+    First applies NFKC normalization to decompose fullwidth and
+    compatibility characters into their ASCII equivalents, then strips
+    zero-width characters and canonicalizes whitespace.  This is the
+    main entry point used by the matching engine.
 
     Newline characters are preserved so this function can safely be
     applied to multi-line content (e.g. for file-scope rule matching).
@@ -83,4 +86,5 @@ def normalize_text(text: str) -> str:
     Returns:
         Normalized string.
     """
+    text = unicodedata.normalize("NFKC", text)
     return canonicalize_whitespace(strip_zero_width(text))

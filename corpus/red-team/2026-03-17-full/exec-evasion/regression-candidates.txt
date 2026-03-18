@@ -1,0 +1,51 @@
+# Regression Test Candidates -- exec-evasion corpus
+# Generated: 2026-03-17
+# Each entry evaded ALL detectors (AST + regex) with zero findings.
+# Severity: must-fix = critical/high evasion; should-fix = medium/low
+
+# --- MUST-FIX (9 evasions, all critical -- globals()[name] dispatches to eval/exec/system) ---
+
+# 1. bytes_xor_evasion.py -- XOR arithmetic on byte literals
+#    Technique: XOR bytes with key, chr() per-element in generator
+#    Gap: generator expression with BinOp(BitXor) not resolved by chr resolver
+#    Impact: CRITICAL -- fully evades to eval
+
+# 2. classvar_assembly.py -- Class-level variable concatenation
+#    Technique: Config.func_name = prefix + suffix at class scope
+#    Gap: class-level BinOp concatenation of class variables not tracked
+#    Impact: CRITICAL -- Config.func_name resolves to 'eval' at runtime
+
+# 3. dict_pop_evasion.py -- dict.pop() extracts dangerous value
+#    Technique: dict literal tracked, but .pop() method not resolved
+#    Gap: dict method calls (.pop, .get, .setdefault) not tracked
+#    Impact: CRITICAL -- dict contains literal 'eval', pop retrieves it
+
+# 4. format_map_evasion.py -- str.format_map(dict) assembly
+#    Technique: template.format_map(parts) where parts has 'ev' + 'al'
+#    Gap: format_map not in _resolve_format_call (only .format() tracked)
+#    Impact: CRITICAL -- format_map produces 'eval' from tracked dict
+
+# 5. loop_assembly.py -- for-loop string concatenation
+#    Technique: for c in ['e','v','a','l']: name += c
+#    Gap: loop bodies with augmented assignment not unrolled
+#    Impact: CRITICAL -- loop produces 'eval' from char list
+
+# 6. nested_comprehension.py -- nested list comprehension with chr()
+#    Technique: ''.join([chr(c) for row in [[101,118],[97,108]] for c in row])
+#    Gap: nested comprehension (double 'for' clause) not resolved by listcomp handler
+#    Impact: CRITICAL -- produces 'eval' from nested int lists
+
+# 7. star_import_evasion.py -- from os import *; system('...')
+#    Technique: star import brings system into namespace without alias tracking
+#    Gap: build_alias_map only tracks explicit imports, not star imports
+#    Impact: CRITICAL -- system() call invisible after star import
+
+# 8. string_method_evasion.py -- 'EVAL'.lower()
+#    Technique: string method transform (lower/upper/swapcase/title)
+#    Gap: only .replace() tracked in split resolver, not lower/upper/etc.
+#    Impact: CRITICAL -- trivial evasion producing 'eval'
+
+# 9. try_except_evasion.py -- try/except import aliasing
+#    Technique: from subprocess import call as harmless_func in try block
+#    Gap: alias_map only tracks module-level imports, not imports inside try blocks
+#    Impact: CRITICAL -- subprocess.call aliased to innocuous name

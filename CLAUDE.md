@@ -50,7 +50,7 @@ src/skill_scan/           # Production source code
   _ast_symbol_table_return_helpers.py # Return-value extraction
   _ast_split_detector.py  # Split-evasion detector (detect_split_evasion)
   _ast_split_helpers.py   # Format/%-format resolution helpers
-  _ast_split_resolve.py   # Expression resolution helpers
+  _ast_split_resolve.py   # Expression resolution helpers (AT LINE LIMIT: 300/300)
   _ast_split_bytes.py     # Bytes-constructor resolution
   _ast_split_chr.py       # chr/ord/int resolution
   _ast_split_reduce.py    # reduce/operator concat resolution
@@ -65,7 +65,10 @@ src/skill_scan/           # Production source code
   suppression.py          # Inline noqa suppression
   rules/data/
     obfuscation.toml      # OBFS-002..005 regex-based rules
-tests/                    # Test suite (mirrors src/ structure)
+tests/
+  unit/
+    test_ast_split_case_methods.py  # Case-method resolver tests (extracted from test_ast_split_detector.py)
+    ...                             # Other tests mirror src/ structure
 scripts/                  # Quality & analysis scripts
 .agent/                   # Plans, standards, workflow
 ```
@@ -83,8 +86,11 @@ Key patterns and invariants. For detailed module-level docs, see `.agent/ARCHITE
 - `_NAME_RULE` / `_DECORATOR_RULE` — lookup tables mapping dangerous names to `(rule_id, severity, prefix)`; use when one detector emits different rule IDs per name
 - `_DANGEROUS_KWARGS` — table-driven config for kwargs detector; extend by adding entries, no code changes needed
 - `_collect_int_list_assigns(tree)` in `_ast_split_join_helpers.py` — parallel pre-pass collecting `Name = [int, ...]` assignments AND tracking `+=`/`.extend()` mutations; built in `analyze_python()` and threaded to `detect_split_evasion` via `int_list_table` kwarg; mutation helpers live in `_ast_split_int_list_helpers.py`
+- `_CASE_METHODS` frozenset + `_is_case_method` / `_resolve_case_method_chain` in `_ast_split_resolve.py` — resolves `.lower()`, `.upper()`, `.title()`, `.swapcase()`, `.capitalize()`, `.casefold()` chains; registered in `_RESOLVERS` before `_is_call` (follows `_is_replace_call` / `_resolve_replace_chain` pattern)
 
 **Invariants**:
+- `normalize_text()` in `normalizer.py` applies NFKC normalization (`unicodedata.normalize('NFKC', text)`) as its FIRST step — this decomposes fullwidth Unicode characters (U+FF41-FF5A) and other compatibility characters before zero-width stripping and whitespace canonicalization
+- `_handle_assign` in `_ast_symbol_table_helpers.py` iterates ALL targets in `stmt.targets` — multi-target assignments (`a = b = 'eval'`) track every target name with the same resolved value
 - Bare `# noqa` does NOT suppress — security scanner requires explicit rule IDs (`# noqa: RULE-ID`)
 - `AST-PARSE` and `AST-DEPTH` findings are exempt from `active_ids` filtering — always propagate
 - `MAX_AST_RESOLVE_DEPTH = 50` — recursive helpers return `None` at depth > 50
@@ -97,6 +103,7 @@ Key patterns and invariants. For detailed module-level docs, see `.agent/ARCHITE
 
 **Known debt**:
 - PEP 448 spread dicts (`{**base, ...}`) in kwargs are conservatively treated as unresolvable (no tracking planned)
+- `_ast_split_resolve.py` is at the 300-line limit — any future resolver additions require splitting the file first
 
 ## Tips
 

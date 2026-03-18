@@ -132,13 +132,23 @@ class TestHandleAssign:
         _handle_assign(stmt, table)
         assert table == {"x": "val"}
 
-    def test_multiple_targets_skipped(self) -> None:
+    def test_multiple_targets_tracked(self) -> None:
+        """Multi-target assignment (a = b = ...) tracks all targets."""
         tree = _PARSE("a = b = 'val'")
         table: dict[str, str | _Ref] = {}
         stmt = tree.body[0]
         assert isinstance(stmt, ast.Assign)
         _handle_assign(stmt, table)
-        assert table == {}
+        assert table == {"a": "val", "b": "val"}
+
+    def test_three_targets_tracked(self) -> None:
+        """Three-way assignment (a = b = c = ...) tracks all targets."""
+        tree = _PARSE("a = b = c = 'os'")
+        table: dict[str, str | _Ref] = {}
+        stmt = tree.body[0]
+        assert isinstance(stmt, ast.Assign)
+        _handle_assign(stmt, table)
+        assert table == {"a": "os", "b": "os", "c": "os"}
 
     def test_tuple_unpack(self) -> None:
         tree = _PARSE("a, b = 'x', 'y'")
