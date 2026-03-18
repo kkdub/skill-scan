@@ -1,0 +1,129 @@
+{
+  "kwargs_class_dict.py": {
+    "detected": false,
+    "finding_count": 0,
+    "findings": []
+  },
+  "kwargs_conditional.py": {
+    "detected": false,
+    "finding_count": 0,
+    "findings": []
+  },
+  "kwargs_dynamic_key.py": {
+    "detected": false,
+    "finding_count": 0,
+    "findings": []
+  },
+  "kwargs_method_chain.py": {
+    "detected": false,
+    "finding_count": 0,
+    "findings": []
+  },
+  "kwargs_nested_func.py": {
+    "detected": false,
+    "finding_count": 0,
+    "findings": []
+  },
+  "kwargs_spread.py": {
+    "detected": false,
+    "finding_count": 0,
+    "findings": []
+  },
+  "split_augmented_str.py": {
+    "detected": true,
+    "finding_count": 1,
+    "findings": [
+      {
+        "rule_id": "EXEC-002",
+        "severity": "critical",
+        "matched_text": "split evasion: dynamic dispatch via introspection subscript to 'eval'",
+        "line": 4
+      }
+    ]
+  },
+  "split_bytes_xor.py": {
+    "detected": false,
+    "finding_count": 0,
+    "findings": []
+  },
+  "split_class_level.py": {
+    "detected": false,
+    "finding_count": 0,
+    "findings": []
+  },
+  "split_format_keywords.py": {
+    "detected": false,
+    "finding_count": 0,
+    "findings": []
+  },
+  "split_fstring_method.py": {
+    "detected": false,
+    "finding_count": 0,
+    "findings": []
+  },
+  "split_generator_complex.py": {
+    "detected": false,
+    "finding_count": 0,
+    "findings": []
+  },
+  "split_intlist_branch.py": {
+    "detected": false,
+    "finding_count": 0,
+    "findings": []
+  },
+  "split_intlist_concat.py": {
+    "detected": false,
+    "finding_count": 0,
+    "findings": []
+  },
+  "split_intlist_extend_var.py": {
+    "detected": false,
+    "finding_count": 0,
+    "findings": []
+  },
+  "split_join_set.py": {
+    "detected": false,
+    "finding_count": 0,
+    "findings": []
+  },
+  "split_join_star_unpack.py": {
+    "detected": false,
+    "finding_count": 0,
+    "findings": []
+  },
+  "split_list_index.py": {
+    "detected": false,
+    "finding_count": 0,
+    "findings": []
+  },
+  "split_map_lambda.py": {
+    "detected": false,
+    "finding_count": 0,
+    "findings": []
+  },
+  "split_multi_assign.py": {
+    "detected": false,
+    "finding_count": 0,
+    "findings": []
+  },
+  "split_nested_dict.py": {
+    "detected": false,
+    "finding_count": 0,
+    "findings": []
+  },
+  "split_reduce_custom.py": {
+    "detected": false,
+    "finding_count": 0,
+    "findings": []
+  },
+  "split_reverse.py": {
+    "detected": false,
+    "finding_count": 0,
+    "findings": []
+  },
+  "split_slice_variable.py": {
+    "detected": false,
+    "finding_count": 0,
+    "findings": []
+  }
+}

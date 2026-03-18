@@ -1,0 +1,153 @@
+{
+  "run_date": "2026-03-17",
+  "corpus": "exec-evasion",
+  "total_files": 20,
+  "detected": 11,
+  "evaded": 9,
+  "evasion_rate": 45.0,
+  "per_file": {
+    "bytes_xor_evasion.py": {
+      "status": "evaded",
+      "findings": []
+    },
+    "class_method_evasion.py": {
+      "status": "detected",
+      "findings": [
+        {
+          "rule_id": "EXEC-006",
+          "matched_text": "getattr(builtins, '"
+        },
+        {
+          "rule_id": "EXEC-002",
+          "matched_text": "string evasion building 'eval'"
+        }
+      ]
+    },
+    "classvar_assembly.py": {
+      "status": "evaded",
+      "findings": []
+    },
+    "conditional_assembly.py": {
+      "status": "detected",
+      "findings": [
+        {
+          "rule_id": "EXEC-002",
+          "matched_text": "split variable evasion building 'exec'"
+        }
+      ]
+    },
+    "decorator_arg_evasion.py": {
+      "status": "detected",
+      "findings": [
+        {
+          "rule_id": "EXEC-002",
+          "matched_text": "string evasion building 'eval'"
+        }
+      ]
+    },
+    "dict_pop_evasion.py": {
+      "status": "evaded",
+      "findings": []
+    },
+    "exec_via_type.py": {
+      "status": "detected",
+      "findings": [
+        {
+          "rule_id": "EXEC-002",
+          "matched_text": "exec("
+        }
+      ]
+    },
+    "format_map_evasion.py": {
+      "status": "evaded",
+      "findings": []
+    },
+    "getattr_chain.py": {
+      "status": "detected",
+      "findings": [
+        {
+          "rule_id": "EXEC-006",
+          "matched_text": "getattr(builtins, f"
+        },
+        {
+          "rule_id": "EXEC-002",
+          "matched_text": "string evasion building 'eval'"
+        }
+      ]
+    },
+    "import_alias_evasion.py": {
+      "status": "detected",
+      "findings": [
+        {
+          "rule_id": "EXEC-006",
+          "matched_text": "importlib.import_module("
+        }
+      ]
+    },
+    "indirect_eval.py": {
+      "status": "detected",
+      "findings": [
+        {
+          "rule_id": "EXEC-002",
+          "matched_text": "split variable evasion building 'eval'"
+        }
+      ]
+    },
+    "lambda_indirect.py": {
+      "status": "detected",
+      "findings": [
+        {
+          "rule_id": "EXEC-002",
+          "matched_text": "split evasion: dynamic dispatch via introspection subscript to 'eval'"
+        }
+      ]
+    },
+    "loop_assembly.py": {
+      "status": "evaded",
+      "findings": []
+    },
+    "nested_comprehension.py": {
+      "status": "evaded",
+      "findings": []
+    },
+    "property_evasion.py": {
+      "status": "detected",
+      "findings": [
+        {
+          "rule_id": "EXEC-002",
+          "matched_text": "string evasion building 'eval'"
+        }
+      ]
+    },
+    "star_import_evasion.py": {
+      "status": "evaded",
+      "findings": []
+    },
+    "string_method_evasion.py": {
+      "status": "evaded",
+      "findings": []
+    },
+    "try_except_evasion.py": {
+      "status": "evaded",
+      "findings": []
+    },
+    "tuple_unpack_evasion.py": {
+      "status": "detected",
+      "findings": [
+        {
+          "rule_id": "EXEC-002",
+          "matched_text": "split variable evasion building 'eval'"
+        }
+      ]
+    },
+    "walrus_assembly.py": {
+      "status": "detected",
+      "findings": [
+        {
+          "rule_id": "EXEC-002",
+          "matched_text": "split variable evasion building 'eval'"
+        }
+      ]
+    }
+  }
+}

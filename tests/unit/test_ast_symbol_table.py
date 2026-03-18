@@ -59,11 +59,15 @@ class TestSimpleAssignments:
         result = build_symbol_table(_PARSE("x = 'hel' + 'lo'"))
         assert result == {"x": "hello"}
 
-    def test_multiple_targets_skipped(self) -> None:
-        """Multiple assignment targets (a = b = ...) are not tracked."""
+    def test_multiple_targets_tracked(self) -> None:
+        """Multiple assignment targets (a = b = ...) track all targets."""
         result = build_symbol_table(_PARSE("a = b = 'val'"))
-        # a = b = 'val' produces Assign with two targets -- skipped
-        assert result == {}
+        assert result == {"a": "val", "b": "val"}
+
+    def test_three_targets_tracked(self) -> None:
+        """Three-way assignment (a = b = c = ...) tracks all targets."""
+        result = build_symbol_table(_PARSE("a = b = c = 'os'"))
+        assert result == {"a": "os", "b": "os", "c": "os"}
 
     def test_augmented_assign_concatenates(self) -> None:
         """x += 'suffix' appends to tracked string value."""

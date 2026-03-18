@@ -43,7 +43,7 @@ Detailed module-level documentation for skill-scan internals. For key patterns a
 
 ## Split-Evasion Detector
 
-- `detect_split_evasion()` reconstructs strings via: `BinOp(Add)`, f-string interpolation, `"".join(...)`, `'template'.format(...)`, `'%s%s' % (a, b)`, `.replace()` chains, `functools.reduce()` concat, dict/list subscript lookups, `ast.Attribute` (`self.attr`), `ast.Call` (return values), `reversed()` join, `chr()`/`ord()` chains, bytes-constructor patterns, comprehension `chr()` mapping (including tracked int-list variables via `int_list_table`), and dynamic dispatch via introspection subscripts
+- `detect_split_evasion()` reconstructs strings via: `BinOp(Add)`, f-string interpolation, `"".join(...)`, `'template'.format(...)`, `'%s%s' % (a, b)`, `.replace()` chains, case-method chains (`.lower()`, `.upper()`, `.title()`, `.swapcase()`, `.capitalize()`, `.casefold()`), `functools.reduce()` concat, dict/list subscript lookups, `ast.Attribute` (`self.attr`), `ast.Call` (return values), `reversed()` join, `chr()`/`ord()` chains, bytes-constructor patterns, comprehension `chr()` mapping (including tracked int-list variables via `int_list_table`), and dynamic dispatch via introspection subscripts
 - Emits EXEC-002 for dangerous names (eval, exec, system, popen), EXEC-006 for dynamic import names (`__import__`, `getattr`); also bridges to decoder for split encoded payloads
 - `_RESOLVERS` — tuple of `(predicate, resolver)` pairs; `_try_resolve_split()` iterates and returns first non-`None` result; all resolvers share signature `(node, symbol_table, scope, *, alias_map=None) -> str | None`; add new resolvers here
 - `_NAME_RULE` maps dangerous names to `(rule_id, severity, description_prefix)`
@@ -51,11 +51,12 @@ Detailed module-level documentation for skill-scan internals. For key patterns a
 
 ## Split-Evasion Sub-modules
 
-- `_ast_split_resolve.py` — expression resolution helpers (`resolve_binop_chain`, `resolve_operand`, `resolve_fstring`, `resolve_expr`, `resolve_call_return`, `resolve_call`); re-exports from `_ast_split_bytes`, `_ast_split_reduce`, `_ast_split_helpers`
+- `_ast_split_resolve.py` — expression resolution helpers (`resolve_binop_chain`, `resolve_operand`, `resolve_fstring`, `resolve_expr`, `resolve_call_return`, `resolve_call`); re-exports from `_ast_split_bytes`, `_ast_split_reduce`, `_ast_split_helpers`; **at 300-line limit** — future additions require splitting this file
 - `resolve_expr()` — resolves `ast.Name`, `ast.Attribute`, `ast.Subscript`, `ast.Call`; Attribute resolution gated to `self`/`cls`.attr and `ClassName.attr` only
 - `resolve_call_return()` — resolves calls via parentheses-suffix composite key; handles `func()` and `self.method()` / `ClassName.method()`
 - `resolve_call()` — registry-compatible wrapper chaining join, format, bytes-constructor, reduce, and call-return resolvers
 - `_resolve_replace_chain()` — walks `.replace()` chains up to 20 levels deep
+- `_CASE_METHODS` frozenset + `_is_case_method()` + `_resolve_case_method_chain()` — resolves chained `.lower()`, `.upper()`, `.title()`, `.swapcase()`, `.capitalize()`, `.casefold()` calls (no args) up to 20 levels deep; resolves base via `_resolve_base_string` (constant or symbol-table lookup) then falls back to `resolve_expr`; registered in `_RESOLVERS` before `_is_call`; follows the `_replace` pattern
 - `_ast_split_chr.py` — resolves `chr(N)`, `chr(ord('x'))`, `chr(ord('x') + N)`; `_MAX_INT_DEPTH = 50`
 - `_ast_split_bytes.py` — resolves `bytearray(b'...').decode()`, `str(b'...', 'utf-8')`, `codecs.decode(b'...', 'utf-8')`; gates on literal bytes arguments only
 - `_ast_split_reduce.py` — resolves `functools.reduce(lambda a,b: a+b, [...])` and `functools.reduce(operator.add/concat, [...])`

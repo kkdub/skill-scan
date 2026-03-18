@@ -1,0 +1,45 @@
+{
+  "run_date": "2026-03-17",
+  "scope": "full-scanner",
+  "target": "src/skill_scan/ (all detection layers)",
+  "total_inputs": 80,
+  "total_detected": 37,
+  "total_evaded": 43,
+  "overall_evasion_rate_percent": 53.8,
+  "categories": {
+    "exec-evasion": {
+      "description": "Code execution evasion (EXEC-* rules + AST detectors)",
+      "inputs": 20,
+      "detected": 11,
+      "evaded": 9,
+      "evasion_rate_percent": 45.0
+    },
+    "pi-evasion": {
+      "description": "Prompt injection evasion (PI-* rules)",
+      "inputs": 16,
+      "detected": 12,
+      "evaded": 4,
+      "evasion_rate_percent": 25.0
+    },
+    "exfil-obfs-evasion": {
+      "description": "Data exfiltration + obfuscation + decoder bypass (EXFIL-*, OBFS-*, decoder)",
+      "inputs": 20,
+      "detected": 13,
+      "evaded": 7,
+      "evasion_rate_percent": 35.0
+    },
+    "split-kwargs-evasion": {
+      "description": "Split-evasion resolver + kwargs detector edge cases",
+      "inputs": 24,
+      "detected": 1,
+      "evaded": 23,
+      "evasion_rate_percent": 95.8
+    }
+  },
+  "severity_classification": {
+    "critical_gt50": ["split-kwargs-evasion"],
+    "high_25_50": ["exec-evasion", "exfil-obfs-evasion"],
+    "medium_10_25": ["pi-evasion"],
+    "low_lt10": []
+  }
+}

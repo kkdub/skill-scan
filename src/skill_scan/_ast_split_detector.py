@@ -13,6 +13,8 @@ from skill_scan._ast_detectors import _make_finding
 from skill_scan._ast_split_helpers import _scoped_lookup
 from skill_scan._ast_split_match import _NAME_RULE, _check_dangerous
 from skill_scan._ast_split_resolve import (
+    _is_case_method,
+    _resolve_case_method_chain,
     _resolve_replace_chain,
     resolve_binop_chain,
     resolve_call,
@@ -48,11 +50,16 @@ def _is_replace(n: ast.AST) -> bool:
     return _is_call(n) and isinstance(func, ast.Attribute) and func.attr == "replace"
 
 
+def _is_case(n: ast.AST) -> bool:
+    return isinstance(n, ast.Call) and _is_case_method(n)
+
+
 _RESOLVERS: tuple[tuple[_Predicate, _Resolver], ...] = (
     (_is_binop_add, resolve_binop_chain),
     (_is_binop_mod, resolve_percent_format),
     (_is_fstr, resolve_fstring),
     (_is_replace, _resolve_replace_chain),
+    (_is_case, _resolve_case_method_chain),
     (_is_call, resolve_call),
 )
 
