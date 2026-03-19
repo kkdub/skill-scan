@@ -50,9 +50,41 @@ def _record_import(node: ast.Import, alias_map: dict[str, str]) -> None:
         alias_map[alias.asname or alias.name] = alias.name
 
 
+_STAR_IMPORT_EXPANSIONS: dict[str, list[str]] = {
+    "os": [
+        "system",
+        "popen",
+        "execl",
+        "execle",
+        "execlp",
+        "execv",
+        "execve",
+        "execvp",
+        "execvpe",
+        "spawnl",
+        "spawnle",
+        "spawnlp",
+        "spawnlpe",
+    ],
+    "subprocess": ["run", "call", "check_output", "check_call", "Popen"],
+    "shutil": ["rmtree", "move", "copy", "copy2"],
+    "socket": ["getaddrinfo", "gethostbyname", "create_connection"],
+}
+
+
 def _record_import_from(node: ast.ImportFrom, alias_map: dict[str, str]) -> None:
-    """Record aliases from a ``from ... import`` statement."""
+    """Record aliases from a ``from ... import`` statement.
+
+    Handles ``from X import *`` for known-dangerous modules by expanding
+    to their dangerous exports (e.g. system -> os.system).
+    """
     for alias in node.names:
+        if alias.name == "*":
+            expansions = _STAR_IMPORT_EXPANSIONS.get(node.module or "")
+            if expansions:
+                for name in expansions:
+                    alias_map[name] = f"{node.module}.{name}"
+            continue
         alias_map[alias.asname or alias.name] = f"{node.module}.{alias.name}"
 
 

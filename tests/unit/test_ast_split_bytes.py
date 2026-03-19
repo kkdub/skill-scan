@@ -1,7 +1,7 @@
 """Tests for bytes/bytearray/str/codecs constructor detection.
 
 Covers:
-- resolve_bytes_constructor(): bytearray(b'...').decode(), str(b'...',enc), codecs.decode(b'...',enc)
+- resolve_bytes_constructor(): bytearray(b'...').decode(), str(b'...',enc), codecs.decode(b'...', enc)
 - R005: all three bytes-constructor patterns detected via full pipeline
 - R-IMP004: non-literal bytes arguments return None without error
 - R-EFF004: each variant exercised independently

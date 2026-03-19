@@ -2,6 +2,17 @@
 
 Resolves ``''.join(...)`` patterns (list/generator/map/reversed) and tracked
 int-list variables used as comprehension iterables via ``_collect_int_list_assigns``.
+
+Public surface
+--------------
+``_collect_int_list_assigns(tree)``
+    Pre-pass that collects all ``Name = [int, ...]`` assignments and mutations
+    (``+=``, ``.extend()``) from all scopes.  Returns ``dict[str, list[int]]``
+    keyed by ``scope.name`` (module-level uses empty-string prefix).
+
+``_resolve_join_call(node, symbol_table, scope, ...)``
+    Top-level resolver: returns the decoded string for ``'sep'.join(arg)`` or
+    None if the argument cannot be statically resolved.
 """
 
 from __future__ import annotations
@@ -67,6 +78,8 @@ def _resolve_comprehension_join(
     int_list_scope: str = "",
 ) -> str | None:
     """Resolve generator or list comprehension inside join to a string."""
+    if len(node.generators) == 2:
+        return _resolve_nested_comprehension_join(node, sep, alias_map=alias_map)
     if len(node.generators) != 1:
         return None
     comp = node.generators[0]
@@ -89,6 +102,43 @@ def _resolve_comprehension_join(
             int_list_scope=int_list_scope,
         )
     return None
+
+
+def _flatten_list_of_lists(outer_iter: ast.expr) -> list[ast.expr] | None:
+    """Flatten a ``[[int, ...], [int, ...]]`` literal to a 1D element list, or None."""
+    if not isinstance(outer_iter, ast.List | ast.Tuple):
+        return None
+    flat: list[ast.expr] = []
+    for elt in outer_iter.elts:
+        if not isinstance(elt, ast.List):
+            return None
+        flat.extend(elt.elts)
+    return flat
+
+
+def _resolve_nested_comprehension_join(
+    node: ast.GeneratorExp | ast.ListComp,
+    sep: str,
+    *,
+    alias_map: dict[str, str] | None = None,
+) -> str | None:
+    """Resolve nested comprehension: ``chr(c) for row in [[ints], ...] for c in row``.
+
+    Handles exactly 2 generators where the outer iterates a List/Tuple of Lists
+    (2D int array), the inner target iterates the outer variable, and the element
+    is chr(inner_target).
+    """
+    outer, inner = node.generators[0], node.generators[1]
+    if outer.ifs or inner.ifs:
+        return None
+    if not isinstance(outer.target, ast.Name) or not isinstance(inner.target, ast.Name):
+        return None
+    if not isinstance(inner.iter, ast.Name) or inner.iter.id != outer.target.id:
+        return None
+    flat = _flatten_list_of_lists(outer.iter)
+    if flat is None:
+        return None
+    return _resolve_comprehension_chr(node.elt, inner.target.id, flat, sep, alias_map=alias_map)
 
 
 def _resolve_direct_iter(

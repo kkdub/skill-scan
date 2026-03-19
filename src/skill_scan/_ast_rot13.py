@@ -4,6 +4,7 @@ Pure functions that detect ROT13 usage via:
   - codecs.encode/decode with 'rot_13' or 'rot13' encoding
   - codecs.getencoder/getdecoder/lookup/iterencode with ROT13
   - str.maketrans() with a ROT13 character pair
+  - Custom function definitions with chr/ord/%26 rotation arithmetic
 
 All findings use rule_id='OBFS-001', severity=HIGH, category='obfuscation'.
 """
@@ -163,3 +164,135 @@ def _make_rot13_finding(file_path: str, line: int, call_name: str, encoding: str
         description=f"ROT13 obfuscation -- {call_name}() with '{encoding}' encoding detected via AST",
         recommendation=_RECOMMENDATION,
     )
+
+
+# ---------------------------------------------------------------------------
+# Custom ROT13 function detection -- chr/ord arithmetic with % 26
+# ---------------------------------------------------------------------------
+
+
+def _has_rot13_arithmetic(node: ast.AST) -> bool:
+    """Check whether an AST subtree contains chr(... % 26 ...) with ord().
+
+    Returns True when the subtree has BOTH:
+      - A call to chr() whose argument tree contains a BinOp with Mod and
+        the constant 26
+      - A call to ord() anywhere in the same subtree (typically inside chr())
+    """
+    has_chr_mod26 = False
+    has_ord = False
+    for child in ast.walk(node):
+        if isinstance(child, ast.Call) and isinstance(child.func, ast.Name):
+            if child.func.id == "ord":
+                has_ord = True
+            if child.func.id == "chr" and _arg_contains_mod26(child):
+                has_chr_mod26 = True
+        if has_chr_mod26 and has_ord:
+            return True
+    return False
+
+
+def _arg_contains_mod26(call_node: ast.Call) -> bool:
+    """Check whether any argument of a Call contains ``... % 26``."""
+    for arg in call_node.args:
+        for child in ast.walk(arg):
+            if (
+                isinstance(child, ast.BinOp)
+                and isinstance(child.op, ast.Mod)
+                and isinstance(child.right, ast.Constant)
+                and child.right.value == 26
+            ):
+                return True
+    return False
+
+
+def _detect_custom_rot13(func_node: ast.FunctionDef | ast.AsyncFunctionDef, file_path: str) -> list[Finding]:
+    """Detect a function with manual ROT13 arithmetic (chr/ord/%26).
+
+    Requires BOTH a lowercase and uppercase If-branch with rotation arithmetic.
+    """
+    lower_found = False
+    upper_found = False
+    for node in ast.walk(func_node):
+        if not isinstance(node, ast.If):
+            continue
+        # Check the if-body and all elif/else bodies for ROT13 arithmetic
+        for body_list in (node.body, node.orelse):
+            for stmt in body_list:
+                if not _has_rot13_arithmetic(stmt):
+                    continue
+                # Determine which case branch this is by inspecting the test
+                case = _branch_case(node, body_list is node.orelse)
+                if case == "lower":
+                    lower_found = True
+                elif case == "upper":
+                    upper_found = True
+    if lower_found and upper_found:
+        return [
+            Finding(
+                rule_id=_RULE_ID,
+                severity=_SEVERITY,
+                category=_CATEGORY,
+                file=file_path,
+                line=func_node.lineno,
+                matched_text=f"def {func_node.name}(...)",
+                description=("ROT13 obfuscation -- custom rotation function with chr/ord/%26 arithmetic"),
+                recommendation=_RECOMMENDATION,
+            )
+        ]
+    return []
+
+
+def _branch_case(if_node: ast.If, is_orelse: bool) -> str | None:
+    """Determine whether an If node's test checks lowercase or uppercase range.
+
+    Looks for patterns like ``'a' <= c <= 'z'`` or ``'A' <= c <= 'Z'`` in the
+    Compare node.  When *is_orelse* is True the arithmetic was found in the
+    else branch — check whether that else branch is itself an If (elif) and
+    inspect its test instead.
+    """
+    test = if_node.test
+    if is_orelse and if_node.orelse and isinstance(if_node.orelse[0], ast.If):
+        test = if_node.orelse[0].test
+    return _compare_case(test)
+
+
+def _compare_case(node: ast.expr) -> str | None:
+    """Extract 'lower' or 'upper' from a Compare node like 'a' <= c <= 'z'."""
+    if isinstance(node, ast.Compare):
+        return _case_from_comparators(node)
+    # Handle BoolOp (e.g., ``c >= 'a' and c <= 'z'``)
+    if isinstance(node, ast.BoolOp) and isinstance(node.op, ast.And):
+        return _first_case_from_boolop(node)
+    return None
+
+
+def _case_from_comparators(node: ast.Compare) -> str | None:
+    """Return 'lower'/'upper' by scanning constant nodes in a Compare."""
+    candidates: list[ast.expr] = list(node.comparators)
+    if isinstance(node.left, ast.Constant):
+        candidates.insert(0, node.left)
+    for comp in candidates:
+        result = _case_from_constant(comp)
+        if result is not None:
+            return result
+    return None
+
+
+def _case_from_constant(node: ast.expr) -> str | None:
+    """Return 'lower'/'upper' if *node* is a string sentinel for a letter range."""
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        if node.value in ("a", "z"):
+            return "lower"
+        if node.value in ("A", "Z"):
+            return "upper"
+    return None
+
+
+def _first_case_from_boolop(node: ast.BoolOp) -> str | None:
+    """Return the first non-None case result from BoolOp child values."""
+    for val in node.values:
+        result = _compare_case(val)
+        if result is not None:
+            return result
+    return None

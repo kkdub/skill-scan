@@ -1,10 +1,18 @@
 # Obfuscation Detection Rules
 # Category: obfuscation
-# Rules OBFS-002 through OBFS-005
+# Rules OBFS-001 through OBFS-005
 #
 # Known limitation (R-ADV002): Multi-line string concatenation cannot be
 # detected by line-based regex scanning. Payloads split across lines will
 # not be caught by these rules.
+
+[rules.OBFS-001]
+severity = "high"
+category = "obfuscation"
+description = "ROT13 obfuscation -- codecs.encode/decode with rot_13, str.maketrans rotation, or custom chr/ord/%26 rotation function"
+recommendation = "Remove ROT13 obfuscation layer; inspect the decoded content for malicious payloads"
+# Detection handled by AST detectors in _ast_rot13.py (no regex patterns needed)
+patterns = []
 
 [rules.OBFS-002]
 severity = "medium"

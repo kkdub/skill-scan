@@ -27,9 +27,14 @@ class TestRuleFileValidation:
         rules = load_rules(toml_file)
         assert len(rules) > 0, f"{toml_file.name} produced zero rules"
 
+    # AST-only rules have detection in Python code, not regex patterns
+    _AST_ONLY_RULES = frozenset({"OBFS-001", "EXFIL-008"})
+
     def test_rules_have_patterns(self, toml_file: Path) -> None:
-        """Every rule must have at least one detection pattern."""
+        """Every rule must have at least one detection pattern (AST-only rules exempt)."""
         for rule in load_rules(toml_file):
+            if rule.rule_id in self._AST_ONLY_RULES:
+                continue
             assert len(rule.patterns) > 0, f"{rule.rule_id} has no patterns"
 
     def test_rules_have_descriptions(self, toml_file: Path) -> None:
@@ -76,16 +81,15 @@ class TestRulesCatalog:
         actual = rules_md.read_text(encoding="utf-8")
         assert actual == expected, "RULES.md is stale. Run `make rules-catalog` to regenerate."
 
-    def test_obfs001_in_procedural_rules(self) -> None:
-        """OBFS-001 entry exists in _PROCEDURAL_RULES with correct metadata."""
-        rules = self._catalog_mod._PROCEDURAL_RULES
+    def test_obfs001_in_toml_rules(self) -> None:
+        """OBFS-001 entry exists in obfuscation.toml with correct metadata."""
+        obfs_toml = _DATA_DIR / "obfuscation.toml"
+        rules = load_rules(obfs_toml)
         obfs = [r for r in rules if r.rule_id == "OBFS-001"]
-        assert len(obfs) == 1, "OBFS-001 must appear exactly once in _PROCEDURAL_RULES"
+        assert len(obfs) == 1, "OBFS-001 must appear exactly once in obfuscation.toml"
         entry = obfs[0]
-        assert entry.severity == "high"
+        assert entry.severity.value == "high"
         assert entry.category == "obfuscation"
-        assert entry.confidence == "stable"
-        assert entry.source == "procedural"
 
     def test_obfs001_in_obfuscation_section(self) -> None:
         """Generated catalog places OBFS-001 in the Obfuscation section."""
@@ -96,7 +100,7 @@ class TestRulesCatalog:
     def test_no_missing_ast_procedural_rules(self) -> None:
         """All AST-only rule IDs are covered by _PROCEDURAL_RULES or TOML rules."""
         # AST detectors emit these rule IDs
-        ast_rule_ids = {"EXEC-002", "EXEC-006", "EXEC-007", "OBFS-001"}
+        ast_rule_ids = {"EXEC-002", "EXEC-006", "EXEC-007", "OBFS-001", "EXFIL-008"}
         # Collect all rule IDs from TOML + procedural
         groups = self._catalog_mod.collect_rules()
         all_catalog_ids = {r.rule_id for rules in groups.values() for r in rules}

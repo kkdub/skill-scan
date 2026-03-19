@@ -185,11 +185,11 @@ class TestObfuscationRuleMetadata:
     """Verify rule metadata is correct."""
 
     def test_rule_count(self, rules: list[Rule]) -> None:
-        assert len(rules) == 4
+        assert len(rules) == 5
 
     def test_rule_ids(self, rules: list[Rule]) -> None:
         ids = {r.rule_id for r in rules}
-        assert ids == {"OBFS-002", "OBFS-003", "OBFS-004", "OBFS-005"}
+        assert ids == {"OBFS-001", "OBFS-002", "OBFS-003", "OBFS-004", "OBFS-005"}
 
     def test_categories_all_obfuscation(self, rules: list[Rule]) -> None:
         for rule in rules:

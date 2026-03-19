@@ -1,6 +1,6 @@
 # Data Exfiltration Detection Rules
 # Category: data-exfiltration
-# Rules EXFIL-001 through EXFIL-004
+# Rules EXFIL-001 through EXFIL-008
 
 [rules.EXFIL-001]
 severity = "critical"
@@ -156,3 +156,11 @@ exclude_patterns = [
   "(?i)\\bsmtp\\b.*\\blocalhost\\b",
   "(?i)\\bsmtp\\b.*\\b127\\.0\\.0\\.1\\b"
 ]
+
+[rules.EXFIL-008]
+severity = "critical"
+category = "data-exfiltration"
+description = "Subprocess network tool invocation — shell-out to curl, wget, or netcat via subprocess (AST)"
+recommendation = "Remove subprocess calls to network tools; use auditable Python HTTP clients instead"
+# Detection handled by AST detector in _ast_exfil_detector.py (no regex patterns needed)
+patterns = []

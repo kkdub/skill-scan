@@ -10,6 +10,7 @@ import ast
 from collections.abc import Callable
 
 from skill_scan._ast_detectors import _make_finding
+from skill_scan._ast_split_bytes import _build_bytes_table, resolve_fromhex_concat
 from skill_scan._ast_split_helpers import _scoped_lookup
 from skill_scan._ast_split_match import _NAME_RULE, _check_dangerous
 from skill_scan._ast_split_resolve import (
@@ -83,6 +84,7 @@ def detect_split_evasion(
     findings: list[Finding] = []
     scope_map = _build_scope_map(tree)
     il_scope_map = _build_scope_map(tree, method_scope=True) if int_list_table else scope_map
+    bytes_table = _build_bytes_table(tree)
     for node in _nodes if _nodes is not None else ast.walk(tree):
         scope = scope_map.get(id(node), "")
         # Dynamic dispatch via introspection subscripts
@@ -90,6 +92,14 @@ def detect_split_evasion(
         if dd is not None:
             findings.append(dd)
             continue
+        # bytes.fromhex() concat: (bytes.fromhex('XX') + ...).decode()
+        if isinstance(node, ast.Call):
+            fh = resolve_fromhex_concat(node, bytes_table)
+            if fh is not None:
+                finding = _check_dangerous(fh, file_path, node, label="split variable")
+                if finding is not None:
+                    findings.append(finding)
+                    continue
         il_scope = il_scope_map.get(id(node), "")
         pair = _try_resolve_split(
             node,

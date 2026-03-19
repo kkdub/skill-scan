@@ -9,16 +9,19 @@ Detailed module-level documentation for skill-scan internals. For key patterns a
 - `ScanConfig.max_workers`: `0` = auto-detect (capped at 8), positive = explicit worker count (also capped at 8)
 - `ScanResult.suppressed_count`: count of findings removed by inline `# noqa: RULE-ID` comments; default `0`
 - `match_content()` in `engine.py` is a public wrapper with no `_depth` parameter; `_match_content_recursive()` is the private implementation that carries `_depth`
+- `_line_phase_findings(content, file_path, line_rules)` — extracted helper that runs per-line matching and then the multi-line PI pass; called from `_match_content_recursive`
+- `_multiline_pi_findings(content, file_path, pi_rules, existing)` — sliding window (sizes 3, 4, 5) that joins consecutive lines with a space and applies prompt-injection rules; only `category == 'prompt-injection'` rules are used; findings are attributed to the first line of the window; deduplicates against `existing` findings by `(rule_id, any_line_in_window)`; returns only NEW findings not already found by per-line scan
+- `_scan_window_rule(rule, joined, file_path, first_line_num, window_line_nums, found_lines, results)` — extracted helper for checking one rule against one window; updates `found_lines` tracking on match
 
 ## AST Analyzer
 
 - `analyze_python()` returns an `AST-PARSE` INFO finding on `SyntaxError`/`ValueError`/`RecursionError` during parsing; returns an `AST-DEPTH` INFO finding (plus any accumulated findings) on `RecursionError` during tree walking
 - `AST-PARSE` and `AST-DEPTH` findings are exempt from `active_ids` filtering in `content_scanner._apply_rules()` — they always propagate to output
 - `MAX_AST_RESOLVE_DEPTH = 50` in `_ast_helpers.py` — recursive string-resolution helpers return `None` instead of crashing at depth > 50
-- `build_alias_map(tree)` in `_ast_helpers.py` returns `dict[str, str]` mapping local alias to canonical module name; called by `analyze_python()` and threaded to all `_detect_*` functions via `alias_map` kwarg; recurses into `ast.Try` blocks (body, handlers, orelse, finalbody) via `_collect_imports` / `_try_bodies` so imports inside `try/except` are captured
+- `build_alias_map(tree)` in `_ast_helpers.py` returns `dict[str, str]` mapping local alias to canonical module name; called by `analyze_python()` and threaded to all `_detect_*` functions via `alias_map` kwarg; recurses into `ast.Try` blocks (body, handlers, orelse, finalbody) via `_collect_imports` / `_try_bodies` so imports inside `try/except` are captured; `from X import *` is expanded for known-dangerous modules via `_STAR_IMPORT_EXPANSIONS` (os, subprocess, shutil, socket)
 - `get_call_name(node, alias_map=None)` resolves aliased call names (e.g. `c.encode` with `alias_map={'c': 'codecs'}` → `'codecs.encode'`); all `_detect_*` functions accept `alias_map` kwarg (empty-dict default, backward-compatible)
-- `ast_analyzer.py` uses a `_DETECTORS` tuple to register all detector functions; current detectors: `_detect_unsafe_calls`, `_detect_dynamic_imports`, `_detect_unsafe_deserialization`, `_detect_string_concat_evasion`, `_detect_dynamic_access`, `_detect_decorator_evasion`, `_detect_rot13_codec`, `_detect_rot13_maketrans`, `_detect_subprocess_list_exfil`; add new detectors to this tuple
-- `analyze_python()` also calls `build_symbol_table(tree)`, `_collect_int_list_assigns(tree)`, `detect_split_evasion(tree, file_path, alias_map, symbol_table, int_list_table=...)`, and `detect_kwargs_unpacking(tree, file_path, alias_map, symbol_table)` separately from the `_DETECTORS` loop — tree-level detectors that need the full symbol table go here, not in `_DETECTORS`
+- `ast_analyzer.py` uses a `_DETECTORS` tuple to register all detector functions; current detectors: `_detect_unsafe_calls`, `_detect_dynamic_imports`, `_detect_unsafe_deserialization`, `_detect_string_concat_evasion`, `_detect_dynamic_access`, `_detect_decorator_evasion`, `_detect_rot13_codec`, `_detect_rot13_maketrans`, `_detect_subprocess_list_exfil`, `_detect_dns_exfil`; add new detectors to this tuple
+- `analyze_python()` also calls `build_symbol_table(tree)`, `collect_loop_assigns(tree)` (merged into `symbol_table`), `_collect_int_list_assigns(tree)`, `detect_split_evasion(...)`, and `detect_kwargs_unpacking(...)` separately from the `_DETECTORS` loop — tree-level detectors that need the full symbol table go here, not in `_DETECTORS`; `_detect_custom_rot13` is called in a separate loop over `ast.FunctionDef | ast.AsyncFunctionDef` nodes
 
 ## Symbol Table
 
@@ -43,7 +46,7 @@ Detailed module-level documentation for skill-scan internals. For key patterns a
 
 ## Split-Evasion Detector
 
-- `detect_split_evasion()` reconstructs strings via: `BinOp(Add)`, f-string interpolation, `"".join(...)`, `'template'.format(...)` (positional and keyword args), `'template'.format_map(dict)`, `'%s%s' % (a, b)`, `.replace()` chains, case-method chains (`.lower()`, `.upper()`, `.title()`, `.swapcase()`, `.capitalize()`, `.casefold()`), `functools.reduce()` concat, dict/list subscript lookups, `ast.Attribute` (`self.attr`), `ast.Call` (return values), `reversed()` join, `chr()`/`ord()` chains, bytes-constructor patterns, comprehension `chr()` mapping (including tracked int-list variables via `int_list_table`), `map(lambda c: chr(c), [...])` (lambda-chr pattern), string reversal via `[::-1]` subscript slices, and dynamic dispatch via introspection subscripts
+- `detect_split_evasion()` reconstructs strings via: `BinOp(Add)`, f-string interpolation, `"".join(...)`, `'template'.format(...)` (positional and keyword args), `'template'.format_map(dict)`, `'%s%s' % (a, b)`, `.replace()` chains, case-method chains (`.lower()`, `.upper()`, `.title()`, `.swapcase()`, `.capitalize()`, `.casefold()`), `functools.reduce()` concat, dict/list subscript lookups, `ast.Attribute` (`self.attr`), `ast.Call` (return values), `reversed()` join, `chr()`/`ord()` chains, bytes-constructor patterns including `bytes.fromhex()` inline concatenation, comprehension `chr()` mapping (including tracked int-list variables via `int_list_table` and nested 2-generator comprehensions), `map(lambda c: chr(c), [...])` (lambda-chr pattern), string reversal via `[::-1]` subscript slices, dynamic dispatch via introspection subscripts, and loop-assembled strings from `collect_loop_assigns` pre-pass (merged into symbol_table)
 - Emits EXEC-002 for dangerous names (eval, exec, system, popen), EXEC-006 for dynamic import names (`__import__`, `getattr`); also bridges to decoder for split encoded payloads
 - `_RESOLVERS` — tuple of `(predicate, resolver)` pairs registered in `_ast_split_detector.py`; current order: `_is_binop_add`, `_is_binop_mod`, `_is_fstr`, `_is_replace`, `_is_case`, `_is_subscript`, `_is_call`; `_try_resolve_split()` iterates and returns first non-`None` result; all resolvers share signature `(node, symbol_table, scope, *, alias_map=None) -> str | None`; add new resolvers here; `_is_subscript` (added in PLAN-030) resolves `ast.Subscript` nodes including `[::-1]` string reversal
 - `_NAME_RULE` maps dangerous names to `(rule_id, severity, description_prefix)`
@@ -58,10 +61,10 @@ Detailed module-level documentation for skill-scan internals. For key patterns a
 - `_resolve_replace_chain()` — walks `.replace()` chains up to 20 levels deep
 - `_CASE_METHODS` frozenset + `_is_case_method()` + `_resolve_case_method_chain()` — resolves chained `.lower()`, `.upper()`, `.title()`, `.swapcase()`, `.capitalize()`, `.casefold()` calls (no args) up to 20 levels deep; resolves base via `_resolve_base_string` (constant or symbol-table lookup) then falls back to `resolve_expr`; registered in `_RESOLVERS` before `_is_call`; follows the `_replace` pattern
 - `_ast_split_chr.py` — resolves `chr(N)`, `chr(ord('x'))`, `chr(ord('x') + N)`; `_MAX_INT_DEPTH = 50`
-- `_ast_split_bytes.py` — resolves `bytearray(b'...').decode()`, `str(b'...', 'utf-8')`, `codecs.decode(b'...', 'utf-8')`; gates on literal bytes arguments only
+- `_ast_split_bytes.py` — resolves `bytearray(b'...').decode()`, `str(b'...', 'utf-8')`, `codecs.decode(b'...', 'utf-8')`; also resolves inline `(bytes.fromhex('XX') + bytes.fromhex('YY')).decode()` via `resolve_fromhex_concat`; `_build_bytes_table` pre-pass tracks `name = bytes.fromhex(...)` variable assignments for split-evasion; gates on literal bytes arguments only; symbol_table is `dict[str, str]` and cannot hold bytes objects — tracked-variable fromhex is limited to the pre-pass
 - `_ast_split_reduce.py` — resolves `functools.reduce(lambda a,b: a+b, [...])` and `functools.reduce(operator.add/concat, [...])`
 - `_ast_split_helpers.py` — format/%-format resolution; `_scoped_lookup`, `_resolve_join_elements`, `_resolve_subscript_expr`, `_resolve_slice_expr`; `_PERCENT_SPEC_RE` matches all standard %-specifiers with `(?<!%)` lookbehind; `_resolve_format_call` handles both positional and keyword args (keyword args via `node.keywords` loop, rejecting `**kwargs` spreads where `kw.arg is None`); `_resolve_slice_expr` handles `step == -1` reversal (rejects only `step == 0`); at 297/300 lines — near limit
-- `_ast_split_join_helpers.py` — `_resolve_join_call()` dispatches to list/tuple, comprehension, reversed, or map resolvers; passes `int_list_table` and `int_list_scope` to `_resolve_map_join`; `_collect_int_list_assigns(tree)` pre-pass collects `Name = [int, ...]` assignments AND tracks `+=`/`.extend()` mutations (module/function/class-method scope) as `dict[str, list[int]]`; delegates statement dispatch to `_handle_int_list_stmt` from `_ast_split_int_list_helpers`; `_resolve_comprehension_join()` accepts `int_list_table` kwarg and resolves `chr(c) for c in tracked_var` via `_resolve_tracked_iter()`
+- `_ast_split_join_helpers.py` — `_resolve_join_call()` dispatches to list/tuple, comprehension, reversed, or map resolvers; passes `int_list_table` and `int_list_scope` to `_resolve_map_join`; `_collect_int_list_assigns(tree)` pre-pass collects `Name = [int, ...]` assignments AND tracks `+=`/`.extend()` mutations (module/function/class-method scope) as `dict[str, list[int]]`; delegates statement dispatch to `_handle_int_list_stmt` from `_ast_split_int_list_helpers`; `_resolve_comprehension_join()` accepts `int_list_table` kwarg and resolves `chr(c) for c in tracked_var` via `_resolve_tracked_iter()`; also resolves nested 2-generator comprehensions of the form `[chr(c) for row in [[ints],[ints]] for c in row]` by flattening the 2D list-of-lists before dispatching to `_resolve_comprehension_chr`; at 298/300 lines
 - `_ast_split_int_list_helpers.py` — int-list mutation tracking helpers extracted from `_ast_split_join_helpers`; exposes `_SHADOW` sentinel and `_handle_int_list_stmt(stmt, scope, result)` dispatch entry point; `_handle_assign` tracks `Name = [int, ...]` (stores `_SHADOW` for non-int-list values); `_handle_extend_call` handles `name.extend([...])` calls; `_extend_tracked` handles both `+=` and `.extend()` mutations — ignores unknown variables, converts to `_SHADOW` on mixed-type or non-literal arg, concatenates on all-int literal; `_extract_int_list(elts)` returns `list[int] | None`; identity check `existing is _SHADOW` distinguishes shadow markers from legitimate empty lists
 - `_ast_split_map_helpers.py` — `_resolve_map_join(call, sep, alias_map, *, int_list_table, int_list_scope)` handles `map(chr, [ints])`, `map(lambda c: chr(c), [ints])`, and `map(str, [strs])`; `_effective_map_fn(func_arg, alias_map)` normalizes both `ast.Name` references and `ast.Lambda` (`lambda c: chr(c)`) to a canonical function name; `_is_lambda_chr(node)` validates lambda structure (single arg, body is `chr(arg)`, no vararg/kwonly); tracked int-list variables resolved via `_resolve_tracked_elts`
 
@@ -86,10 +89,12 @@ Detailed module-level documentation for skill-scan internals. For key patterns a
 
 ## Exfil Detector
 
-- `_ast_exfil_detector.py` — node-level detector for subprocess list-arg data exfiltration; registered in `_DETECTORS` in `ast_analyzer.py`; new module was created because `_ast_detectors.py` was at 294/300 lines
+- `_ast_exfil_detector.py` — node-level detectors for data exfiltration patterns; registered in `_DETECTORS` in `ast_analyzer.py`; new module was created because `_ast_detectors.py` was at 294/300 lines
 - `_detect_subprocess_list_exfil(node, file_path, *, alias_map)` — emits `EXFIL-008` when a `subprocess.run/call/check_output/check_call/Popen` call has a list as first arg whose first element is a network tool name; uses `get_call_name` for alias resolution; handles `/usr/bin/curl`-style paths via `split('/')[-1]`
+- `_detect_dns_exfil(node, file_path, *, alias_map)` — emits `EXFIL-006` when `socket.getaddrinfo()` is called with a non-literal first argument (f-strings, variables, concatenation, or any non-`ast.Constant` node); literal string hostnames are safe and not flagged; uses `get_call_name` for alias resolution (catches star-import expanded `getaddrinfo`)
 - `_SUBPROCESS_CALLS` — frozenset of recognized subprocess function names (qualified: `subprocess.run`, etc.)
 - `_NETWORK_TOOLS` — frozenset of network tool names that trigger detection: `curl`, `wget`, `nc`, `ncat`, `netcat`
+- `_DNS_EXFIL_TARGETS` — frozenset of DNS exfil function names: `socket.getaddrinfo`; extend by adding entries
 - Uses `Finding()` directly with `category='data-exfiltration'` — do NOT use `_make_finding` (which hardcodes `'malicious-code'`)
 
 ## Decoder
@@ -103,6 +108,17 @@ Detailed module-level documentation for skill-scan internals. For key patterns a
 
 - `_ast_rot13.py` uses its own `_make_rot13_finding()` with `category='obfuscation'` — do NOT reuse `_make_finding` from `_ast_detectors.py` which hardcodes `category='malicious-code'`
 - `is_rot13_pair(from_str, to_str) -> bool` is a public pure function; re-exported from `ast_analyzer.py`
+- `_detect_custom_rot13(func_node, file_path) -> list[Finding]` — heuristic detector for manual chr/ord ROT13 functions; called in a separate loop in `analyze_python()` over `ast.FunctionDef | ast.AsyncFunctionDef` nodes; requires BOTH a lowercase branch (contains `'a'` or `'z'` string constants) AND an uppercase branch (`'A'` or `'Z'`) AND `% 26` arithmetic AND `chr`/`ord` calls within the function body; emits OBFS-001; all four conditions are required to minimize false positives
+- OBFS-001 in `obfuscation.toml` has `patterns = []` — detection is AST-only; the TOML entry exists for rule metadata (severity, description, recommendation) and catalog generation; do NOT add regex patterns
+
+## Loop Unroller
+
+- `_ast_loop_unroller.py` — pre-pass module for static resolution of for-loop string assembly patterns
+- `collect_loop_assigns(tree: ast.Module) -> dict[str, str]` — scans module-level and function-level bodies; returns a dict mapping `target_name` (or `funcname.target_name` for function scope) to the concatenated string value; called in `analyze_python()` and merged into `symbol_table` before `detect_split_evasion` runs
+- Supported pattern: `target = ''` initialized before the loop, followed by `for VAR in [str, str, ...]: target += VAR`; iter must be an inline list literal or a `Name` referencing a local list-literal assignment; body must be exactly one `AugAssign` with `ast.Add`
+- Returns `None` (skips) if: iter is not a recognized list source, body has multiple statements, body contains non-string elements, there is no `target = ''` initialization, or the body statement is not `target += loop_var`
+- Only single-level loops supported — nested loops and loops with if-guards are not unrolled (conservative)
+- Keys use the same scoping prefix as `build_symbol_table` (`"funcname.varname"`) so merged values are resolved by split-evasion correctly
 
 ## Known Limitations
 
@@ -112,6 +128,9 @@ Detailed module-level documentation for skill-scan internals. For key patterns a
 - `_collect_int_list_assigns` does not walk class-level statements (only class methods); `class C: codes = [ints]; codes += [more]` at class body scope is untracked (DEBT-028-INTLIST-CLASS-BODY)
 - `codes = a + b` (int-list concatenation via BinOp) is not tracked in the pre-pass; requires cross-variable resolution (DEBT-027-INTLIST-CONCAT)
 - `codes.extend(a)` where `a` is a tracked variable (not a literal) is ignored conservatively (DEBT-027-INTLIST-EXTEND-VAR)
+- `collect_loop_assigns` supports only inline string-literal lists and local list-literal name references as iter source; tracked list variables from `symbol_table` are NOT supported (`symbol_table` is `dict[str, str]`); int-list iter sources (e.g., `for c in int_codes`) are also unsupported via this pre-pass
+- `resolve_fromhex_concat` handles only inline `(bytes.fromhex('XX') + bytes.fromhex('YY')).decode()` expressions — tracked-variable fromhex (e.g., `a = bytes.fromhex('6576'); b = bytes.fromhex('616c'); (a + b).decode()`) requires a separate bytes-tracking pre-pass (not yet implemented)
+- Nested comprehension support is limited to exactly 2 generators with the inner iter being a plain `Name` matching the outer target variable; 3+ generators return `None`
 
 ## Evasion Corpus
 

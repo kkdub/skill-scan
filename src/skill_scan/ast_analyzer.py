@@ -13,9 +13,11 @@ from __future__ import annotations
 
 import ast
 
+from skill_scan._ast_exfil_detector import _detect_dns_exfil as _detect_dns_exfil
 from skill_scan._ast_exfil_detector import _detect_subprocess_list_exfil as _detect_subprocess_list_exfil
 from skill_scan._ast_helpers import build_alias_map
 from skill_scan._ast_kwargs_detector import detect_kwargs_unpacking as detect_kwargs_unpacking
+from skill_scan._ast_loop_unroller import collect_loop_assigns as collect_loop_assigns
 from skill_scan._ast_split_detector import detect_split_evasion as detect_split_evasion
 from skill_scan._ast_split_join_helpers import _collect_int_list_assigns as _collect_int_list_assigns
 from skill_scan._ast_symbol_table import build_symbol_table as build_symbol_table
@@ -38,6 +40,7 @@ def analyze_python(content: str, file_path: str) -> list[Finding]:
 
     alias_map = build_alias_map(tree)
     symbol_table = build_symbol_table(tree)
+    symbol_table.update(collect_loop_assigns(tree))
     int_list_table = _collect_int_list_assigns(tree)
     findings: list[Finding] = []
     try:
@@ -51,6 +54,9 @@ def analyze_python(content: str, file_path: str) -> list[Finding]:
             )
         )
         findings.extend(detect_kwargs_unpacking(tree, file_path, alias_map, symbol_table, _nodes=all_nodes))
+        for node in all_nodes:
+            if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
+                findings.extend(_detect_custom_rot13(node, file_path))
     except RecursionError:
         findings.append(_depth_error_finding(file_path))
     return findings
@@ -102,6 +108,7 @@ from skill_scan._ast_rot13 import (  # noqa: E402
     _CODEC_DIRECT as _CODEC_DIRECT,
     _CODEC_ENCODING_ARG1 as _CODEC_ENCODING_ARG1,
     _CODEC_INDIRECT as _CODEC_INDIRECT,
+    _detect_custom_rot13 as _detect_custom_rot13,
     _detect_rot13_codec as _detect_rot13_codec,
     _detect_rot13_maketrans as _detect_rot13_maketrans,
     is_rot13_pair as is_rot13_pair,
@@ -124,4 +131,5 @@ _DETECTORS = (
     _detect_rot13_codec,
     _detect_rot13_maketrans,
     _detect_subprocess_list_exfil,
+    _detect_dns_exfil,
 )

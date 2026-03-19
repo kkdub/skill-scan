@@ -136,14 +136,28 @@
       ]
     },
     "loop_assembly.py": {
-      "detected": false,
-      "finding_count": 0,
-      "findings": []
+      "detected": true,
+      "finding_count": 1,
+      "findings": [
+        {
+          "rule_id": "EXEC-002",
+          "severity": "critical",
+          "matched_text": "split evasion: dynamic dispatch via introspection subscript to 'eval'",
+          "line": 6
+        }
+      ]
     },
     "nested_comprehension.py": {
-      "detected": false,
-      "finding_count": 0,
-      "findings": []
+      "detected": true,
+      "finding_count": 1,
+      "findings": [
+        {
+          "rule_id": "EXEC-002",
+          "severity": "critical",
+          "matched_text": "split variable evasion building 'eval'",
+          "line": 2
+        }
+      ]
     },
     "property_evasion.py": {
       "detected": true,
@@ -158,9 +172,16 @@
       ]
     },
     "star_import_evasion.py": {
-      "detected": false,
-      "finding_count": 0,
-      "findings": []
+      "detected": true,
+      "finding_count": 1,
+      "findings": [
+        {
+          "rule_id": "EXEC-002",
+          "severity": "critical",
+          "matched_text": "os.system(",
+          "line": 3
+        }
+      ]
     },
     "string_method_evasion.py": {
       "detected": true,
@@ -277,9 +298,16 @@
       ]
     },
     "docs/guide.md": {
-      "detected": false,
-      "finding_count": 0,
-      "findings": []
+      "detected": true,
+      "finding_count": 1,
+      "findings": [
+        {
+          "rule_id": "PI-001",
+          "severity": "critical",
+          "matched_text": "ignore all previous instructions",
+          "line": 5
+        }
+      ]
     },
     "docs/license.md": {
       "detected": true,
@@ -534,9 +562,16 @@
       ]
     },
     "exfil_dns_txt.py": {
-      "detected": false,
-      "finding_count": 0,
-      "findings": []
+      "detected": true,
+      "finding_count": 1,
+      "findings": [
+        {
+          "rule_id": "EXFIL-006",
+          "severity": "critical",
+          "matched_text": "socket.getaddrinfo(<dynamic>, ...)",
+          "line": 8
+        }
+      ]
     },
     "exfil_env_indirect.py": {
       "detected": true,
@@ -659,14 +694,28 @@
       ]
     },
     "obfs_hex_split.py": {
-      "detected": false,
-      "finding_count": 0,
-      "findings": []
+      "detected": true,
+      "finding_count": 1,
+      "findings": [
+        {
+          "rule_id": "EXEC-002",
+          "severity": "critical",
+          "matched_text": "split variable evasion building 'eval'",
+          "line": 4
+        }
+      ]
     },
     "obfs_rot13_custom.py": {
-      "detected": false,
-      "finding_count": 0,
-      "findings": []
+      "detected": true,
+      "finding_count": 1,
+      "findings": [
+        {
+          "rule_id": "OBFS-001",
+          "severity": "high",
+          "matched_text": "def custom_rot(...)",
+          "line": 2
+        }
+      ]
     },
     "obfs_string_mult_assembly.py": {
       "detected": true,
