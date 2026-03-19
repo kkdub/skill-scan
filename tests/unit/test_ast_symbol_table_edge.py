@@ -1,6 +1,6 @@
 """Edge case and file-size-constraint tests for AST symbol table.
 
-Split from test_ast_symbol_table.py to stay under the 250-line file limit.
+Split from test_ast_symbol_table.py to stay under the 300-line file limit.
 Covers: empty/import-only modules, class bodies, reassignment, complex RHS,
 file-size guard, dict subscript assignments, and dict literal tracking.
 """
@@ -106,9 +106,8 @@ class TestStringMultiply:
         result = build_symbol_table(_PARSE(code))
         assert result["a"] == "ev"
         assert result["b"] == "al"
-        # c is BinOp(Add) with Name operands -- not resolved in symbol table
-        # (the split detector handles this at detection time)
-        assert "c" not in result
+        # c is BinOp(Add) with Name operands -- resolved eagerly in symbol table
+        assert result["c"] == "eval"
 
 
 # -- R003/R004: Dict subscript and literal tracking -------------------------

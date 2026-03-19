@@ -105,8 +105,24 @@ def _resolve_codecs_decode(node: ast.Call, alias_map: dict[str, str]) -> str | N
 # -- bytes.fromhex() resolution -----------------------------------------------
 
 
-def _resolve_fromhex(node: ast.Call) -> bytes | None:
-    """Resolve ``bytes.fromhex('hex_str')`` to bytes, or None."""
+def _extract_hex_arg(
+    node: ast.Call,
+    symbol_table: dict[str, str] | None,
+) -> str | None:
+    """Extract the hex string argument from a bytes.fromhex() call."""
+    arg = node.args[0]
+    if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+        return arg.value
+    if isinstance(arg, ast.Name) and symbol_table:
+        return symbol_table.get(arg.id)
+    return None
+
+
+def _resolve_fromhex(
+    node: ast.Call,
+    symbol_table: dict[str, str] | None = None,
+) -> bytes | None:
+    """Resolve ``bytes.fromhex('hex_str')`` or ``bytes.fromhex(var)`` to bytes."""
     func = node.func
     if not isinstance(func, ast.Attribute) or func.attr != "fromhex":
         return None
@@ -114,11 +130,11 @@ def _resolve_fromhex(node: ast.Call) -> bytes | None:
         return None
     if len(node.args) != 1 or node.keywords:
         return None
-    arg = node.args[0]
-    if not (isinstance(arg, ast.Constant) and isinstance(arg.value, str)):
+    hex_str = _extract_hex_arg(node, symbol_table)
+    if hex_str is None:
         return None
     try:
-        return bytes.fromhex(arg.value)
+        return bytes.fromhex(hex_str)
     except ValueError:
         return None
 
@@ -126,6 +142,7 @@ def _resolve_fromhex(node: ast.Call) -> bytes | None:
 def _resolve_fromhex_operand(
     node: ast.expr,
     bytes_table: dict[str, bytes] | None,
+    symbol_table: dict[str, str] | None = None,
 ) -> bytes | None:
     """Resolve a single operand of a fromhex BinOp to bytes.
 
@@ -133,7 +150,7 @@ def _resolve_fromhex_operand(
     Does NOT handle nested BinOp (caller recurses for left side only).
     """
     if isinstance(node, ast.Call):
-        return _resolve_fromhex(node)
+        return _resolve_fromhex(node, symbol_table)
     if isinstance(node, ast.Name) and bytes_table:
         return bytes_table.get(node.id)
     return None
@@ -142,6 +159,7 @@ def _resolve_fromhex_operand(
 def _resolve_fromhex_binop(
     node: ast.expr,
     bytes_table: dict[str, bytes] | None = None,
+    symbol_table: dict[str, str] | None = None,
 ) -> bytes | None:
     """Resolve ``bytes.fromhex('XX') + bytes.fromhex('YY')`` to concatenated bytes.
 
@@ -152,13 +170,13 @@ def _resolve_fromhex_binop(
     if not isinstance(node, ast.BinOp) or not isinstance(node.op, ast.Add):
         return None
     left = (
-        _resolve_fromhex_binop(node.left, bytes_table)
+        _resolve_fromhex_binop(node.left, bytes_table, symbol_table)
         if isinstance(node.left, ast.BinOp)
-        else _resolve_fromhex_operand(node.left, bytes_table)
+        else _resolve_fromhex_operand(node.left, bytes_table, symbol_table)
     )
     if left is None:
         return None
-    right = _resolve_fromhex_operand(node.right, bytes_table)
+    right = _resolve_fromhex_operand(node.right, bytes_table, symbol_table)
     if right is None:
         return None
     return left + right
@@ -182,12 +200,13 @@ def _build_bytes_table(tree: ast.Module) -> dict[str, bytes]:
 def _resolve_raw_bytes(
     inner: ast.expr,
     bytes_table: dict[str, bytes] | None,
+    symbol_table: dict[str, str] | None = None,
 ) -> bytes | None:
     """Resolve inner expression of ``.decode()`` to bytes."""
     if isinstance(inner, ast.BinOp):
-        return _resolve_fromhex_binop(inner, bytes_table)
+        return _resolve_fromhex_binop(inner, bytes_table, symbol_table)
     if isinstance(inner, ast.Call):
-        return _resolve_fromhex(inner)
+        return _resolve_fromhex(inner, symbol_table)
     if isinstance(inner, ast.Name) and bytes_table:
         return bytes_table.get(inner.id)
     return None
@@ -196,12 +215,14 @@ def _resolve_raw_bytes(
 def resolve_fromhex_concat(
     node: ast.expr,
     bytes_table: dict[str, bytes] | None = None,
+    symbol_table: dict[str, str] | None = None,
 ) -> str | None:
     """Resolve ``(bytes.fromhex('XX') + bytes.fromhex('YY')).decode()`` to a string.
 
     Also handles single ``bytes.fromhex('XX').decode()`` without concatenation.
     When *bytes_table* is provided, named variables that were assigned from
-    ``bytes.fromhex()`` calls are resolved too.
+    ``bytes.fromhex()`` calls are resolved too. When *symbol_table* is provided,
+    ``bytes.fromhex(var)`` resolves *var* via symbol table lookup.
     """
     if not isinstance(node, ast.Call):
         return None
@@ -211,7 +232,7 @@ def resolve_fromhex_concat(
     encoding = _get_decode_encoding(node)
     if encoding is None:
         return None
-    raw = _resolve_raw_bytes(func.value, bytes_table)
+    raw = _resolve_raw_bytes(func.value, bytes_table, symbol_table)
     if raw is None:
         return None
     try:

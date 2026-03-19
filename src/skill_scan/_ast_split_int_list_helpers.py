@@ -47,8 +47,23 @@ def _handle_assign(stmt: ast.Assign, scope: str, result: dict[str, list[int]]) -
     if isinstance(stmt.value, ast.List | ast.Tuple):
         ints = _extract_int_list(stmt.value.elts)
         result[key] = ints if ints is not None else _SHADOW
+    elif isinstance(stmt.value, ast.BinOp) and isinstance(stmt.value.op, ast.Add):
+        result[key] = _resolve_binop_concat(stmt.value, scope, result)
     else:
         result[key] = _SHADOW
+
+
+def _resolve_binop_concat(node: ast.BinOp, scope: str, result: dict[str, list[int]]) -> list[int]:
+    """Resolve Name + Name where both operands are tracked int-lists."""
+    if not (isinstance(node.left, ast.Name) and isinstance(node.right, ast.Name)):
+        return _SHADOW
+    left_key = f"{scope}.{node.left.id}" if scope else node.left.id
+    right_key = f"{scope}.{node.right.id}" if scope else node.right.id
+    left = result.get(left_key)
+    right = result.get(right_key)
+    if left is None or left is _SHADOW or right is None or right is _SHADOW:
+        return _SHADOW
+    return left + right
 
 
 def _handle_extend_call(call: ast.Call, scope: str, result: dict[str, list[int]]) -> None:
@@ -66,6 +81,9 @@ def _extend_tracked(name: str, value: ast.expr, scope: str, result: dict[str, li
     if key not in result:
         return
     existing = result[key]
+    if isinstance(value, ast.Name):
+        _extend_with_tracked_var(key, value.id, scope, existing, result)
+        return
     if not isinstance(value, ast.List | ast.Tuple):
         result[key] = _SHADOW
         return
@@ -73,3 +91,17 @@ def _extend_tracked(name: str, value: ast.expr, scope: str, result: dict[str, li
         return
     ints = _extract_int_list(value.elts)
     result[key] = (existing + ints) if ints is not None else _SHADOW
+
+
+def _extend_with_tracked_var(
+    target_key: str, var_name: str, scope: str, existing: list[int], result: dict[str, list[int]]
+) -> None:
+    """Extend target with a tracked variable's int-list, or shadow if unresolvable."""
+    var_key = f"{scope}.{var_name}" if scope else var_name
+    src = result.get(var_key)
+    if src is None or src is _SHADOW:
+        result[target_key] = _SHADOW
+        return
+    if existing is _SHADOW:
+        return
+    result[target_key] = existing + src

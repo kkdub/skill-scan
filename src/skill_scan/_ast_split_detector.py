@@ -94,7 +94,7 @@ def detect_split_evasion(
             continue
         # bytes.fromhex() concat: (bytes.fromhex('XX') + ...).decode()
         if isinstance(node, ast.Call):
-            fh = resolve_fromhex_concat(node, bytes_table)
+            fh = resolve_fromhex_concat(node, bytes_table, symbol_table)
             if fh is not None:
                 finding = _check_dangerous(fh, file_path, node, label="split variable")
                 if finding is not None:
@@ -130,10 +130,13 @@ def _build_scope_map(tree: ast.Module, *, method_scope: bool = False) -> dict[in
         if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
             pairs.append((node, node.name))
         elif isinstance(node, ast.ClassDef):
+            # Map class body statements (non-method) to class scope
             for stmt in node.body:
                 if isinstance(stmt, ast.FunctionDef | ast.AsyncFunctionDef):
                     scope = f"{node.name}.{stmt.name}" if method_scope else node.name
                     pairs.append((stmt, scope))
+                else:
+                    pairs.append((stmt, node.name))
     for root, scope_name in pairs:
         for child in ast.walk(root):
             result[id(child)] = scope_name
