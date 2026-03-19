@@ -147,19 +147,20 @@ def _match_content_recursive(
 
 def _line_phase_findings(content: str, file_path: str, line_rules: list[Rule]) -> list[Finding]:
     """Run per-line and multiline (PI) matching for all line-scope rules."""
+    lines = content.split("\n")
     findings: list[Finding] = []
-    for line_num, line in enumerate(content.split("\n"), start=1):
+    for line_num, line in enumerate(lines, start=1):
         line_findings = match_line(line, line_num, file_path, line_rules)
         findings.extend(line_findings)
         findings.extend(_normalized_line_findings(line, line_num, file_path, line_rules, line_findings))
     pi_rules = [r for r in line_rules if r.category == "prompt-injection"]
     if pi_rules:
-        findings.extend(_multiline_pi_findings(content, file_path, pi_rules, findings))
+        findings.extend(_multiline_pi_findings(lines, file_path, pi_rules, findings))
     return findings
 
 
 def _multiline_pi_findings(
-    content: str,
+    lines: list[str],
     file_path: str,
     pi_rules: list[Rule],
     existing: list[Finding],
@@ -171,7 +172,6 @@ def _multiline_pi_findings(
     the matching window. Deduplicates against existing findings: skips if
     same rule_id was already found on any line within the window.
     """
-    lines = content.split("\n")
     num_lines = len(lines)
     if num_lines < 3:
         return []

@@ -62,14 +62,6 @@ _PROCEDURAL_RULES: list[RuleInfo] = [
     ),
     RuleInfo("FS-008", "medium", "file-safety", "File could not be read (OS error)", "stable", "procedural"),
     RuleInfo(
-        "EXFIL-008",
-        "critical",
-        "data-exfiltration",
-        "Subprocess network tool invocation — shell-out to curl, wget, or netcat via subprocess (AST)",
-        "stable",
-        "procedural",
-    ),
-    RuleInfo(
         "SV-001",
         "medium",
         "schema-validation",

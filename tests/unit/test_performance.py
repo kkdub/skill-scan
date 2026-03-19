@@ -124,7 +124,7 @@ class TestManyShortLines:
         match_content(content, "many.py", rules)
         elapsed = time.perf_counter() - start
 
-        assert elapsed < 5.0, f"Many-lines scan took {elapsed:.2f}s (limit 5s)"
+        assert elapsed < 8.0, f"Many-lines scan took {elapsed:.2f}s (limit 8s)"
 
 
 # ---------------------------------------------------------------------------

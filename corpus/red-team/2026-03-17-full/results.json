@@ -622,9 +622,16 @@
       ]
     },
     "exfil_subprocess_curl.py": {
-      "detected": false,
-      "finding_count": 0,
-      "findings": []
+      "detected": true,
+      "finding_count": 1,
+      "findings": [
+        {
+          "rule_id": "EXFIL-008",
+          "severity": "critical",
+          "matched_text": "subprocess.run(['curl', ...])",
+          "line": 4
+        }
+      ]
     },
     "exfil_tempfile.py": {
       "detected": true,
