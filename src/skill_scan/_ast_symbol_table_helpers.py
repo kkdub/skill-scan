@@ -2,7 +2,7 @@
 
 Extracted from _ast_symbol_table.py. These functions walk statement bodies
 and collect string assignments (Name targets, tuple/list unpacking,
-augmented assignment, walrus operator) into a mutable table.
+augmented assignment, walrus operator, replace chains) into a mutable table.
 """
 
 from __future__ import annotations
@@ -11,18 +11,25 @@ import ast
 
 from skill_scan._ast_helpers import _resolve_int_expr, try_resolve_string
 from skill_scan._ast_symbol_table import _Ref
+from skill_scan._ast_symbol_table_dict_helpers import (
+    _handle_dict_literal,
+    _handle_dict_pop,
+    _handle_string_list_literal,
+    _resolve_replace_chain_simple,
+)
 
 
 def _walk_body(body: list[ast.stmt], table: dict[str, str | _Ref]) -> None:
-    """Walk a statement list, collecting assignments into table."""
+    """Walk a statement list, dispatching each to ``_process_stmt``."""
     for stmt in body:
         _process_stmt(stmt, table)
 
 
 def _process_stmt(stmt: ast.stmt, table: dict[str, str | _Ref]) -> None:
-    """Process a single statement for assignment tracking."""
+    """Process one statement: dispatch by type, then collect walrus exprs."""
     if isinstance(stmt, ast.Assign):
-        _handle_assign(stmt, table)
+        if not _handle_dict_pop(stmt, table):
+            _handle_assign(stmt, table)
     elif isinstance(stmt, ast.AugAssign):
         _handle_aug_assign(stmt, table)
     else:
@@ -31,7 +38,7 @@ def _process_stmt(stmt: ast.stmt, table: dict[str, str | _Ref]) -> None:
 
 
 def _recurse_control_flow(stmt: ast.stmt, table: dict[str, str | _Ref]) -> None:
-    """Recurse into control flow bodies (if/for/while/with/try)."""
+    """Recurse into control flow bodies (if/for/while/with/try/except)."""
     match stmt:
         case ast.If() | ast.For() | ast.While() | ast.AsyncFor():
             _walk_body(stmt.body, table)
@@ -47,7 +54,7 @@ def _recurse_control_flow(stmt: ast.stmt, table: dict[str, str | _Ref]) -> None:
 
 
 def _collect_walrus(stmt: ast.stmt, table: dict[str, str | _Ref]) -> None:
-    """Collect walrus operator (:=) assignments, skipping nested scope bodies."""
+    """Collect walrus (:=) assignments, skipping nested scopes (func/class/lambda)."""
 
     class _WalrusVisitor(ast.NodeVisitor):
         def visit_FunctionDef(self, node: ast.FunctionDef) -> None:
@@ -73,10 +80,11 @@ def _collect_walrus(stmt: ast.stmt, table: dict[str, str | _Ref]) -> None:
 
 
 def _handle_assign(stmt: ast.Assign, table: dict[str, str | _Ref]) -> None:
-    """Handle ast.Assign: simple Name target or tuple/list unpacking.
+    """Handle ``ast.Assign`` nodes by iterating ALL targets.
 
-    Iterates all targets so that multi-target assignments like
-    ``a = b = 'eval'`` track every target with the same resolved value.
+    Supports Name targets (simple assignment), Tuple/List targets (unpacking),
+    and Subscript targets (``d['key'] = val``). For Name targets, also checks
+    whether the RHS is a dict literal or a string list/tuple literal.
     """
     for target in stmt.targets:
         if isinstance(target, ast.Tuple | ast.List):
@@ -91,16 +99,18 @@ def _handle_assign(stmt: ast.Assign, table: dict[str, str | _Ref]) -> None:
             # Check if RHS is a dict literal -- track composite keys
             if isinstance(stmt.value, ast.Dict):
                 _handle_dict_literal(target.id, stmt.value, table)
+            # Check if RHS is a list/tuple of all string constants
+            if isinstance(stmt.value, ast.List | ast.Tuple):
+                _handle_string_list_literal(target.id, stmt.value, table)
             _track_name_assign(target.id, stmt.value, table)
             continue
 
 
-def _handle_unpack(
-    target: ast.Tuple | ast.List,
-    value: ast.expr,
-    table: dict[str, str | _Ref],
-) -> None:
-    """Handle tuple/list unpacking: a, b = 'ev', 'al'."""
+def _handle_unpack(target: ast.Tuple | ast.List, value: ast.expr, table: dict[str, str | _Ref]) -> None:
+    """Handle tuple/list unpacking like ``a, b = 'ev', 'al'``.
+
+    Both sides must have matching element counts; Name targets get resolved.
+    """
     if not isinstance(value, ast.Tuple | ast.List):
         return
     if len(target.elts) != len(value.elts):
@@ -112,8 +122,24 @@ def _handle_unpack(
                 table[tgt.id] = resolved
 
 
+def _resolve_operand(node: ast.expr, table: dict[str, str | _Ref]) -> str | None:
+    """Resolve a BinOp operand: string constant or table-tracked Name."""
+    s = try_resolve_string(node)
+    if s is not None:
+        return s
+    if isinstance(node, ast.Name):
+        v = table.get(node.id)
+        return v if isinstance(v, str) else None
+    return None
+
+
 def _track_name_assign(var_name: str, value_node: ast.expr, table: dict[str, str | _Ref]) -> None:
-    """Track a simple Name = <expr> assignment."""
+    """Track a simple ``Name = <expr>`` assignment into the symbol table.
+
+    Tries resolution in order: string literal, string multiplication,
+    string concatenation (BinOp Add), ``.replace()`` chain, and finally
+    a ``_Ref`` for Name-to-Name aliasing when nothing else resolves.
+    """
     resolved = try_resolve_string(value_node)
     if resolved is not None:
         table[var_name] = resolved
@@ -121,6 +147,16 @@ def _track_name_assign(var_name: str, value_node: ast.expr, table: dict[str, str
     mult = _resolve_binop_mult(value_node)
     if mult is not None:
         table[var_name] = mult
+        return
+    if isinstance(value_node, ast.BinOp) and isinstance(value_node.op, ast.Add):
+        left = _resolve_operand(value_node.left, table)
+        right = _resolve_operand(value_node.right, table)
+        if left is not None and right is not None:
+            table[var_name] = left + right
+            return
+    repl = _resolve_replace_chain_simple(value_node, table)
+    if repl is not None:
+        table[var_name] = repl
         return
     if isinstance(value_node, ast.Name):
         table[var_name] = _Ref(value_node.id)
@@ -130,25 +166,25 @@ _MAX_REPEAT = 1000  # cap repetition to prevent DoS via huge strings
 
 
 def _resolve_binop_mult(node: ast.expr) -> str | None:
-    """Resolve string * positive-int (or int * string) to repeated string.
+    """Resolve ``string * int`` to a repeated string.
 
-    Only resolves when the integer operand is in [1, _MAX_REPEAT]. Returns
-    None for zero, negative, float, non-constant, or oversized operands.
+    Only resolves when the integer is in ``[1, _MAX_REPEAT]`` to prevent
+    denial-of-service via huge string allocation.
     """
     if not isinstance(node, ast.BinOp) or not isinstance(node.op, ast.Mult):
         return None
-
     pair = _extract_str_int_pair(node)
     if pair is None:
         return None
     str_val, int_val = pair
-    if not 1 <= int_val <= _MAX_REPEAT:
-        return None
-    return str_val * int_val
+    return str_val * int_val if 1 <= int_val <= _MAX_REPEAT else None
 
 
 def _extract_str_int_pair(node: ast.BinOp) -> tuple[str, int] | None:
-    """Extract (string, int) from either operand order of a BinOp."""
+    """Extract ``(string, int)`` from either operand order of a BinOp.
+
+    Handles both ``'x' * 3`` and ``3 * 'x'`` orderings.
+    """
     str_val = try_resolve_string(node.left)
     if str_val is not None:
         int_val = _resolve_int_expr(node.right)
@@ -163,15 +199,12 @@ def _extract_str_int_pair(node: ast.BinOp) -> tuple[str, int] | None:
 
 
 def _handle_subscript_assign(
-    target: ast.Subscript,
-    value_node: ast.expr,
-    table: dict[str, str | _Ref],
+    target: ast.Subscript, value_node: ast.expr, table: dict[str, str | _Ref]
 ) -> None:
-    """Handle subscript assignment: d['key'] = 'value' -> composite key 'varname[key]'.
+    """Handle subscript assignment ``d['key'] = 'val'``.
 
-    Accepts both string keys (d['k']) and non-negative integer indices (parts[0]).
-    Integer 0 and string '0' produce the same composite key 'varname[0]' -- documented
-    collision edge case (R-IMP002).
+    Stores the value under a composite key ``'varname[key]'`` in the table.
+    Only handles string or non-negative integer slice keys.
     """
     if not isinstance(target.value, ast.Name):
         return
@@ -191,30 +224,12 @@ def _handle_subscript_assign(
     table[f"{base}[{key}]"] = resolved
 
 
-def _handle_dict_literal(
-    var_name: str,
-    dict_node: ast.Dict,
-    table: dict[str, str | _Ref],
-) -> None:
-    """Handle dict literal: parts = {'a': 'ex', 'b': 'ec'} -> composite keys."""
-    for k, v in zip(dict_node.keys, dict_node.values, strict=False):
-        if k is None:
-            continue  # **kwargs unpacking
-        if not isinstance(k, ast.Constant) or not isinstance(k.value, str):
-            continue
-        resolved = try_resolve_string(v)
-        if resolved is not None:
-            table[f"{var_name}[{k.value}]"] = resolved
+def _collect_scope_declarations(body: list[ast.stmt]) -> tuple[set[str], set[str]]:
+    """Collect ``global`` and ``nonlocal`` declarations from a statement body.
 
-
-def _collect_scope_declarations(
-    body: list[ast.stmt],
-) -> tuple[set[str], set[str]]:
-    """Collect global and nonlocal declarations from a function body.
-
-    Walks the immediate body and recurses into control-flow branches
-    (if/for/while/with/try) but does NOT recurse into nested functions.
-    Returns (global_names, nonlocal_names).
+    Recurses into control-flow constructs (if/for/while/with/try) to find
+    declarations nested inside branches. Returns two sets: global names
+    and nonlocal names.
     """
     global_names: set[str] = set()
     nonlocal_names: set[str] = set()
@@ -245,7 +260,12 @@ def _collect_scope_declarations(
 
 
 def _handle_aug_assign(stmt: ast.AugAssign, table: dict[str, str | _Ref]) -> None:
-    """Handle ast.AugAssign: augmented string assignment when x is already tracked."""
+    """Handle ``ast.AugAssign`` for augmented string concatenation.
+
+    Only processes ``+=`` on Name targets where the variable is already
+    tracked as a string in the table. Concatenates the resolved RHS
+    string onto the existing value.
+    """
     if not isinstance(stmt.op, ast.Add):
         return
     if not isinstance(stmt.target, ast.Name):
@@ -260,15 +280,9 @@ def _handle_aug_assign(stmt: ast.AugAssign, table: dict[str, str | _Ref]) -> Non
 
 
 def _handle_self_attr_assign(
-    body: list[ast.stmt],
-    result: dict[str, str],
-    self_name: str,
-    class_name: str,
+    body: list[ast.stmt], result: dict[str, str], self_name: str, class_name: str
 ) -> None:
-    """Walk a method body for self.attr = 'string' assignments.
-
-    Delegates to _ast_symbol_table_class_helpers for the actual walking.
-    """
+    """Walk a method body for ``self.attr = 'string'`` (deferred import)."""
     from skill_scan._ast_symbol_table_class_helpers import _walk_self_attrs
 
     _walk_self_attrs(body, result, self_name, class_name)

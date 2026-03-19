@@ -50,15 +50,17 @@ src/skill_scan/           # Production source code
   _ast_symbol_table_return_helpers.py # Return-value extraction
   _ast_split_detector.py  # Split-evasion detector (detect_split_evasion)
   _ast_split_helpers.py   # Format/%-format resolution helpers
-  _ast_split_resolve.py   # Expression resolution helpers + format_map resolver (285/300 lines)
+  _ast_split_resolve.py   # Expression resolution helpers + format_map resolver (291/300 lines)
   _ast_split_bytes.py     # Bytes-constructor resolution
   _ast_split_chr.py       # chr/ord/int resolution
   _ast_split_reduce.py    # reduce/operator concat resolution
   _ast_split_join_helpers.py # Generator/comprehension join resolution; _collect_int_list_assigns pre-pass
   _ast_split_int_list_helpers.py # Int-list mutation tracking (_SHADOW sentinel, _handle_int_list_stmt, _handle_assign, _handle_extend_call, _extend_tracked)
   _ast_split_map_helpers.py  # map(chr/str/lambda, [...]) resolution for join patterns
+  _ast_split_star_helpers.py # Star-unpack flattening for join arguments (_flatten_starred_list, _expand_starred, _maybe_flatten_starred)
   _ast_kwargs_detector.py # Kwargs unpacking detector (detect_kwargs_unpacking); re-exports from _ast_kwargs_dict_tracker.py
-  _ast_kwargs_dict_tracker.py # Dict-collection pre-pass + .update() tracking (extracted from _ast_kwargs_detector.py)
+  _ast_kwargs_dict_tracker.py # Dict-collection pre-pass + .update() tracking; _build_string_table for dynamic key resolution
+  _ast_symbol_table_dict_helpers.py  # Dict/list literal helpers + dict.pop tracking + replace-chain resolution (extracted from _ast_symbol_table_helpers.py)
   _ast_exfil_detector.py  # Subprocess list-arg + DNS exfil detectors (_detect_subprocess_list_exfil, _detect_dns_exfil)
   _ast_loop_unroller.py   # Static for-loop unrolling pre-pass (collect_loop_assigns)
   decoder.py              # Facade: EncodedPayload, extract/decode
@@ -71,6 +73,11 @@ src/skill_scan/           # Production source code
 tests/
   unit/
     test_ast_split_case_methods.py  # Case-method resolver tests (extracted from test_ast_split_detector.py)
+    test_ast_split_int_list_helpers.py  # Int-list concat, extend-var, class-body pre-pass tests (PLAN-032 Part A)
+    test_ast_kwargs_dict_tracker.py     # Dynamic key resolution tests (PLAN-032 Part B)
+    test_ast_split_star_helpers.py      # Star-unpack flattening tests (PLAN-032 Part C)
+    test_part_d_classvar_dictpop.py     # Class-body scope, classvar assembly, dict.pop tests (PLAN-032 Part D)
+    test_hex_escape_resolution.py       # Hex escape .replace() chain + fromhex(var) tests (PLAN-032 Part E)
     ...                             # Other tests mirror src/ structure
 scripts/                  # Quality & analysis scripts
 .agent/                   # Plans, standards, workflow
@@ -88,7 +95,13 @@ Key patterns and invariants. For detailed module-level docs, see `.agent/ARCHITE
 - Tree-level detectors needing the full symbol table (`detect_split_evasion`, `detect_kwargs_unpacking`) go in `analyze_python()` directly, not in `_DETECTORS`; `_detect_custom_rot13` is walked separately over `ast.FunctionDef | ast.AsyncFunctionDef` nodes (requires full function body, not per-node dispatch)
 - `_NAME_RULE` / `_DECORATOR_RULE` — lookup tables mapping dangerous names to `(rule_id, severity, prefix)`; use when one detector emits different rule IDs per name
 - `_DANGEROUS_KWARGS` — table-driven config for kwargs detector; extend by adding entries, no code changes needed
-- `_collect_int_list_assigns(tree)` in `_ast_split_join_helpers.py` — parallel pre-pass collecting `Name = [int, ...]` assignments AND tracking `+=`/`.extend()` mutations; built in `analyze_python()` and threaded to `detect_split_evasion` via `int_list_table` kwarg; mutation helpers live in `_ast_split_int_list_helpers.py`
+- `_collect_int_list_assigns(tree)` in `_ast_split_join_helpers.py` — parallel pre-pass collecting `Name = [int, ...]` assignments AND tracking `+=`/`.extend()` mutations; built in `analyze_python()` and threaded to `detect_split_evasion` via `int_list_table` kwarg; mutation helpers live in `_ast_split_int_list_helpers.py`; also walks ClassDef body directly (class-level int-lists tracked under `ClassName.varname` key)
+- `_handle_string_list_literal` in `_ast_symbol_table_dict_helpers.py` — tracks `name = ['ev', 'al']` assignments as indexed elements `name[0]`, `name[1]`, etc. and `name.__len__` in the symbol table; enables `parts[0] + parts[1]` BinOp resolution and star-unpack flattening
+- `_handle_dict_literal` in `_ast_symbol_table_dict_helpers.py` — tracks `name = {'key': 'val'}` assignments as composite keys `name[key]` in the symbol table; enables dict.pop() resolution
+- `_handle_dict_pop` in `_ast_symbol_table_dict_helpers.py` — resolves `target = d.pop('key')` by looking up `d[key]` in the symbol table composite key entries; called first in `_process_stmt` before `_handle_assign`
+- `_resolve_replace_chain_simple` in `_ast_symbol_table_dict_helpers.py` — resolves chained `.replace(old, new)` on a constant or tracked variable in the symbol table builder; used to track hex strings with escape-sequence separators
+- `_maybe_flatten_starred` in `_ast_split_star_helpers.py` — expands `ast.Starred` elements in join argument lists by looking up `name.__len__` and `name[i]` entries in the symbol table; called from `_resolve_join_call` before `_resolve_join_elements`
+- `_build_string_table(body)` in `_ast_kwargs_dict_tracker.py` — local pre-pass that tracks `name = 'literal'` and `name = 'a' + 'b'` string assignments within a body; passed to `_extract_dict_literal` for Name key resolution in kwargs dict tracking
 - `_CASE_METHODS` frozenset + `_is_case_method` / `_resolve_case_method_chain` in `_ast_split_resolve.py` — resolves `.lower()`, `.upper()`, `.title()`, `.swapcase()`, `.capitalize()`, `.casefold()` chains; registered in `_RESOLVERS` before `_is_call` (follows `_is_replace_call` / `_resolve_replace_chain` pattern)
 - `_SUBPROCESS_CALLS` / `_NETWORK_TOOLS` in `_ast_exfil_detector.py` — frozensets defining which subprocess variants and tool names trigger EXFIL-008; extend by adding entries, no code changes needed
 - `_DNS_EXFIL_TARGETS` in `_ast_exfil_detector.py` — frozenset defining which calls trigger EXFIL-006 DNS exfil detection (`socket.getaddrinfo`); non-literal first arg triggers finding; extend by adding entries
@@ -117,18 +130,26 @@ Key patterns and invariants. For detailed module-level docs, see `.agent/ARCHITE
 - `_resolve_slice_expr` rejects `step == 0` (invalid) but permits `step == -1` (string reversal `[::-1]`) — step guard is `step is not None and step == 0`, not `step <= 0`
 - `_detect_custom_rot13` requires BOTH a lowercase branch (`'a'`/`'z'` sentinels) AND an uppercase branch (`'A'`/`'Z'` sentinels) inside the function body, plus `% 26` arithmetic with `chr`/`ord` calls — all three conditions required to minimize false positives on general chr/ord code
 - `_multiline_pi_findings` in `engine.py` — sliding window of 3, 4, 5 consecutive lines joined with space; applies only `category == 'prompt-injection'` rules; deduplicates against `existing` findings by `(rule_id, any_line_in_window)`; findings attributed to first line of window; called from `_line_phase_findings`
-- `_build_bytes_table` pre-pass in `_ast_split_bytes.py` — tracks `name = bytes.fromhex(...)` variable assignments for use in split-evasion; inline `(bytes.fromhex('XX') + bytes.fromhex('YY')).decode()` is resolved without symbol table (symbol_table is `dict[str, str]`, cannot hold bytes objects)
+- `_build_bytes_table` pre-pass in `_ast_split_bytes.py` — tracks `name = bytes.fromhex(...)` variable assignments for use in split-evasion; inline `(bytes.fromhex('XX') + bytes.fromhex('YY')).decode()` is resolved without symbol table (symbol_table is `dict[str, str]`, cannot hold bytes objects); `resolve_fromhex_concat` accepts optional `symbol_table` kwarg so `bytes.fromhex(var)` resolves `var` via symbol table lookup
+- `_build_scope_map` in `_ast_split_detector.py` — maps class body statements (non-method) to `ClassName` scope in addition to methods; class-level join/concat nodes now get the correct scope for symbol table lookups (`ClassName.var` keys)
+- `_handle_assign` in `_ast_symbol_table_helpers.py` resolves `BinOp(Add)` of two tracked `Name` references eagerly before storing — class-level `func_name = prefix + suffix` resolves to the concatenated string without requiring a second `_resolve_indirections` pass
+- `_handle_string_list_literal` and `_handle_dict_literal` extracted from `_ast_symbol_table_helpers.py` to `_ast_symbol_table_dict_helpers.py` — import them from the dict-helpers module, not from the helpers module directly
+- `_resolve_binop_concat` in `_ast_split_int_list_helpers.py` — resolves `codes = part1 + part2` where both operands are tracked int-lists in the pre-pass result dict; called from `_handle_assign` when RHS is `BinOp(Add)` of two `Name` nodes
+- `_extend_with_tracked_var` in `_ast_split_int_list_helpers.py` — extends a tracked int-list with the contents of another tracked variable; called from `_extend_tracked` when the extension value is an `ast.Name`; shadows target if source is untracked
 - OBFS-001 TOML entry has `patterns = []` — detection is AST-only via `_detect_rot13_codec`, `_detect_rot13_maketrans`, and `_detect_custom_rot13`; do not add regex patterns (AST handles this more accurately)
 
 **Known debt**:
 - PEP 448 spread dicts (`{**base, ...}`) in kwargs are conservatively treated as unresolvable (no tracking planned)
-- `_ast_split_resolve.py` is at 285/300 lines — limited room; future resolver additions may require splitting
-- `_ast_split_helpers.py` is at 297/300 lines — near limit; any addition requires offsetting removal first
+- `_ast_split_resolve.py` is at 291/300 lines — limited room; future resolver additions may require splitting
+- `_ast_split_helpers.py` is at 299/300 lines — effectively frozen; any addition requires offsetting removal first
 - `_ast_helpers.py` is at 300/300 lines — no room for additions without removing lines first
 - `_ast_rot13.py` is at 300/300 lines — no room for additions without removing lines first
-- `_ast_split_join_helpers.py` is at 298/300 lines — 2 lines remaining
+- `_ast_split_join_helpers.py` is at 290/300 lines — 10 lines remaining (compacted during PLAN-032 Part C)
+- `_ast_symbol_table_helpers.py` is at 284/300 lines — 16 lines remaining (dict helpers extracted to `_ast_symbol_table_dict_helpers.py`)
+- `_ast_split_star_helpers.py` is at ~80/300 lines — ample room
+- `_ast_symbol_table_dict_helpers.py` is at ~146/300 lines — ample room
 - `collect_loop_assigns` supports only inline string-literal lists and local list-literal name references as iter source — tracked list variables from symbol_table are NOT supported (symbol_table is `dict[str, str]`, cannot hold lists)
-- `resolve_fromhex_concat` handles only inline `(bytes.fromhex('XX') + bytes.fromhex('YY')).decode()` — tracked-variable fromhex patterns require a separate bytes-tracking pre-pass (deferred)
+- `_maybe_flatten_starred` in `_ast_split_star_helpers.py` only expands `ast.Starred` where the starred value is a plain `ast.Name` — starred expressions (computed, attribute, subscript) are not supported
 
 ## Tips
 

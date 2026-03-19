@@ -24,19 +24,32 @@
       ]
     },
     "classvar_assembly.py": {
-      "detected": false,
-      "finding_count": 0,
-      "findings": []
-    },
-    "conditional_assembly.py": {
       "detected": true,
       "finding_count": 1,
       "findings": [
         {
           "rule_id": "EXEC-002",
           "severity": "critical",
+          "matched_text": "split variable evasion building 'eval'",
+          "line": 5
+        }
+      ]
+    },
+    "conditional_assembly.py": {
+      "detected": true,
+      "finding_count": 2,
+      "findings": [
+        {
+          "rule_id": "EXEC-002",
+          "severity": "critical",
           "matched_text": "split variable evasion building 'exec'",
           "line": 10
+        },
+        {
+          "rule_id": "EXEC-002",
+          "severity": "critical",
+          "matched_text": "split evasion: dynamic dispatch via introspection subscript to 'exec'",
+          "line": 11
         }
       ]
     },
@@ -53,9 +66,16 @@
       ]
     },
     "dict_pop_evasion.py": {
-      "detected": false,
-      "finding_count": 0,
-      "findings": []
+      "detected": true,
+      "finding_count": 1,
+      "findings": [
+        {
+          "rule_id": "EXEC-002",
+          "severity": "critical",
+          "matched_text": "split evasion: dynamic dispatch via introspection subscript to 'eval'",
+          "line": 4
+        }
+      ]
     },
     "exec_via_type.py": {
       "detected": true,
@@ -486,9 +506,16 @@
       ]
     },
     "decoder_hex_spaced.py": {
-      "detected": false,
-      "finding_count": 0,
-      "findings": []
+      "detected": true,
+      "finding_count": 1,
+      "findings": [
+        {
+          "rule_id": "EXEC-002",
+          "severity": "critical",
+          "matched_text": "split variable evasion building 'eval'",
+          "line": 5
+        }
+      ]
     },
     "decoder_mixed_encoding.py": {
       "detected": false,
@@ -862,9 +889,16 @@
       "findings": []
     },
     "kwargs_dynamic_key.py": {
-      "detected": false,
-      "finding_count": 0,
-      "findings": []
+      "detected": true,
+      "finding_count": 1,
+      "findings": [
+        {
+          "rule_id": "EXEC-002",
+          "severity": "critical",
+          "matched_text": "subprocess.run(**{'shell': True})",
+          "line": 5
+        }
+      ]
     },
     "kwargs_method_chain.py": {
       "detected": true,
@@ -906,9 +940,16 @@
       "findings": []
     },
     "split_class_level.py": {
-      "detected": false,
-      "finding_count": 0,
-      "findings": []
+      "detected": true,
+      "finding_count": 1,
+      "findings": [
+        {
+          "rule_id": "EXEC-002",
+          "severity": "critical",
+          "matched_text": "split variable evasion building 'eval'",
+          "line": 4
+        }
+      ]
     },
     "split_format_keywords.py": {
       "detected": true,
@@ -938,14 +979,28 @@
       "findings": []
     },
     "split_intlist_concat.py": {
-      "detected": false,
-      "finding_count": 0,
-      "findings": []
+      "detected": true,
+      "finding_count": 1,
+      "findings": [
+        {
+          "rule_id": "EXEC-002",
+          "severity": "critical",
+          "matched_text": "split variable evasion building 'eval'",
+          "line": 5
+        }
+      ]
     },
     "split_intlist_extend_var.py": {
-      "detected": false,
-      "finding_count": 0,
-      "findings": []
+      "detected": true,
+      "finding_count": 1,
+      "findings": [
+        {
+          "rule_id": "EXEC-002",
+          "severity": "critical",
+          "matched_text": "split variable evasion building 'eval'",
+          "line": 5
+        }
+      ]
     },
     "split_join_set.py": {
       "detected": false,
@@ -953,14 +1008,28 @@
       "findings": []
     },
     "split_join_star_unpack.py": {
-      "detected": false,
-      "finding_count": 0,
-      "findings": []
+      "detected": true,
+      "finding_count": 1,
+      "findings": [
+        {
+          "rule_id": "EXEC-002",
+          "severity": "critical",
+          "matched_text": "split variable evasion building 'eval'",
+          "line": 4
+        }
+      ]
     },
     "split_list_index.py": {
-      "detected": false,
-      "finding_count": 0,
-      "findings": []
+      "detected": true,
+      "finding_count": 1,
+      "findings": [
+        {
+          "rule_id": "EXEC-002",
+          "severity": "critical",
+          "matched_text": "split variable evasion building 'eval'",
+          "line": 3
+        }
+      ]
     },
     "split_map_lambda.py": {
       "detected": true,

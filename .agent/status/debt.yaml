@@ -1,6 +1,7 @@
 # .agent/status/debt.yaml
 # Entries are removed when resolved. Git history tracks removals.
-# Last updated: 2026-03-18
+# Last updated: 2026-03-19
+# Resolved by PLAN-032: DEBT-028-INTLIST-CLASS-BODY, DEBT-027-INTLIST-CONCAT, DEBT-027-INTLIST-EXTEND-VAR
 # Resolved by PLAN-019: lone surrogates, null bytes, OBFS-001 catalog, str.format/%-format evasion
 # Resolved by PLAN-020: FSTRING-CONV, GENERATOR-JOIN, STRING-MULT, PERCENT-OVERPROVISIONED, PERCENT-MIXED-SPECIFIERS, CONTAINERS (dict-only; list indices remain)
 # Resolved by PR-034 review: DEBT-020-RESUB-BACKSLASH (lambda replacement), DEBT-020-UNBOUNDED-MULT (_MAX_REPEAT=1000 cap)
@@ -45,25 +46,6 @@
   blocker: "Requires resolvers to return (value, label) tuples or track whether any leaf resolution used call-return; changes the resolver signature contract across all _RESOLVERS entries."
   resolution: "Have resolvers return (value, source_label) tuples instead of bare strings. Update _RESOLVERS type alias and all callers. Alternatively, add a thread-local or context flag that resolve_call_return sets when it contributes to a resolution."
 
-- id: DEBT-028-INTLIST-CLASS-BODY
-  description: "_collect_int_list_assigns does not walk class-level statements (only methods); class C: codes = [ints]; codes += [more] is untracked"
-  type: effectiveness
-  severity: low
-  plan: none
-  files:
-    - src/skill_scan/_ast_split_join_helpers.py:30-37
-  blocker: "Class-level scope prefix differs from method scope (C vs C.method); adding class body walk requires scope naming decision and testing."
-  resolution: "In _collect_int_list_assigns, add class body walk with scope=class_name for direct class-level statements."
-
-- id: DEBT-027-INTLIST-CONCAT
-  description: "codes = a + b where a and b are tracked int-lists not resolved by _collect_int_list_assigns; requires cross-variable resolution in the pre-pass"
-  type: effectiveness
-  severity: low
-  plan: none
-  files:
-    - src/skill_scan/_ast_split_join_helpers.py
-  blocker: "Requires looking up both operands in the int_list_table during assignment processing — adds cross-variable dependency tracking to the pre-pass."
-  resolution: "In _collect_int_lists_from_body, handle Assign where value is BinOp(Add) with both operands as Name nodes already in the table — concatenate their tracked lists."
 
 - id: DEBT-028-INTLIST-GLOBAL-NONLOCAL
   description: "_extend_tracked writes to scope-qualified key; global/nonlocal declarations not followed, so mutations inside functions with global/nonlocal codes never update the actual binding"
@@ -106,12 +88,22 @@
   blocker: "Mitigated by first-element-only check (only the executable name matters), but 'nc' is ambiguous — could be netcat or an unrelated tool. Fixing requires context-aware disambiguation or user-configurable allowlists."
   resolution: "Consider requiring 'nc' to appear with network-related flags (-e, -l, -p) before flagging, or add a configurable allowlist for known-safe tool names."
 
-- id: DEBT-027-INTLIST-EXTEND-VAR
-  description: "codes.extend(a) where a is a tracked int-list variable is silently ignored; only literal list/tuple args are handled by _handle_extend_call"
-  type: effectiveness
-  severity: low
-  plan: none
+- id: DEBT-032-KWARGS-CLASS-METHOD-SCOPE
+  description: "_collect_dict_assigns uses class name as scope for all methods; two methods in the same class with same-named local dict collide (last-write-wins)"
+  type: security
+  severity: medium
+  plan: PLAN-030
   files:
-    - src/skill_scan/_ast_split_int_list_helpers.py:54-62
-  blocker: "Requires looking up the argument Name in the int_list_table during .extend() processing — adds cross-variable dependency tracking to the pre-pass (same as DEBT-027-INTLIST-CONCAT)."
-  resolution: "In _handle_extend_call, when the arg is ast.Name, look it up in result table and concatenate if found and not _SHADOW."
+    - src/skill_scan/_ast_kwargs_dict_tracker.py:28
+  blocker: "Pre-existing from PLAN-030. PLAN-032 expanded dict-assigns usage but did not introduce or worsen this. Fix requires changing scope to ClassName.method but may affect all downstream lookups."
+  resolution: "Use f'{node.name}.{stmt.name}' as scope for class method bodies in _collect_dict_assigns. Update _collect_from_body scope references accordingly."
+
+- id: DEBT-032-INTLIST-CONCAT-UNBOUNDED
+  description: "_resolve_binop_concat concatenates tracked int-lists with no size cap; crafted skill with large lists could allocate excessive memory in pre-pass"
+  type: technical
+  severity: low
+  plan: PLAN-032
+  files:
+    - src/skill_scan/_ast_split_int_list_helpers.py:56-66
+  blocker: "Mitigated in practice by AST literal size, but no explicit guard. Low priority since attacker-controlled list size requires proportionally large source files."
+  resolution: "Cap concat result at ~2048 elements, returning _SHADOW above the cap, matching the defensive posture of _MAX_REPEAT=1000 elsewhere."

@@ -19,20 +19,10 @@ from __future__ import annotations
 
 import ast
 
-from skill_scan._ast_split_helpers import (
-    _resolve_expr_list,
-    _resolve_join_elements,
-    _scoped_lookup,
-)
-from skill_scan._ast_split_int_list_helpers import (
-    _SHADOW,
-    _handle_int_list_stmt,
-)
-from skill_scan._ast_split_map_helpers import (
-    _resolve_call_fn_name,
-    _resolve_map_chr,
-    _resolve_map_join,
-)
+from skill_scan._ast_split_helpers import _resolve_expr_list, _resolve_join_elements, _scoped_lookup
+from skill_scan._ast_split_int_list_helpers import _SHADOW, _handle_int_list_stmt
+from skill_scan._ast_split_map_helpers import _resolve_call_fn_name, _resolve_map_chr, _resolve_map_join
+from skill_scan._ast_split_star_helpers import _maybe_flatten_starred
 
 
 def _collect_int_list_assigns(tree: ast.Module) -> dict[str, list[int]]:
@@ -43,6 +33,7 @@ def _collect_int_list_assigns(tree: ast.Module) -> dict[str, list[int]]:
         if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
             _collect_int_lists_from_body(node.body, node.name, result)
         elif isinstance(node, ast.ClassDef):
+            _collect_int_lists_from_body(node.body, node.name, result)
             for stmt in node.body:
                 if isinstance(stmt, ast.FunctionDef | ast.AsyncFunctionDef):
                     _collect_int_lists_from_body(stmt.body, f"{node.name}.{stmt.name}", result)
@@ -273,7 +264,8 @@ def _resolve_join_call(
     sep = str(node.func.value.value)
     arg = node.args[0]
     if isinstance(arg, ast.List | ast.Tuple):
-        return _resolve_join_elements(arg.elts, sep, symbol_table, scope)
+        elts = _maybe_flatten_starred(arg.elts, symbol_table, scope)
+        return _resolve_join_elements(elts, sep, symbol_table, scope)
     if isinstance(arg, ast.GeneratorExp | ast.ListComp):
         return _resolve_comprehension_join(
             arg,

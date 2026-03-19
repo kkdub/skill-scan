@@ -2,11 +2,11 @@
   "run_date": "2026-03-17",
   "target": "skill-scan EXFIL-*/OBFS-*/decoder rules",
   "total": 20,
-  "detected": 4,
+  "detected": 5,
   "partial_evasion": 9,
-  "full_evasion": 7,
-  "evasion_rate_full_pct": 35,
-  "evasion_rate_effective_pct": 80,
+  "full_evasion": 6,
+  "evasion_rate_full_pct": 30,
+  "evasion_rate_effective_pct": 75,
   "notes": "exfil_env_indirect.py 'detected' only because comment text matched EXFIL-004; actual os.environ.get loop technique evaded as intended",
   "per_file": {
     "exfil_aliased.py": {
@@ -138,9 +138,9 @@
     "decoder_hex_spaced.py": {
       "technique": "Hex with tab/newline separators instead of spaces",
       "target_rules": ["decoder-hex-space"],
-      "detected_by": [],
-      "status": "full_evasion",
-      "notes": "Hex digits are only 4 chars per fromhex call (too short). Tab/newline separators in string literal are not real hex. globals()[name] not caught."
+      "detected_by": ["EXEC-002"],
+      "status": "detected",
+      "notes": "PLAN-032 Part E: Symbol table tracks .replace() chain on hex string variable, bytes.fromhex(tracked_var) resolves via symbol table lookup, globals()[name] caught by split-evasion detector."
     },
     "decoder_mixed_encoding.py": {
       "technique": "Combine hex and base64 for different parts of 'eval'",
@@ -169,10 +169,10 @@
     },
     "decoder_bypass": {
       "total": 4,
-      "full_evasion": 2,
+      "full_evasion": 1,
       "partial_evasion": 2,
-      "detected": 0,
-      "evasion_files": ["decoder_hex_spaced.py", "decoder_mixed_encoding.py"],
+      "detected": 1,
+      "evasion_files": ["decoder_mixed_encoding.py"],
       "partial_files": ["decoder_short_b64.py", "decoder_data_uri.py"]
     }
   }
