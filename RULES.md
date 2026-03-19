@@ -107,7 +107,7 @@ To add a custom rule, copy a section from [template.toml](src/skill_scan/rules/t
 
 | Rule ID | Severity | Description | Confidence |
 |---------|----------|-------------|------------|
-| OBFS-001 | high | ROT13 obfuscation detected via AST analysis | stable |
+| OBFS-001 | high | ROT13 obfuscation -- codecs.encode/decode with rot_13, str.maketrans rotation, or custom chr/ord/%26 rotation function | stable |
 | OBFS-002 | medium | URL-encoded payload -- three or more consecutive percent-encoded bytes | stable |
 | OBFS-003 | high | Double URL-encoding -- percent-encoded percent sign followed by hex pair (%25XX) | stable |
 | OBFS-004 | medium | Unnecessarily encoded unreserved character -- RFC 3986 alphanumeric encoded as %XX | stable |
