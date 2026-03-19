@@ -38,7 +38,7 @@ class TestClassVarBinOpAdd:
         assert result["Config.suffix"] == "al"
 
     def test_class_binop_add_three_parts(self) -> None:
-        """Three-part concatenation: a + b + c resolves."""
+        """Two-part concatenation: a + b resolves."""
         code = "class Evasion:\n    a = 'ex'\n    b = 'ec'\n    c = a + b\n"
         result = build_symbol_table(_PARSE(code))
         assert result["Evasion.c"] == "exec"
@@ -158,11 +158,20 @@ class TestCorpusDetection:
 
     def test_classvar_assembly_corpus_detected(self) -> None:
         """corpus classvar_assembly.py should produce EXEC findings."""
+        import pytest
+
         from skill_scan.ast_analyzer import analyze_python
 
-        corpus_path = Path("corpus/red-team/2026-03-17-full/exec-evasion/classvar_assembly.py")
+        corpus_path = (
+            Path(__file__).resolve().parent.parent
+            / "corpus"
+            / "red-team"
+            / "2026-03-17-full"
+            / "exec-evasion"
+            / "classvar_assembly.py"
+        )
         if not corpus_path.exists():
-            return
+            pytest.skip(f"corpus file not found: {corpus_path}")
         content = corpus_path.read_text()
         findings = analyze_python(content, str(corpus_path))
         exec_findings = [f for f in findings if f.rule_id.startswith("EXEC-")]
@@ -170,11 +179,20 @@ class TestCorpusDetection:
 
     def test_dict_pop_corpus_detected(self) -> None:
         """corpus dict_pop_evasion.py should produce EXEC findings."""
+        import pytest
+
         from skill_scan.ast_analyzer import analyze_python
 
-        corpus_path = Path("corpus/red-team/2026-03-17-full/exec-evasion/dict_pop_evasion.py")
+        corpus_path = (
+            Path(__file__).resolve().parent.parent
+            / "corpus"
+            / "red-team"
+            / "2026-03-17-full"
+            / "exec-evasion"
+            / "dict_pop_evasion.py"
+        )
         if not corpus_path.exists():
-            return
+            pytest.skip(f"corpus file not found: {corpus_path}")
         content = corpus_path.read_text()
         findings = analyze_python(content, str(corpus_path))
         exec_findings = [f for f in findings if f.rule_id.startswith("EXEC-")]

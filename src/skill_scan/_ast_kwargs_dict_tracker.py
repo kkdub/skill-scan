@@ -50,18 +50,41 @@ def _build_string_table(body: list[ast.stmt]) -> dict[str, str]:
     return table
 
 
+def _update_string_table(stmt: ast.Assign, string_table: dict[str, str]) -> None:
+    """Update string_table incrementally from a single-target Assign."""
+    target = stmt.targets[0]
+    if not isinstance(target, ast.Name):
+        return
+    if isinstance(stmt.value, ast.Constant) and isinstance(stmt.value.value, str):
+        string_table[target.id] = stmt.value.value
+    elif isinstance(stmt.value, ast.BinOp) and isinstance(stmt.value.op, ast.Add):
+        resolved = _resolve_string_concat(stmt.value)
+        if resolved is not None:
+            string_table[target.id] = resolved
+        else:
+            string_table.pop(target.id, None)
+    else:
+        string_table.pop(target.id, None)
+
+
 def _collect_from_body(
     body: list[ast.stmt],
     scope: str,
     result: dict[str, dict[str, object]],
 ) -> None:
-    """Collect dict assignments from a body, keyed with *scope* prefix."""
-    string_table = _build_string_table(body)
+    """Collect dict assignments from a body, keyed with *scope* prefix.
+
+    Builds the string table incrementally so that only prior assignments
+    are visible — prevents false positives from forward references or
+    overwritten variables.
+    """
+    string_table: dict[str, str] = {}
     for stmt in body:
         if isinstance(stmt, ast.AugAssign) and isinstance(stmt.op, ast.BitOr):
             _track_aug_union(stmt, result, scope)
         elif isinstance(stmt, ast.Assign) and len(stmt.targets) == 1:
             _track_assign(stmt.targets[0], stmt.value, result, scope, string_table=string_table)
+            _update_string_table(stmt, string_table)
         elif isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Call):
             _handle_update_call(stmt.value, result, scope)
 

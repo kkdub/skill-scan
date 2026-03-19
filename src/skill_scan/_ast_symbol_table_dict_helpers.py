@@ -58,7 +58,7 @@ def _extract_dict_pop_parts(stmt: ast.Assign) -> tuple[str, str, str] | None:
         return None
     if not isinstance(func.value, ast.Name):
         return None
-    if not call.args or not isinstance(call.args[0], ast.Constant):
+    if len(call.args) not in (1, 2) or not isinstance(call.args[0], ast.Constant):
         return None
     if not isinstance(call.args[0].value, str):
         return None
@@ -78,9 +78,13 @@ def _handle_dict_pop(
     if parts is None:
         return False
     target_name, dict_name, key = parts
-    val = table.get(f"{dict_name}[{key}]")
+    composite_key = f"{dict_name}[{key}]"
+    val = table.get(composite_key)
     if isinstance(val, str):
         table[target_name] = val
+    else:
+        # Store as _Ref so _resolve_indirections can resolve from parent scope
+        table[target_name] = _Ref(composite_key)
     return True
 
 

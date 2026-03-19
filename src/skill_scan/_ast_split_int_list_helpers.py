@@ -16,6 +16,9 @@ import ast
 _SHADOW: list[int] = []
 """Identity sentinel -- never mutate.  Used as shadow marker in int-list table."""
 
+_MAX_INT_LIST_SIZE = 10000
+"""Cap combined int-list size to prevent allocation spikes on untrusted input."""
+
 
 def _extract_int_list(elts: list[ast.expr]) -> list[int] | None:
     """Extract a list of int constants, or None if any element is non-int."""
@@ -62,6 +65,8 @@ def _resolve_binop_concat(node: ast.BinOp, scope: str, result: dict[str, list[in
     left = result.get(left_key)
     right = result.get(right_key)
     if left is None or left is _SHADOW or right is None or right is _SHADOW:
+        return _SHADOW
+    if len(left) + len(right) > _MAX_INT_LIST_SIZE:
         return _SHADOW
     return left + right
 
