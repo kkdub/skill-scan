@@ -1,6 +1,6 @@
 """Private class-scope helpers for the symbol table builder.
 
-Extracted from _ast_symbol_table_helpers.py to stay under SIZE-001 and
+Extracted from _ast_symbol_table_assignments.py to stay under SIZE-001 and
 maintainability thresholds. Handles self.attr = 'val' assignment tracking
 inside class method bodies.
 """
