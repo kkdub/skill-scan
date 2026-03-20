@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import ast
 
-from skill_scan._ast_helpers import try_resolve_string
+from skill_scan._ast_imports import try_resolve_string
 from skill_scan._ast_symbol_table import _Ref
 
 

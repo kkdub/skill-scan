@@ -19,10 +19,11 @@ from __future__ import annotations
 
 import ast
 
-from skill_scan._ast_split_helpers import _resolve_expr_list, _resolve_join_elements, _scoped_lookup
-from skill_scan._ast_split_int_list_helpers import _SHADOW, _handle_int_list_stmt
-from skill_scan._ast_split_map_helpers import _resolve_call_fn_name, _resolve_map_chr, _resolve_map_join
-from skill_scan._ast_split_star_helpers import _maybe_flatten_starred
+from skill_scan._ast_split_format import _resolve_expr_list, _resolve_join_elements, _scoped_lookup
+from skill_scan._ast_split_int_list_tracker import _SHADOW, _handle_int_list_stmt
+from skill_scan._ast_split_map_resolver import _resolve_call_fn_name, _resolve_map_chr, _resolve_map_join
+from skill_scan._ast_split_star_unpack import _maybe_flatten_starred
+from skill_scan._ast_symbol_table_returns import _sub_bodies
 
 
 def _collect_int_list_assigns(tree: ast.Module) -> dict[str, list[int]]:
@@ -46,16 +47,6 @@ def _collect_int_lists_from_body(body: list[ast.stmt], scope: str, result: dict[
         _handle_int_list_stmt(stmt, scope, result)
         for child_body in _sub_bodies(stmt):
             _collect_int_lists_from_body(child_body, scope, result)
-
-
-def _sub_bodies(stmt: ast.stmt) -> list[list[ast.stmt]]:
-    """Return child body lists from control-flow nodes (not function/class defs)."""
-    if not isinstance(stmt, ast.If | ast.For | ast.While | ast.AsyncFor | ast.With | ast.AsyncWith | ast.Try):
-        return []
-    bodies = [getattr(stmt, a) for a in ("body", "orelse", "finalbody") if hasattr(stmt, a)]
-    for handler in getattr(stmt, "handlers", ()):
-        bodies.append(handler.body)
-    return bodies
 
 
 def _resolve_comprehension_join(

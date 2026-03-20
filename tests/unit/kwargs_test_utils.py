@@ -6,7 +6,7 @@ import ast
 import textwrap
 
 from skill_scan._ast_kwargs_detector import detect_kwargs_unpacking
-from skill_scan._ast_helpers import build_alias_map
+from skill_scan._ast_imports import build_alias_map
 from skill_scan._ast_symbol_table import build_symbol_table
 from skill_scan.ast_analyzer import analyze_python
 from skill_scan.models import Finding

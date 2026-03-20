@@ -40,7 +40,7 @@ class EncodedPayload:
 #
 # NOTE: must come after the constants and EncodedPayload above because
 # _decoder_helpers.py reads MIN_ENCODED_LENGTH from this module at import time.
-from skill_scan._decoder_helpers import (  # noqa: E402
+from skill_scan._decoder_base64_hex import (  # noqa: E402
     _BASE64_RE as _BASE64_RE,
     _HB as _HB,
     _HEX_BLOCK_RE as _HEX_BLOCK_RE,

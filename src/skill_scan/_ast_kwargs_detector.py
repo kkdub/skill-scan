@@ -12,7 +12,7 @@ from __future__ import annotations
 import ast
 
 from skill_scan._ast_detectors import _make_finding
-from skill_scan._ast_helpers import get_call_name
+from skill_scan._ast_imports import get_call_name
 from skill_scan._ast_kwargs_dict_tracker import (
     _UNRESOLVABLE,
     _collect_dict_assigns,

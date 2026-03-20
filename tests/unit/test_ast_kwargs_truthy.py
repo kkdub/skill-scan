@@ -16,7 +16,7 @@ from skill_scan._ast_kwargs_detector import (
 )
 from skill_scan.models import Severity
 
-from tests.unit.kwargs_test_helpers import detect as _detect, detect_full as _detect_full
+from tests.unit.kwargs_test_utils import detect as _detect, detect_full as _detect_full
 
 
 class TestIntegerTruthyMatch:

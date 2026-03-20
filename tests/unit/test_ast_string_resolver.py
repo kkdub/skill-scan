@@ -1,14 +1,13 @@
-"""Tests for _ast_join_helpers.py -- extracted join-resolution helpers.
+"""Tests for _ast_string_resolver.py join-resolution helpers.
 
-Verifies that the extraction preserved all behavior and that
-re-exports from _ast_helpers still work.
+Verifies behavior and that re-exports from _ast_imports still work.
 """
 
 from __future__ import annotations
 
 import ast
 
-from skill_scan._ast_join_helpers import (
+from skill_scan._ast_string_resolver import (
     _is_chr_of_target,
     _resolve_int_list_to_chars,
     _resolve_join_listcomp,
@@ -140,7 +139,7 @@ class TestResolveJoinMapChr:
 
 class TestReExportsFromAstHelpers:
     def test_imports_from_ast_helpers(self) -> None:
-        from skill_scan._ast_helpers import (
+        from skill_scan._ast_imports import (
             _is_chr_of_target as reexported_is_chr,
             _resolve_int_list_to_chars as reexported_int_list,
             _resolve_join_listcomp as reexported_listcomp,

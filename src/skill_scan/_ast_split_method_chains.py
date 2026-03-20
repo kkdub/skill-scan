@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import ast
 
-from skill_scan._ast_split_helpers import _scoped_lookup
+from skill_scan._ast_split_format import _scoped_lookup
 from skill_scan._ast_split_resolve import (
     resolve_binop_chain,
     resolve_call,

@@ -1,6 +1,7 @@
 # .agent/status/debt.yaml
 # Entries are removed when resolved. Git history tracks removals.
 # Last updated: 2026-03-19
+# Resolved by PLAN-033 Part A: format_map extracted to _ast_split_format_map.py (was SPLIT-RESOLVE-AT-LIMIT)
 # Resolved by PLAN-032: DEBT-028-INTLIST-CLASS-BODY, DEBT-027-INTLIST-CONCAT, DEBT-027-INTLIST-EXTEND-VAR
 # Resolved by PLAN-019: lone surrogates, null bytes, OBFS-001 catalog, str.format/%-format evasion
 # Resolved by PLAN-020: FSTRING-CONV, GENERATOR-JOIN, STRING-MULT, PERCENT-OVERPROVISIONED, PERCENT-MIXED-SPECIFIERS, CONTAINERS (dict-only; list indices remain)
@@ -53,7 +54,7 @@
   severity: low
   plan: none
   files:
-    - src/skill_scan/_ast_split_int_list_helpers.py:65-69
+    - src/skill_scan/_ast_split_int_list_tracker.py:65-69
   blocker: "Requires scope chain tracking to resolve global/nonlocal declarations to their target scope key before writing."
   resolution: "In _extend_tracked, accept a scope_declarations parameter (or the full scope chain); when the name has a global/nonlocal binding, resolve the key to the target scope before lookup/write."
 
@@ -63,20 +64,10 @@
   severity: low
   plan: none
   files:
-    - src/skill_scan/_ast_split_join_helpers.py
-    - src/skill_scan/_ast_split_int_list_helpers.py
+    - src/skill_scan/_ast_split_comprehension.py
+    - src/skill_scan/_ast_split_int_list_tracker.py
   blocker: "Requires branch-aware traversal (snapshot-and-merge or shadow-on-branch) to avoid combining mutations from mutually exclusive paths; significant complexity for the pre-pass collector."
   resolution: "Snapshot the int_list_table before each branch, walk the branch, then merge results conservatively (shadow any key that differs between branches)."
-
-- id: DEBT-029-SPLIT-RESOLVE-AT-LIMIT
-  description: "_ast_split_resolve.py is at exactly 300/300 line limit after adding case-method resolver; any future addition requires file split"
-  type: technical
-  severity: low
-  plan: PLAN-029
-  files:
-    - src/skill_scan/_ast_split_resolve.py:1-300
-  blocker: "File is at the project's max line limit. No code changes needed now, but the next resolver addition will breach the limit."
-  resolution: "Extract _is_case_method/_resolve_case_method_chain (~48 lines) or _is_replace_call/_resolve_replace_chain (~62 lines) to a new _ast_split_case.py or _ast_split_replace.py sibling module. Follow existing facade re-export pattern."
 
 - id: DEBT-030-NC-FALSE-POSITIVE
   description: "'nc' in _NETWORK_TOOLS is a 2-char string; any program literally named 'nc' in subprocess list-args triggers EXFIL-001 false positive"
@@ -104,6 +95,6 @@
   severity: low
   plan: PLAN-032
   files:
-    - src/skill_scan/_ast_split_int_list_helpers.py:56-66
+    - src/skill_scan/_ast_split_int_list_tracker.py:56-66
   blocker: "Mitigated in practice by AST literal size, but no explicit guard. Low priority since attacker-controlled list size requires proportionally large source files."
   resolution: "Cap concat result at ~2048 elements, returning _SHADOW above the cap, matching the defensive posture of _MAX_REPEAT=1000 elsewhere."

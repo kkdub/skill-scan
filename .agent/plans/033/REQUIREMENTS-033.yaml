@@ -1,0 +1,139 @@
+# REQUIREMENTS-033: Module extraction and rename refactor
+# Generated: 2026-03-19
+
+# --- Extractions (capacity recovery) ---
+- id: R001
+  description: >
+    Extract format_map resolver (_resolve_format_map_call, _resolve_dict_arg,
+    _lookup_str_dict) from _ast_split_resolve.py into _ast_split_format_map.py.
+    Source file drops to <=225 lines; new module <=100 lines.
+  verify: inspect
+  status: done
+  contract:
+    given: "_ast_split_resolve.py at 291/300 lines with format_map logic inline"
+    when: "format_map functions moved to _ast_split_format_map.py with import wiring"
+    then: "_ast_split_resolve.py <=225 lines, _ast_split_format_map.py <=100 lines, all tests pass"
+
+- id: R002
+  description: >
+    Extract ROT13 branch-analysis functions (_branch_case, _compare_case,
+    _case_from_comparators, _case_from_constant, _first_case_from_boolop)
+    from _ast_rot13.py into _ast_rot13_branch_analysis.py.
+    Source file drops to <=250 lines; new module <=60 lines.
+  verify: inspect
+  status: done
+  contract:
+    given: "_ast_rot13.py at 298/300 lines with branch-case analysis inline"
+    when: "branch-analysis functions moved to _ast_rot13_branch_analysis.py with import wiring"
+    then: "_ast_rot13.py <=250 lines, _ast_rot13_branch_analysis.py <=60 lines, all tests pass"
+
+- id: R003
+  description: >
+    Extract multiline PI sliding-window logic (_multiline_pi_findings,
+    _scan_window_rule) from rules/engine.py into rules/_multiline_pi.py.
+    Source file drops to <=265 lines; new module <=60 lines.
+  verify: inspect
+  status: done
+  contract:
+    given: "rules/engine.py at 295/300 lines with multiline PI logic inline"
+    when: "sliding-window functions moved to rules/_multiline_pi.py with import wiring"
+    then: "rules/engine.py <=265 lines, rules/_multiline_pi.py <=60 lines, all tests pass"
+
+- id: R004
+  description: >
+    Extract string resolution pipeline (try_resolve_string, _try_resolve_string,
+    _resolve_binop_add, _resolve_int_expr, _resolve_chr_call, _resolve_join_call,
+    _resolve_iterable_elements, _resolve_bytes_decode, _get_call_name_from_any,
+    MAX_AST_RESOLVE_DEPTH) from _ast_helpers.py into _ast_string_resolver.py.
+    Absorb _ast_join_helpers.py (62 lines) into the same module. Delete
+    _ast_join_helpers.py. Source file drops to <=160 lines.
+  verify: inspect
+  status: done
+  contract:
+    given: "_ast_helpers.py at 300/300 lines; _ast_join_helpers.py at 62 lines"
+    when: "string resolution pipeline + join helpers merged into _ast_string_resolver.py"
+    then: "_ast_helpers.py <=160 lines, _ast_join_helpers.py deleted, _ast_string_resolver.py <=200 lines, all tests pass"
+
+# --- Renames (naming debt elimination) ---
+- id: R005
+  description: >
+    Rename all *_helpers.py files to descriptive names using a rename script.
+    Mapping: _ast_helpers.py -> _ast_imports.py,
+    _ast_split_helpers.py -> _ast_split_format.py,
+    _ast_split_join_helpers.py -> _ast_split_comprehension.py,
+    _ast_split_star_helpers.py -> _ast_split_star_unpack.py,
+    _ast_split_map_helpers.py -> _ast_split_map_resolver.py,
+    _ast_split_int_list_helpers.py -> _ast_split_int_list_tracker.py,
+    _ast_symbol_table_helpers.py -> _ast_symbol_table_assignments.py,
+    _ast_symbol_table_dict_helpers.py -> _ast_symbol_table_dict_tracker.py,
+    _ast_symbol_table_class_helpers.py -> _ast_symbol_table_self_attrs.py,
+    _ast_symbol_table_return_helpers.py -> _ast_symbol_table_returns.py,
+    _decoder_helpers.py -> _decoder_base64_hex.py.
+    Zero grep matches for '_helpers' in src/skill_scan/*.py after completion.
+  verify: grep
+  status: done
+
+- id: R006
+  description: >
+    Rename corresponding test files to match new source module names.
+    E.g., test_ast_split_helpers.py -> test_ast_split_format.py.
+  verify: grep
+  status: done
+
+# --- Invariants ---
+- id: R-IMP001
+  description: "Zero behavioral changes: scanner produces identical findings on all inputs"
+  verify: test
+  status: done
+  contract:
+    given: "Existing test suite with 1690+ tests covering all detection patterns"
+    when: "All modules extracted and renamed"
+    then: "make check passes with zero test failures and identical scanner output"
+
+- id: R-IMP002
+  description: "All facade re-exports updated: public API of ast_analyzer.py and decoder.py unchanged"
+  verify: inspect
+  status: done
+
+- id: R-IMP003
+  description: "No orphaned imports: every from skill_scan._ast_* path resolves"
+  verify: test
+  status: done
+  contract:
+    given: "All import paths rewritten by rename script"
+    when: "ruff and pytest run"
+    then: "Zero import resolution errors"
+
+- id: R-IMP004
+  description: "No file exceeds 300 lines"
+  verify: inspect
+  status: done
+
+- id: R-IMP005
+  description: "DEBT-029-SPLIT-RESOLVE-AT-LIMIT resolved in debt.yaml after extraction"
+  verify: inspect
+  status: done
+
+- id: R-IMP006
+  description: >
+    Build scripts/rename_module.py that takes (old_module, new_module) pairs,
+    performs git mv on source file, rewrites all import paths across src/ and tests/,
+    and renames matching test files.
+  verify: inspect
+  status: done
+
+# --- Documentation ---
+- id: R007
+  description: "Update CLAUDE.md architecture notes to reflect new filenames and module map"
+  verify: inspect
+  status: done
+
+- id: R008
+  description: "Update README.md to reflect current codebase state"
+  verify: inspect
+  status: done
+
+- id: R009
+  description: "Fix or document any new debt items discovered during refactoring in debt.yaml"
+  verify: inspect
+  status: done

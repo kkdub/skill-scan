@@ -44,8 +44,8 @@ def build_symbol_table(tree: ast.Module) -> dict[str, str]:
     or a chain of variable references ending in a string constant.
     Non-string assignments (int, list, etc.) are silently skipped.
     """
-    from skill_scan._ast_symbol_table_helpers import _collect_scope_declarations
-    from skill_scan._ast_symbol_table_return_helpers import _collect_return_value
+    from skill_scan._ast_symbol_table_assignments import _collect_scope_declarations
+    from skill_scan._ast_symbol_table_returns import _collect_return_value
 
     module_scope = _collect_assignments(tree.body)
     _resolve_indirections(module_scope)
@@ -104,8 +104,8 @@ def _process_nested(
     result: dict[str, str],
 ) -> None:
     """Handle nested functions -- route nonlocal writes to enclosing scope."""
-    from skill_scan._ast_symbol_table_helpers import _collect_scope_declarations
-    from skill_scan._ast_symbol_table_return_helpers import _collect_return_value
+    from skill_scan._ast_symbol_table_assignments import _collect_scope_declarations
+    from skill_scan._ast_symbol_table_returns import _collect_return_value
 
     for node in body:
         if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
@@ -154,8 +154,8 @@ def _process_class(
     result: dict[str, str],
 ) -> None:
     """Walk a ClassDef body: class-level assignments and self.attr in methods."""
-    from skill_scan._ast_symbol_table_helpers import _handle_self_attr_assign
-    from skill_scan._ast_symbol_table_return_helpers import _collect_return_value
+    from skill_scan._ast_symbol_table_assignments import _handle_self_attr_assign
+    from skill_scan._ast_symbol_table_returns import _collect_return_value
 
     cls_name = node.name
     # Class-level assignments (e.g. payload = 'eval')
@@ -223,7 +223,7 @@ def _collect_assignments(
     body: list[ast.stmt],
 ) -> dict[str, str | _Ref]:
     """Extract assignments from a body, recursing into control flow blocks."""
-    from skill_scan._ast_symbol_table_helpers import _walk_body
+    from skill_scan._ast_symbol_table_assignments import _walk_body
 
     table: dict[str, str | _Ref] = {}
     _walk_body(body, table)

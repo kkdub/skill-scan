@@ -17,6 +17,7 @@ from dataclasses import replace
 from skill_scan.decoder import MAX_DECODE_DEPTH, decode_payload, extract_encoded_strings
 from skill_scan.models import Finding, Rule
 from skill_scan.normalizer import normalize_text
+from skill_scan.rules._multiline_pi import _multiline_pi_findings
 
 _MAX_MATCHED_TEXT = 200
 MAX_PAYLOADS_PER_FILE = 100
@@ -155,65 +156,10 @@ def _line_phase_findings(content: str, file_path: str, line_rules: list[Rule]) -
         findings.extend(_normalized_line_findings(line, line_num, file_path, line_rules, line_findings))
     pi_rules = [r for r in line_rules if r.category == "prompt-injection"]
     if pi_rules:
-        findings.extend(_multiline_pi_findings(lines, file_path, pi_rules, findings))
+        findings.extend(
+            _multiline_pi_findings(lines, file_path, pi_rules, findings, _make_finding, _is_excluded)
+        )
     return findings
-
-
-def _multiline_pi_findings(
-    lines: list[str],
-    file_path: str,
-    pi_rules: list[Rule],
-    existing: list[Finding],
-) -> list[Finding]:
-    """Scan sliding windows of consecutive lines for multi-line PI attacks.
-
-    Joins windows of 3-5 consecutive lines with a single space and applies
-    prompt-injection rules. Findings are attributed to the first line of
-    the matching window. Deduplicates against existing findings: skips if
-    same rule_id was already found on any line within the window.
-    """
-    num_lines = len(lines)
-    if num_lines < 3:
-        return []
-
-    found_lines: dict[str, set[int]] = {}
-    for f in existing:
-        if f.line is not None:
-            found_lines.setdefault(f.rule_id, set()).add(f.line)
-
-    results: list[Finding] = []
-    for window_size in (3, 4, 5):
-        for start in range(num_lines - window_size + 1):
-            first_line_num = start + 1
-            window_line_nums = set(range(first_line_num, first_line_num + window_size))
-            joined = " ".join(lines[start : start + window_size])
-            for rule in pi_rules:
-                _scan_window_rule(
-                    rule, joined, file_path, first_line_num, window_line_nums, found_lines, results
-                )
-    return results
-
-
-def _scan_window_rule(
-    rule: Rule,
-    joined: str,
-    file_path: str,
-    first_line_num: int,
-    window_line_nums: set[int],
-    found_lines: dict[str, set[int]],
-    results: list[Finding],
-) -> None:
-    """Check one rule against a joined window; append finding and update found_lines."""
-    if rule.rule_id in found_lines and found_lines[rule.rule_id] & window_line_nums:
-        return
-    if _is_excluded(joined, rule):
-        return
-    for pattern in rule.patterns:
-        match = pattern.search(joined)
-        if match:
-            results.append(_make_finding(rule, file_path, first_line_num, match))
-            found_lines.setdefault(rule.rule_id, set()).update(window_line_nums)
-            break
 
 
 def _normalized_line_findings(

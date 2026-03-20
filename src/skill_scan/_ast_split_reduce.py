@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import ast
 
-from skill_scan._ast_helpers import get_call_name
+from skill_scan._ast_imports import get_call_name
 
 
 def _resolve_reduce_concat(

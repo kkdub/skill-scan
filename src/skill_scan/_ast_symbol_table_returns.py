@@ -13,7 +13,7 @@ from __future__ import annotations
 import ast
 from collections.abc import Mapping
 
-from skill_scan._ast_helpers import try_resolve_string
+from skill_scan._ast_imports import try_resolve_string
 
 
 def _collect_return_value(
@@ -220,12 +220,15 @@ def _match_definitely_returns(node: ast.Match) -> bool:
 
 
 def _sub_bodies(stmt: ast.stmt) -> list[list[ast.stmt]]:
-    """Return sub-bodies of a statement for return collection."""
+    """Return child body lists from control-flow nodes (not function/class defs).
+
+    Covers If, For, While, AsyncFor, With, AsyncWith, Try, and Match.
+    """
     if isinstance(stmt, ast.If):
         return [stmt.body, stmt.orelse]
-    if isinstance(stmt, ast.For | ast.While):
+    if isinstance(stmt, ast.For | ast.While | ast.AsyncFor):
         return [stmt.body, stmt.orelse]
-    if isinstance(stmt, ast.With):
+    if isinstance(stmt, ast.With | ast.AsyncWith):
         return [stmt.body]
     if isinstance(stmt, ast.Try):
         subs: list[list[ast.stmt]] = [stmt.body, stmt.orelse, stmt.finalbody]

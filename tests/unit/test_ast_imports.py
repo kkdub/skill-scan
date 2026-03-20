@@ -1,4 +1,4 @@
-"""Tests for _ast_helpers -- build_alias_map ast.Try recursion and star imports.
+"""Tests for _ast_imports -- build_alias_map ast.Try recursion and star imports.
 
 Covers build_alias_map walking imports inside try/except/else/finally blocks,
 and star import expansion for known-dangerous modules.
@@ -9,7 +9,7 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-from skill_scan._ast_helpers import build_alias_map
+from skill_scan._ast_imports import build_alias_map
 from skill_scan.ast_analyzer import analyze_python
 
 _FILE = "test.py"

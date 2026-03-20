@@ -1,4 +1,4 @@
-"""Tests for _ast_split_map_helpers -- map(chr/str/lambda) resolution.
+"""Tests for _ast_split_map_resolver -- map(chr/str/lambda) resolution.
 
 Covers _resolve_map_join with direct chr/str, lambda c: chr(c),
 and tracked int-list variable resolution via int_list_table.
@@ -11,8 +11,8 @@ from pathlib import Path
 
 
 from skill_scan._ast_split_detector import detect_split_evasion
-from skill_scan._ast_split_join_helpers import _collect_int_list_assigns
-from skill_scan._ast_split_map_helpers import _is_lambda_chr, _resolve_map_join
+from skill_scan._ast_split_comprehension import _collect_int_list_assigns
+from skill_scan._ast_split_map_resolver import _is_lambda_chr, _resolve_map_join
 from skill_scan._ast_symbol_table import build_symbol_table
 from skill_scan.ast_analyzer import analyze_python
 from skill_scan.models import Finding
@@ -35,7 +35,7 @@ def _detect(code: str) -> list[Finding]:
     tree = ast.parse(code)
     st = build_symbol_table(tree)
     il = _collect_int_list_assigns(tree)
-    from skill_scan._ast_helpers import build_alias_map
+    from skill_scan._ast_imports import build_alias_map
 
     am = build_alias_map(tree)
     return detect_split_evasion(tree, _FILE, am, st, int_list_table=il)

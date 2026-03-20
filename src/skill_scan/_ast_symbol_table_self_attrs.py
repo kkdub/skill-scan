@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import ast
 
-from skill_scan._ast_helpers import try_resolve_string
-from skill_scan._ast_symbol_table_return_helpers import _sub_bodies
+from skill_scan._ast_imports import try_resolve_string
+from skill_scan._ast_symbol_table_returns import _sub_bodies
 
 
 def _walk_self_attrs(

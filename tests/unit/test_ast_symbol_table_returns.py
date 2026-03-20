@@ -249,8 +249,8 @@ class TestMatchGuardHandling:
 
 
 class TestReturnHelperFileSize:
-    def test_return_helpers_under_300_lines(self) -> None:
+    def test_symbol_table_returns_under_300_lines(self) -> None:
         src = pathlib.Path(__file__).resolve().parent.parent.parent
-        target = src / "src" / "skill_scan" / "_ast_symbol_table_return_helpers.py"
+        target = src / "src" / "skill_scan" / "_ast_symbol_table_returns.py"
         line_count = len(target.read_text().splitlines())
-        assert line_count <= 300, f"_ast_symbol_table_return_helpers.py is {line_count} lines (max 300)"
+        assert line_count <= 300, f"_ast_symbol_table_returns.py is {line_count} lines (max 300)"

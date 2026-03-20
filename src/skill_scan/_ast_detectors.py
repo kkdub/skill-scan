@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import ast
 
-from skill_scan._ast_helpers import (
+from skill_scan._ast_imports import (
     get_call_name,
     has_safe_loader,
     is_subprocess_shell_true,

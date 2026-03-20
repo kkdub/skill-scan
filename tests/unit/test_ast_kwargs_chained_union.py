@@ -11,7 +11,7 @@ import ast
 
 from skill_scan._ast_kwargs_detector import _collect_dict_assigns
 
-from tests.unit.kwargs_test_helpers import detect as _detect
+from tests.unit.kwargs_test_utils import detect as _detect
 
 _PARSE = ast.parse
 

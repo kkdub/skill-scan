@@ -9,14 +9,15 @@ from __future__ import annotations
 
 import ast
 
-from skill_scan._ast_helpers import _resolve_int_expr, try_resolve_string
+from skill_scan._ast_imports import _resolve_int_expr, try_resolve_string
 from skill_scan._ast_symbol_table import _Ref
-from skill_scan._ast_symbol_table_dict_helpers import (
+from skill_scan._ast_symbol_table_dict_tracker import (
     _handle_dict_literal,
     _handle_dict_pop,
     _handle_string_list_literal,
     _resolve_replace_chain_simple,
 )
+from skill_scan._ast_symbol_table_returns import _sub_bodies
 
 
 def _walk_body(body: list[ast.stmt], table: dict[str, str | _Ref]) -> None:
@@ -38,19 +39,9 @@ def _process_stmt(stmt: ast.stmt, table: dict[str, str | _Ref]) -> None:
 
 
 def _recurse_control_flow(stmt: ast.stmt, table: dict[str, str | _Ref]) -> None:
-    """Recurse into control flow bodies (if/for/while/with/try/except)."""
-    match stmt:
-        case ast.If() | ast.For() | ast.While() | ast.AsyncFor():
-            _walk_body(stmt.body, table)
-            _walk_body(stmt.orelse, table)
-        case ast.With() | ast.AsyncWith():
-            _walk_body(stmt.body, table)
-        case ast.Try():
-            _walk_body(stmt.body, table)
-            for handler in stmt.handlers:
-                _walk_body(handler.body, table)
-            _walk_body(stmt.orelse, table)
-            _walk_body(stmt.finalbody, table)
+    """Recurse into control flow bodies (if/for/while/with/try/match/etc.)."""
+    for body in _sub_bodies(stmt):
+        _walk_body(body, table)
 
 
 def _collect_walrus(stmt: ast.stmt, table: dict[str, str | _Ref]) -> None:
@@ -227,35 +218,23 @@ def _handle_subscript_assign(
 def _collect_scope_declarations(body: list[ast.stmt]) -> tuple[set[str], set[str]]:
     """Collect ``global`` and ``nonlocal`` declarations from a statement body.
 
-    Recurses into control-flow constructs (if/for/while/with/try) to find
-    declarations nested inside branches. Returns two sets: global names
+    Recurses into control-flow constructs (if/for/while/with/try/match) to
+    find declarations nested inside branches. Returns two sets: global names
     and nonlocal names.
     """
     global_names: set[str] = set()
     nonlocal_names: set[str] = set()
 
-    def _recurse(stmts: list[ast.stmt]) -> None:
-        g, n = _collect_scope_declarations(stmts)
-        global_names.update(g)
-        nonlocal_names.update(n)
-
     for stmt in body:
-        match stmt:
-            case ast.Global():
-                global_names.update(stmt.names)
-            case ast.Nonlocal():
-                nonlocal_names.update(stmt.names)
-            case ast.If() | ast.For() | ast.While() | ast.AsyncFor():
-                _recurse(stmt.body)
-                _recurse(stmt.orelse)
-            case ast.With() | ast.AsyncWith():
-                _recurse(stmt.body)
-            case ast.Try():
-                _recurse(stmt.body)
-                for handler in stmt.handlers:
-                    _recurse(handler.body)
-                _recurse(stmt.orelse)
-                _recurse(stmt.finalbody)
+        if isinstance(stmt, ast.Global):
+            global_names.update(stmt.names)
+        elif isinstance(stmt, ast.Nonlocal):
+            nonlocal_names.update(stmt.names)
+        else:
+            for sub in _sub_bodies(stmt):
+                g, n = _collect_scope_declarations(sub)
+                global_names.update(g)
+                nonlocal_names.update(n)
     return global_names, nonlocal_names
 
 
@@ -283,6 +262,6 @@ def _handle_self_attr_assign(
     body: list[ast.stmt], result: dict[str, str], self_name: str, class_name: str
 ) -> None:
     """Walk a method body for ``self.attr = 'string'`` (deferred import)."""
-    from skill_scan._ast_symbol_table_class_helpers import _walk_self_attrs
+    from skill_scan._ast_symbol_table_self_attrs import _walk_self_attrs
 
     _walk_self_attrs(body, result, self_name, class_name)
