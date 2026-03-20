@@ -13,6 +13,7 @@ from __future__ import annotations
 import ast
 import importlib
 import inspect
+from pathlib import Path
 
 
 _FILE = "test.py"
@@ -185,12 +186,12 @@ class TestSplitResolveLineCounts:
         """_ast_split_resolve.py must be <= 225 lines after extraction."""
         src = inspect.getsourcefile(importlib.import_module("skill_scan._ast_split_resolve"))
         assert src is not None
-        line_count = len(open(src).readlines())
+        line_count = len(Path(src).read_text(encoding="utf-8").splitlines())
         assert line_count <= 225, f"_ast_split_resolve.py has {line_count} lines (max 225)"
 
     def test_format_map_module_max_100_lines(self) -> None:
         """_ast_split_format_map.py must be <= 100 lines."""
         src = inspect.getsourcefile(importlib.import_module("skill_scan._ast_split_format_map"))
         assert src is not None
-        line_count = len(open(src).readlines())
+        line_count = len(Path(src).read_text(encoding="utf-8").splitlines())
         assert line_count <= 100, f"_ast_split_format_map.py has {line_count} lines (max 100)"

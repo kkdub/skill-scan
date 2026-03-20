@@ -11,7 +11,7 @@ Detailed module-level documentation for skill-scan internals. For key patterns a
 - `match_content()` in `engine.py` is a public wrapper with no `_depth` parameter; `_match_content_recursive()` is the private implementation that carries `_depth`
 - `_line_phase_findings(content, file_path, line_rules)` — extracted helper that runs per-line matching and then the multi-line PI pass; called from `_match_content_recursive`
 - `_multiline_pi_findings(lines, file_path, pi_rules, existing, make_finding, is_excluded)` — sliding window (sizes 3, 4, 5) that joins consecutive lines with a space and applies prompt-injection rules; only `category == 'prompt-injection'` rules are used; findings are attributed to the first line of the window; deduplicates against `existing` findings by `(rule_id, any_line_in_window)`; returns only NEW findings not already found by per-line scan
-- `_scan_window_rule(rule, joined, file_path, first_line_num, window_line_nums, found_lines, results)` — extracted helper for checking one rule against one window; updates `found_lines` tracking on match
+- `_scan_window_rule(rule, joined, file_path, first_line_num, window_line_nums, found_lines, results, make_finding, is_excluded)` — extracted helper for checking one rule against one window; updates `found_lines` tracking on match
 
 ## AST Analyzer
 

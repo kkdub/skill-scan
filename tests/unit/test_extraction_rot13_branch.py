@@ -13,6 +13,7 @@ from __future__ import annotations
 import ast
 import importlib
 import inspect
+from pathlib import Path
 
 
 _FILE = "test.py"
@@ -198,12 +199,12 @@ class TestRot13LineCounts:
         """_ast_rot13.py must be <= 250 lines after extraction."""
         src = inspect.getsourcefile(importlib.import_module("skill_scan._ast_rot13"))
         assert src is not None
-        line_count = len(open(src).readlines())
+        line_count = len(Path(src).read_text(encoding="utf-8").splitlines())
         assert line_count <= 250, f"_ast_rot13.py has {line_count} lines (max 250)"
 
     def test_branch_analysis_max_60_lines(self) -> None:
         """_ast_rot13_branch_analysis.py must be <= 60 lines."""
         src = inspect.getsourcefile(importlib.import_module("skill_scan._ast_rot13_branch_analysis"))
         assert src is not None
-        line_count = len(open(src).readlines())
+        line_count = len(Path(src).read_text(encoding="utf-8").splitlines())
         assert line_count <= 60, f"_ast_rot13_branch_analysis.py has {line_count} lines (max 60)"
