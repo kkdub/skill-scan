@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import ast
 
-from skill_scan._ast_split_helpers import _scoped_lookup
+from skill_scan._ast_split_format import _scoped_lookup
 
 
 def _flatten_starred_list(

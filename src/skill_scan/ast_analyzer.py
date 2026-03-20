@@ -15,11 +15,11 @@ import ast
 
 from skill_scan._ast_exfil_detector import _detect_dns_exfil as _detect_dns_exfil
 from skill_scan._ast_exfil_detector import _detect_subprocess_list_exfil as _detect_subprocess_list_exfil
-from skill_scan._ast_helpers import build_alias_map
+from skill_scan._ast_imports import build_alias_map
 from skill_scan._ast_kwargs_detector import detect_kwargs_unpacking as detect_kwargs_unpacking
 from skill_scan._ast_loop_unroller import collect_loop_assigns as collect_loop_assigns
 from skill_scan._ast_split_detector import detect_split_evasion as detect_split_evasion
-from skill_scan._ast_split_join_helpers import _collect_int_list_assigns as _collect_int_list_assigns
+from skill_scan._ast_split_comprehension import _collect_int_list_assigns as _collect_int_list_assigns
 from skill_scan._ast_symbol_table import build_symbol_table as build_symbol_table
 from skill_scan.models import Finding, Severity
 

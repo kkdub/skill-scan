@@ -1,7 +1,7 @@
-"""Tests for _ast_symbol_table_helpers -- extracted assignment-tracking helpers.
+"""Tests for _ast_symbol_table_assignments -- extracted assignment-tracking helpers.
 
 Verifies that functions migrated from _ast_symbol_table.py to
-_ast_symbol_table_helpers.py are importable and behave correctly.
+_ast_symbol_table_assignments.py are importable and behave correctly.
 """
 
 from __future__ import annotations
@@ -9,7 +9,7 @@ from __future__ import annotations
 import ast
 
 from skill_scan._ast_symbol_table import _Ref
-from skill_scan._ast_symbol_table_helpers import (
+from skill_scan._ast_symbol_table_assignments import (
     _collect_walrus,
     _handle_assign,
     _handle_aug_assign,

@@ -11,7 +11,7 @@ from collections.abc import Callable
 
 from skill_scan._ast_detectors import _make_finding
 from skill_scan._ast_split_bytes import _build_bytes_table, resolve_fromhex_concat
-from skill_scan._ast_split_helpers import _scoped_lookup
+from skill_scan._ast_split_format import _scoped_lookup
 from skill_scan._ast_split_match import _NAME_RULE, _check_dangerous
 from skill_scan._ast_split_resolve import (
     _is_case_method,

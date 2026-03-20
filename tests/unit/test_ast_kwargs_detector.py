@@ -9,7 +9,7 @@ from __future__ import annotations
 from skill_scan._ast_kwargs_detector import _DANGEROUS_KWARGS
 from skill_scan.models import Severity
 
-from tests.unit.kwargs_test_helpers import _FILE, detect as _detect, detect_full as _detect_full
+from tests.unit.kwargs_test_utils import _FILE, detect as _detect, detect_full as _detect_full
 
 
 # ---------------------------------------------------------------------------

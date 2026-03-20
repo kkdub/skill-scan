@@ -184,8 +184,8 @@ class TestListIndexSubscriptDetection:
 class TestFileSizeConstraints:
     _SPLIT_FILES = (
         "_ast_split_detector.py",
-        "_ast_split_helpers.py",
-        "_ast_split_join_helpers.py",
+        "_ast_split_format.py",
+        "_ast_split_comprehension.py",
         "_ast_split_resolve.py",
     )
 

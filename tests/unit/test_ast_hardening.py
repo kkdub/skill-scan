@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import ast
 
-from skill_scan._ast_helpers import MAX_AST_RESOLVE_DEPTH, try_resolve_string
+from skill_scan._ast_imports import MAX_AST_RESOLVE_DEPTH, try_resolve_string
 from skill_scan.ast_analyzer import analyze_python
 from skill_scan.models import Severity
 from tests.unit.rule_helpers import filter_by_rule

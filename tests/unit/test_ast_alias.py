@@ -10,7 +10,7 @@ import ast
 
 import pytest
 
-from skill_scan._ast_helpers import build_alias_map, get_call_name
+from skill_scan._ast_imports import build_alias_map, get_call_name
 from skill_scan.ast_analyzer import analyze_python
 from tests.unit.rule_helpers import filter_by_rule
 

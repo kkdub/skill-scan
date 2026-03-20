@@ -1,18 +1,18 @@
 """Tests for mixed %-specifier handling, over-provisioning defense, and %% exclusion.
 
-Overflow from test_ast_split_helpers.py (250-line limit).
+Overflow from test_ast_split_format.py (300-line limit).
 Covers R008, R009, R-IMP004, R-IMP005, R-IMP006, R-ADV001, R-ADV002.
 """
 
 from __future__ import annotations
 
 
-from skill_scan._ast_split_helpers import (
+from skill_scan._ast_split_format import (
     _PERCENT_SPEC_RE,
     _substitute_percent,
 )
 
-from tests.unit.test_ast_split_helpers import _detect
+from tests.unit.test_ast_split_format import _detect
 
 
 # -- R009: Mixed %-specifier matching ----------------------------------------

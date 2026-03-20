@@ -1,7 +1,7 @@
 """Int-list tracking helpers for the pre-pass collector.
 
 Handles assignment, AugAssign (+=), and .extend() mutations on tracked
-int-list variables. Imported by ``_ast_split_join_helpers``.
+int-list variables. Imported by ``_ast_split_comprehension``.
 
 Shadow marker: ``_SHADOW`` is a module-level sentinel list used to mark
 variables that were assigned a non-int-list value.  We compare by identity

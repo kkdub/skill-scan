@@ -12,7 +12,7 @@ import pathlib
 import pytest
 
 from skill_scan._ast_split_detector import detect_split_evasion
-from skill_scan._ast_split_helpers import (
+from skill_scan._ast_split_format import (
     _scoped_lookup,
 )
 from skill_scan._ast_symbol_table import build_symbol_table
@@ -180,11 +180,11 @@ class TestPositiveFixtures:
 
 
 class TestFileSizeConstraints:
-    def test_split_helpers_under_250_lines(self) -> None:
+    def test_split_format_under_300_lines(self) -> None:
         src = pathlib.Path(__file__).resolve().parent.parent.parent
-        target = src / "src" / "skill_scan" / "_ast_split_helpers.py"
+        target = src / "src" / "skill_scan" / "_ast_split_format.py"
         line_count = len(target.read_text().splitlines())
-        assert line_count <= 300, f"_ast_split_helpers.py is {line_count} lines (max 300)"
+        assert line_count <= 300, f"_ast_split_format.py is {line_count} lines (max 300)"
 
 
 # -- Acceptance scenarios (plan-level) ----------------------------------------
@@ -215,7 +215,7 @@ class TestAcceptanceScenarios:
         assert "exec" in exec002[0].matched_text
 
 
-# -- _scoped_lookup (moved to _ast_split_helpers) -----------------------------
+# -- _scoped_lookup (in _ast_split_format) -------------------------------------
 
 
 class TestScopedLookup:

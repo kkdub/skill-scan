@@ -1,6 +1,6 @@
 """Dict/list/replace-chain tracking helpers for the symbol table builder.
 
-Extracted from _ast_symbol_table_helpers.py for SIZE-001 compliance.
+Extracted from _ast_symbol_table_assignments.py for SIZE-001 compliance.
 Handles dict literal composite keys, list/tuple element tracking,
 dict.pop() resolution, and .replace() chain resolution.
 """
@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import ast
 
-from skill_scan._ast_helpers import try_resolve_string
+from skill_scan._ast_imports import try_resolve_string
 from skill_scan._ast_symbol_table import _Ref
 
 

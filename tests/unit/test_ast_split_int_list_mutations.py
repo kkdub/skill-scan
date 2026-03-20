@@ -10,8 +10,8 @@ from __future__ import annotations
 import ast
 
 from skill_scan._ast_split_detector import detect_split_evasion
-from skill_scan._ast_split_int_list_helpers import _SHADOW
-from skill_scan._ast_split_join_helpers import _collect_int_list_assigns
+from skill_scan._ast_split_int_list_tracker import _SHADOW
+from skill_scan._ast_split_comprehension import _collect_int_list_assigns
 from skill_scan._ast_symbol_table import build_symbol_table
 from skill_scan.ast_analyzer import analyze_python
 from skill_scan.models import Finding

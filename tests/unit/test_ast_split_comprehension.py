@@ -13,7 +13,7 @@ import ast
 import pathlib
 
 from skill_scan._ast_split_detector import detect_split_evasion
-from skill_scan._ast_split_join_helpers import _resolve_comprehension_join
+from skill_scan._ast_split_comprehension import _resolve_comprehension_join
 from skill_scan._ast_symbol_table import build_symbol_table
 from skill_scan.ast_analyzer import analyze_python
 from skill_scan.models import Finding

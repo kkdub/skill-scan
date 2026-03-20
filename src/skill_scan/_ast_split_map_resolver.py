@@ -59,7 +59,7 @@ def _resolve_map_join(
     The iterable can be a literal list/tuple or a tracked int-list variable
     name resolved via ``int_list_table``.
     """
-    from skill_scan._ast_helpers import get_call_name
+    from skill_scan._ast_imports import get_call_name
 
     if get_call_name(call, alias_map) != "map" or len(call.args) != 2:
         return None
@@ -105,7 +105,7 @@ def _resolve_tracked_elts(
     """Look up a tracked int-list variable and synthesize AST constants."""
     if not int_list_table:
         return None
-    from skill_scan._ast_split_int_list_helpers import _SHADOW
+    from skill_scan._ast_split_int_list_tracker import _SHADOW
 
     key = f"{scope}.{name}" if scope else None
     int_list = int_list_table.get(key) if key else None

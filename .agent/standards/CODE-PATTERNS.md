@@ -346,7 +346,7 @@ def _verify_path_containment(file_path: Path, save_path: Path) -> None:
 
 ## AST Analysis for Python Files
 
-For `.py` files, `content_scanner.py` runs AST analysis after regex scanning and deduplicates by `(rule_id, line)`. The public entry point is `analyze_python(content, file_path) -> list[Finding]` in `ast_analyzer.py`. String resolution helpers live in `_ast_helpers.py`.
+For `.py` files, `content_scanner.py` runs AST analysis after regex scanning and deduplicates by `(rule_id, line)`. The public entry point is `analyze_python(content, file_path) -> list[Finding]` in `ast_analyzer.py`. Import/alias helpers live in `_ast_imports.py`; string resolution helpers live in `_ast_string_resolver.py`.
 
 ```python
 # content_scanner.py — integration point
@@ -386,10 +386,10 @@ for node in ast.walk(tree):
 
 ## Import-Alias Tracking in AST Detectors
 
-`build_alias_map(tree)` in `_ast_helpers.py` returns a `dict[str, str]` mapping local names to canonical dotted module paths. `analyze_python()` builds the map once and passes it to all detectors so aliased imports are resolved correctly.
+`build_alias_map(tree)` in `_ast_imports.py` returns a `dict[str, str]` mapping local names to canonical dotted module paths. `analyze_python()` builds the map once and passes it to all detectors so aliased imports are resolved correctly.
 
 ```python
-# _ast_helpers.py
+# _ast_imports.py
 def build_alias_map(tree: ast.Module) -> dict[str, str]:
     # import codecs as c  -> {'c': 'codecs'}
     # from os import path -> {'path': 'os.path'}
@@ -540,7 +540,7 @@ def _resolve_percent_format(node: ast.BinOp, ...) -> str | None:
 When tracking dict subscript assignments in a flat symbol table, use a `'varname[key]'` bracket format as the composite key. Brackets cannot appear in plain Python identifiers, so this prevents collision between a subscript entry `d[x]` and a hypothetical variable named `d[x]`.
 
 ```python
-# _ast_symbol_table_helpers.py — recording subscript assignment d['key'] = 'val'
+# _ast_symbol_table_assignments.py — recording subscript assignment d['key'] = 'val'
 base = target.value.id   # 'parts'
 key = target.slice.value # 'cmd'
 table[f"{base}[{key}]"] = resolved  # 'parts[cmd]' -> 'eval'
@@ -559,12 +559,12 @@ When two sibling modules need each other (A imports from B, B imports from A), b
 ```python
 # _ast_symbol_table.py (facade) — _Ref is defined here; helpers need it
 def _collect_assignments(body):
-    from skill_scan._ast_symbol_table_helpers import _walk_body  # deferred import
+    from skill_scan._ast_symbol_table_assignments import _walk_body  # deferred import
     table: dict[str, str | _Ref] = {}
     _walk_body(body, table)
     return table
 
-# _ast_symbol_table_helpers.py (helpers) — imports _Ref at module level
+# _ast_symbol_table_assignments.py (assignments) — imports _Ref at module level
 from skill_scan._ast_symbol_table import _Ref  # safe: facade already loaded
 ```
 
@@ -651,7 +651,7 @@ Dict union operators (`x = a | b`, `x |= rhs`) are tracked in `_collect_from_bod
 When a resolver needs to handle `chr(c) for c in tracked_var` where `tracked_var` is a module-level or function-level list of integers, collect those assignments — and their `+=`/`.extend()` mutations — in a parallel pre-pass (`dict[str, list[int]]`) and thread the table through the call chain as an optional kwarg. Only track all-integer lists (conservative: reject mixed-type lists). Use the `_SHADOW` sentinel (identity-checked via `is`) to mark variables that were assigned a non-int-list value, distinguishing them from legitimate empty lists (`codes = []`). Synthesize `ast.Constant` nodes from the stored int values to reuse existing `_resolve_comprehension_chr`.
 
 ```python
-# _ast_split_int_list_helpers.py
+# _ast_split_int_list_tracker.py
 _SHADOW: list[int] = []  # identity sentinel — never mutate
 
 def _handle_int_list_stmt(stmt, scope, result):
