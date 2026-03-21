@@ -113,6 +113,13 @@ def _process_nested(
         inner_scope = _collect_assignments(node.body)
         _resolve_indirections(inner_scope, parent_scope=parent_scope)
         global_names, nonlocal_names = _collect_scope_declarations(node.body)
+        own_keys = set(inner_scope)
+        _process_nested(node.body, inner_scope, result)
+        # Pass-through: deeper nonlocal writes that landed here but belong
+        # to an outer scope (name not owned by this function) keep going up.
+        for k in set(inner_scope) - own_keys:
+            if k not in nonlocal_names:
+                parent_scope[k] = inner_scope.pop(k)
         _route_nested_declarations(
             inner_scope,
             global_names,

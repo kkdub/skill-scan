@@ -59,8 +59,8 @@ src/skill_scan/           # Production source code
   _ast_split_bytes.py     # Bytes-constructor resolution
   _ast_split_chr.py       # chr/ord/int resolution
   _ast_split_reduce.py    # reduce/operator concat resolution
-  _ast_split_comprehension.py # Generator/comprehension join resolution; _collect_int_list_assigns pre-pass
-  _ast_split_int_list_tracker.py # Int-list mutation tracking (_SHADOW sentinel, _handle_int_list_stmt, _handle_assign, _handle_extend_call, _extend_tracked)
+  _ast_split_comprehension.py # Generator/comprehension join resolution; _collect_int_list_assigns pre-pass; delegates nested function traversal to _collect_fn_body
+  _ast_split_int_list_tracker.py # Int-list mutation tracking (_SHADOW sentinel, _Decls type alias, _resolve_scope_key, _collect_fn_body, _handle_int_list_stmt, _handle_assign, _handle_extend_call, _extend_tracked)
   _ast_split_map_resolver.py # map(chr/str/lambda, [...]) resolution for join patterns
   _ast_split_star_unpack.py  # Star-unpack flattening for join arguments (_flatten_starred_list, _expand_starred, _maybe_flatten_starred)
   _ast_kwargs_detector.py # Kwargs unpacking detector (detect_kwargs_unpacking); re-exports from _ast_kwargs_dict_tracker.py
@@ -80,7 +80,7 @@ src/skill_scan/           # Production source code
 tests/
   unit/
     test_ast_split_case_methods.py      # Case-method resolver tests
-    test_ast_split_int_list_tracker.py  # Int-list concat, extend-var, class-body pre-pass tests (PLAN-032 Part A)
+    test_ast_split_int_list_tracker.py  # Int-list concat, extend-var, class-body pre-pass tests (PLAN-032 Part A); global/nonlocal int-list scope tests (PLAN-034)
     test_ast_kwargs_dict_tracker.py     # Dynamic key resolution tests (PLAN-032 Part B)
     test_ast_split_star_unpack.py       # Star-unpack flattening tests (PLAN-032 Part C)
     test_part_d_classvar_dictpop.py     # Class-body scope, classvar assembly, dict.pop tests (PLAN-032 Part D)
@@ -102,7 +102,9 @@ Key patterns and invariants. For detailed module-level docs, see `.agent/ARCHITE
 - Tree-level detectors needing the full symbol table (`detect_split_evasion`, `detect_kwargs_unpacking`) go in `analyze_python()` directly, not in `_DETECTORS`; `_detect_custom_rot13` is walked separately over `ast.FunctionDef | ast.AsyncFunctionDef` nodes (requires full function body, not per-node dispatch)
 - `_NAME_RULE` / `_DECORATOR_RULE` — lookup tables mapping dangerous names to `(rule_id, severity, prefix)`; use when one detector emits different rule IDs per name
 - `_DANGEROUS_KWARGS` — table-driven config for kwargs detector; extend by adding entries, no code changes needed
-- `_collect_int_list_assigns(tree)` in `_ast_split_comprehension.py` — parallel pre-pass collecting `Name = [int, ...]` assignments AND tracking `+=`/`.extend()` mutations; built in `analyze_python()` and threaded to `detect_split_evasion` via `int_list_table` kwarg; mutation helpers live in `_ast_split_int_list_tracker.py`; also walks ClassDef body directly (class-level int-lists tracked under `ClassName.varname` key)
+- `_collect_int_list_assigns(tree)` in `_ast_split_comprehension.py` — parallel pre-pass collecting `Name = [int, ...]` assignments AND tracking `+=`/`.extend()` mutations; built in `analyze_python()` and threaded to `detect_split_evasion` via `int_list_table` kwarg; mutation helpers live in `_ast_split_int_list_tracker.py`; also walks ClassDef body directly (class-level int-lists tracked under `ClassName.varname` key); delegates nested function traversal to `_collect_fn_body` (handles global/nonlocal declarations)
+- `_resolve_scope_key(name, scope, declarations, enclosing_scope)` in `_ast_split_int_list_tracker.py` — central scope-key builder for global/nonlocal declaration resolution in int-list tracking; `global name` resolves to bare name (module-level key); `nonlocal name` resolves to `enclosing_scope.name`; otherwise uses `scope.name` (existing behaviour); declarations parameter is `_Decls = tuple[set[str], set[str]] | None`
+- `_collect_fn_body(fn, scope, enclosing, result)` in `_ast_split_int_list_tracker.py` — recursive nested function traversal with declaration awareness for int-list pre-pass; calls `_collect_scope_declarations` to gather global/nonlocal sets for the function body, walks the body with `declarations` active, then recurses into nested `FunctionDef`/`AsyncFunctionDef` nodes; pass-through nonlocal chain handled by `child_enc = enclosing if decls[1] else scope`
 - `_handle_string_list_literal` in `_ast_symbol_table_dict_tracker.py` — tracks `name = ['ev', 'al']` assignments as indexed elements `name[0]`, `name[1]`, etc. and `name.__len__` in the symbol table; enables `parts[0] + parts[1]` BinOp resolution and star-unpack flattening
 - `_handle_dict_literal` in `_ast_symbol_table_dict_tracker.py` — tracks `name = {'key': 'val'}` assignments as composite keys `name[key]` in the symbol table; enables dict.pop() resolution
 - `_handle_dict_pop` in `_ast_symbol_table_dict_tracker.py` — resolves `target = d.pop('key')` by looking up `d[key]` in the symbol table composite key entries; called first in `_process_stmt` before `_handle_assign`
@@ -125,10 +127,12 @@ Key patterns and invariants. For detailed module-level docs, see `.agent/ARCHITE
 - `MAX_AST_RESOLVE_DEPTH = 50` — recursive helpers return `None` at depth > 50
 - OBFS-* = obfuscation rules; EXEC-* = malicious code execution rules (distinct namespaces)
 - `_make_rot13_finding()` uses `category='obfuscation'` — do NOT reuse `_make_finding` (hardcodes `'malicious-code'`)
+- `_process_nested` in `_ast_symbol_table.py` recursively handles arbitrary nesting depth: recurses into inner function bodies BEFORE routing the current level's nonlocal declarations; tracks `own_keys` (set of keys before recursion) so pass-through nonlocal writes from deeper nesting propagate upward past intermediate scopes that don't declare them; do NOT reorder the recursion/routing steps or nonlocal propagation will break
 - Deferred imports in `_ast_symbol_table.py` break circular deps — don't reorganize without checking import chains
 - `_extract_dict_literal` returns `dict[str, object]` (raw Python constants, not `str()`); `_kwarg_matches` uses native Python truthiness for `bool` table entries and `str()` equality for non-bool entries — `int(0)` is falsy, `str("0")` is truthy
 - `_eval_constant_expr` in `_ast_kwargs_dict_tracker.py` resolves `ast.Constant` and `ast.UnaryOp(USub|UAdd, Constant)` to Python values (handles negative int/float literals); returns `_UNRESOLVABLE` sentinel on failure; re-exported from `_ast_kwargs_detector.py`
 - `_SHADOW` in `_ast_split_int_list_tracker.py` is a module-level sentinel `list[int]` that marks shadowed (non-int-list) variables in the int-list pre-pass; always compare by identity (`existing is _SHADOW`), never by equality — a legitimate empty list (`codes = []`) must not be confused with a shadow marker
+- `_Decls = tuple[set[str], set[str]] | None` in `_ast_split_int_list_tracker.py` — type alias for the optional `(global_names, nonlocal_names)` declarations parameter accepted by mutation helpers; `declarations[0]` = global names, `declarations[1]` = nonlocal names; `None` means no declarations (module scope or class body)
 - `build_alias_map(tree)` recurses into `ast.Try` blocks via `_collect_imports` → `_try_bodies` — imports inside `try/except/else/finally` are captured; do not flatten `tree.body` iteration without preserving this recursion
 - `_is_lambda_chr(node)` in `_ast_split_map_resolver.py` validates exactly: single positional arg, no vararg, no kwonly args, body is `chr(arg)` with matching param name — do not relax these checks without a test for the edge case
 - `_detect_subprocess_list_exfil` uses `Finding()` directly with `category='data-exfiltration'` — do NOT use `_make_finding` (hardcodes `'malicious-code'`); follows the same constraint as `_make_rot13_finding()`
@@ -151,7 +155,8 @@ Key patterns and invariants. For detailed module-level docs, see `.agent/ARCHITE
 - `_ast_split_format.py` is at 299/300 lines — effectively frozen; any addition requires offsetting removal first
 - `_ast_imports.py` is at 160/300 lines — has headroom after string-resolver extraction to `_ast_string_resolver.py`
 - `_ast_rot13.py` is at 247/300 lines — has headroom after branch analysis extraction to `_ast_rot13_branch_analysis.py`
-- `_ast_split_comprehension.py` is at 290/300 lines — 10 lines remaining
+- `_ast_symbol_table.py` is at 297/300 lines — effectively frozen; any future addition requires extracting a helper to a sibling module
+- `_ast_split_comprehension.py` is at 278/300 lines — 22 lines remaining
 - `_ast_symbol_table_assignments.py` is at 288/300 lines — 12 lines remaining
 - `_ast_split_star_unpack.py` is at ~79/300 lines — ample room
 - `_ast_symbol_table_dict_tracker.py` is at ~149/300 lines — ample room
