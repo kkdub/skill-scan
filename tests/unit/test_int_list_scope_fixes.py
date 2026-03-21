@@ -80,3 +80,17 @@ class TestMixedNonlocalLocalChildEnc:
         result = _collect(code)
         # Multi-level chain: all resolve to outer.codes
         assert result["outer.codes"] == [101, 118, 97, 108]
+
+    def test_transparent_intermediate_passthrough(self) -> None:
+        """Middle doesn't touch x at all; inner nonlocal x -> outer scope."""
+        code = (
+            "def outer():\n    x = [101, 118]\n"
+            "    def middle():\n"
+            "        y = [1, 2]\n"
+            "        def inner():\n            nonlocal x\n"
+            "            x += [97, 108]\n        inner()\n"
+            "    middle()\n"
+        )
+        result = _collect(code)
+        # middle is transparent for x -- inner's nonlocal x routes to outer.x
+        assert result["outer.x"] == [101, 118, 97, 108]

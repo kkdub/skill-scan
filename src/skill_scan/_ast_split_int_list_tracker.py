@@ -211,16 +211,16 @@ def _collect_fn_body(
     decls = _collect_scope_declarations(fn.body)
     # Walk the function body with scope declarations active.
     _walk_fn_body(fn.body, scope, result, decls, enclosing)
-    # Determine child_enc per nested function: if ALL of a child's nonlocal
-    # names are also nonlocal in the current function, pass through to our
-    # enclosing scope (multi-level chain).  Otherwise the child's nonlocal
-    # names should resolve to the current scope (locally-bound names).
-    parent_nl = decls[1] if decls else set()
+    # Determine child_enc per nested function: pass through to enclosing
+    # when the parent doesn't locally own any of the child's nonlocal names.
+    # A name is "owned" if scope.name exists in result (was assigned here);
+    # names routed via global/nonlocal or not touched at all are transparent.
     for stmt in fn.body:
         if isinstance(stmt, ast.FunctionDef | ast.AsyncFunctionDef):
             child_nl = _collect_scope_declarations(stmt.body)[1]
-            if child_nl and parent_nl and child_nl <= parent_nl:
-                child_enc = enclosing
+            if child_nl:
+                owns_any = any(_resolve_scope_key(n, scope) in result for n in child_nl)
+                child_enc = scope if owns_any else enclosing
             else:
                 child_enc = scope
             _collect_fn_body(stmt, f"{scope}.{stmt.name}", child_enc, result)
