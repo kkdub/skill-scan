@@ -29,9 +29,29 @@ _SUBPROCESS_CALLS = frozenset(
 
 _NETWORK_TOOLS = frozenset({"curl", "wget", "nc", "ncat", "netcat"})
 
+# 'nc' is ambiguous (could be netcat or an unrelated tool).
+# Require at least one network-related flag to reduce false positives.
+_NC_NETWORK_FLAGS = frozenset({"-e", "-l", "-p", "-c", "-k", "-u", "-z"})
+
 _CATEGORY = "data-exfiltration"
 _RULE_ID = "EXFIL-008"
 _RECOMMENDATION = "Remove subprocess calls to network tools; use auditable Python HTTP clients instead"
+
+
+def _match_network_tool(first_value: str, rest: list[ast.expr]) -> str | None:
+    """Return the tool name if it's a known network tool, else None.
+
+    'nc' is ambiguous — requires at least one network-related flag in *rest*.
+    """
+    tool_name = first_value.split("/")[-1]  # handle /usr/bin/curl
+    if tool_name not in _NETWORK_TOOLS:
+        return None
+    if tool_name == "nc" and not any(
+        isinstance(e, ast.Constant) and isinstance(e.value, str) and e.value in _NC_NETWORK_FLAGS
+        for e in rest
+    ):
+        return None
+    return tool_name
 
 
 def _detect_subprocess_list_exfil(
@@ -64,8 +84,8 @@ def _detect_subprocess_list_exfil(
     if not isinstance(first, ast.Constant) or not isinstance(first.value, str):
         return []
 
-    tool_name = first.value.split("/")[-1]  # handle /usr/bin/curl
-    if tool_name not in _NETWORK_TOOLS:
+    tool_name = _match_network_tool(first.value, elements[1:])
+    if tool_name is None:
         return []
 
     return [

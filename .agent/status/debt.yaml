@@ -2,6 +2,8 @@
 # Entries are removed when resolved. Git history tracks removals.
 # Last updated: 2026-03-21
 # Resolved by fix: DEBT-032-KWARGS-CLASS-METHOD-SCOPE (scope key changed to ClassName.method)
+# Resolved by fix: DEBT-032-INTLIST-CONCAT-UNBOUNDED (_MAX_INT_LIST_SIZE cap in extend paths)
+# Resolved by fix: DEBT-030-NC-FALSE-POSITIVE ('nc' now requires network flags)
 # Resolved by PLAN-033 Part A: format_map extracted to _ast_split_format_map.py (was SPLIT-RESOLVE-AT-LIMIT)
 # Resolved by PLAN-032: DEBT-028-INTLIST-CLASS-BODY, DEBT-027-INTLIST-CONCAT, DEBT-027-INTLIST-EXTEND-VAR
 # Resolved by PLAN-019: lone surrogates, null bytes, OBFS-001 catalog, str.format/%-format evasion
@@ -69,24 +71,3 @@
     - src/skill_scan/_ast_split_int_list_tracker.py
   blocker: "Requires branch-aware traversal (snapshot-and-merge or shadow-on-branch) to avoid combining mutations from mutually exclusive paths; significant complexity for the pre-pass collector."
   resolution: "Snapshot the int_list_table before each branch, walk the branch, then merge results conservatively (shadow any key that differs between branches)."
-
-- id: DEBT-030-NC-FALSE-POSITIVE
-  description: "'nc' in _NETWORK_TOOLS is a 2-char string; any program literally named 'nc' in subprocess list-args triggers EXFIL-001 false positive"
-  type: security
-  severity: low
-  plan: PLAN-030
-  files:
-    - src/skill_scan/_ast_exfil_detector.py:18
-  blocker: "Mitigated by first-element-only check (only the executable name matters), but 'nc' is ambiguous — could be netcat or an unrelated tool. Fixing requires context-aware disambiguation or user-configurable allowlists."
-  resolution: "Consider requiring 'nc' to appear with network-related flags (-e, -l, -p) before flagging, or add a configurable allowlist for known-safe tool names."
-
-
-- id: DEBT-032-INTLIST-CONCAT-UNBOUNDED
-  description: "_resolve_binop_concat concatenates tracked int-lists with no size cap; crafted skill with large lists could allocate excessive memory in pre-pass"
-  type: technical
-  severity: low
-  plan: PLAN-032
-  files:
-    - src/skill_scan/_ast_split_int_list_tracker.py:56-66
-  blocker: "Mitigated in practice by AST literal size, but no explicit guard. Low priority since attacker-controlled list size requires proportionally large source files."
-  resolution: "Cap concat result at ~2048 elements, returning _SHADOW above the cap, matching the defensive posture of _MAX_REPEAT=1000 elsewhere."

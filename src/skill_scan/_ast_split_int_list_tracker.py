@@ -95,7 +95,10 @@ def _extend_tracked(name: str, value: ast.expr, scope: str, result: dict[str, li
     if existing is _SHADOW:
         return
     ints = _extract_int_list(value.elts)
-    result[key] = (existing + ints) if ints is not None else _SHADOW
+    if ints is None or len(existing) + len(ints) > _MAX_INT_LIST_SIZE:
+        result[key] = _SHADOW
+    else:
+        result[key] = existing + ints
 
 
 def _extend_with_tracked_var(
@@ -108,5 +111,8 @@ def _extend_with_tracked_var(
         result[target_key] = _SHADOW
         return
     if existing is _SHADOW:
+        return
+    if len(existing) + len(src) > _MAX_INT_LIST_SIZE:
+        result[target_key] = _SHADOW
         return
     result[target_key] = existing + src
