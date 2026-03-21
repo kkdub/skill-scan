@@ -1,0 +1,208 @@
+id: "PLAN-034"
+title: "Scope chain tracking for multilevel nonlocal and int-list global/nonlocal"
+type: implementation
+status: Done
+created: 2026-03-21
+linked_spec: null
+description: |
+  Implement scope chain tracking to resolve two related debt items:
+  DEBT-021-NONLOCAL-MULTILEVEL (symbol table: nonlocal writes only propagate
+  one level up) and DEBT-028-INTLIST-GLOBAL-NONLOCAL (int-list pre-pass:
+  global/nonlocal declarations not followed for mutations). Both share the
+  same root cause — no scope chain resolution for nonlocal/global declarations.
+
+alternatives: []
+risks:
+  - "_ast_symbol_table.py is at 290/300 lines; proper recursion ordering needs ~5-8 lines — may require extracting a helper to a sibling module"
+  - "Recursion ordering in _process_nested is subtle: deepest nesting must be processed first so nonlocal writes propagate correctly up the chain"
+
+requirements:
+  file: null
+  ids:
+    - R001  # _process_nested recursively walks nested functions so nonlocal writes propagate through arbitrary nesting depth
+    - R002  # _collect_int_list_assigns follows global declarations so int-list mutations in global-declaring functions update the module-level key
+    - R003  # _collect_int_list_assigns follows nonlocal declarations so int-list mutations in nested functions update the enclosing scope key
+    - R-IMP001  # All existing tests pass -- no regressions in symbol table or int-list tracking
+    - R-IMP002  # File line limits respected: all modified files stay under 300 lines
+  uncovered: []
+
+utilities_audit:
+  status: complete
+  search_performed:
+    - query: "_collect_scope_declarations"
+      result: "exists in _ast_symbol_table_assignments.py:218 -- reusable for int-list tracker"
+    - query: "nonlocal/global handling patterns"
+      result: "_route_nested_declarations in _ast_symbol_table.py:132 handles single-level routing; _route_globals handles global routing"
+    - query: "int-list tracker scope handling"
+      result: "_extend_tracked uses scope-qualified keys but has no declaration awareness"
+  categories:
+    scope_declarations:
+      needed: true
+      exists: "src/skill_scan/_ast_symbol_table_assignments.py (_collect_scope_declarations)"
+      gaps: "not imported by int-list tracker"
+      action: use
+      location: "src/skill_scan/_ast_symbol_table_assignments.py"
+  infrastructure_parts: []
+
+environment:
+  status: pending
+  build:
+    tool: null
+    install_cmd: null
+    check_cmd: null
+    prerequisites: []
+  runtime_services: []
+  changes:
+    new_dependencies: []
+    env_vars: []
+    schema_changes: []
+    ci_changes: []
+    build_changes: []
+
+change_surface:
+  status: pending
+  modules: []
+  directory_tree: {}
+
+parts:
+  - id: a
+    title: "Recursive nonlocal propagation in symbol table"
+    status: Done
+    requirements_covered: [R001, R-IMP001, R-IMP002]
+    depends_on: []
+    approach:
+      - step: "Make _process_nested recursive -- after processing an inner function's declarations, call _process_nested on its body to handle deeper nesting"
+        files:
+          - src/skill_scan/_ast_symbol_table.py
+        notes: |
+          Current _process_nested (line 101) iterates body for FunctionDef nodes
+          but does not recurse into their bodies. Add a recursive call after
+          _route_nested_declarations so that inner.inner.nonlocal propagates
+          through. IMPORTANT: recursion must happen BEFORE routing the current
+          level's nonlocals -- process deepest nesting first so inner nonlocal
+          writes land in inner_scope, then the current level's nonlocal routing
+          propagates the accumulated value upward. Alternatively, re-route after
+          the recursive call returns. Simply appending a recursive call after
+          routing will NOT work because the value is already moved.
+          File is at 290/300 lines -- this is NOT a one-line change. Budget
+          ~5-8 lines for the recursive call + ordering fix. Will likely need to
+          extract a helper or slim existing code to stay under 300.
+      - step: "Add tests for multilevel nonlocal: 2-level and 3-level nesting, plus global-from-deeply-nested"
+        files:
+          - tests/unit/test_ast_symbol_table_scope.py
+        notes: |
+          Add TestMultilevelNonlocal class with cases:
+          - inner -> outer -> grandparent (2-level nonlocal)
+          - innermost -> inner -> outer (3-level nonlocal chain)
+          - global declaration from a deeply nested function routes to module scope
+          - nonlocal at level 2 + global at level 3 (mixed declarations)
+    criteria:
+      - "_process_nested calls itself recursively for nested FunctionDef/AsyncFunctionDef nodes found in inner function bodies"
+      - "Two-level nonlocal test: def outer/def middle/def inner with 'nonlocal x' in inner updates outer.x (not middle.x)"
+      - "Three-level nonlocal chain test: nonlocal propagates through 3 nesting levels"
+      - "Global from deeply nested function routes to module scope (result['x'] exists, result.get('inner.x') does not)"
+      - "_ast_symbol_table.py stays at or under 300 lines"
+      - "All existing tests in test_ast_symbol_table_scope.py still pass"
+
+  - id: b
+    title: "Scope declaration tracking in int-list pre-pass"
+    status: Done
+    requirements_covered: [R002, R003, R-IMP001, R-IMP002]
+    depends_on: [a]
+    approach:
+      - step: "Add scope declaration awareness to int-list mutation helpers -- resolve target key from global/nonlocal declarations before writing"
+        files:
+          - src/skill_scan/_ast_split_int_list_tracker.py
+          - src/skill_scan/_ast_split_comprehension.py
+        notes: |
+          TWO changes needed in _ast_split_comprehension.py:_collect_int_list_assigns:
+          1. Add nested function traversal: currently only walks top-level
+             FunctionDef/ClassDef bodies (lines 33-40). Nested functions inside
+             functions are never visited because _sub_bodies explicitly excludes
+             FunctionDef/ClassDef. Must recurse into nested FunctionDef bodies
+             with the enclosing function as parent scope.
+          2. Collect global/nonlocal declarations (import _collect_scope_declarations
+             from _ast_symbol_table_assignments) for each function body. Pass a
+             declarations mapping to _handle_int_list_stmt and _extend_tracked so
+             they can resolve the target key: global names use empty-string scope
+             (module level), nonlocal names use enclosing scope.
+          _ast_split_int_list_tracker.py is at 118 lines -- plenty of room.
+          _ast_split_comprehension.py is at 281 lines -- changes must be minimal.
+          Consider adding a _resolve_scope_key helper in the tracker module.
+      - step: "Add tests for global and nonlocal int-list mutations"
+        files:
+          - tests/unit/test_ast_split_int_list_tracker.py
+        notes: |
+          Add test cases:
+          - Function with 'global codes' mutating module-level int-list via +=
+          - Function with 'global codes' mutating via .extend()
+          - Nested function with 'nonlocal codes' mutating enclosing function's int-list
+          - Mixed: global int-list + local int-list in same function (no cross-contamination)
+          Verify via _collect_int_list_assigns that the correct scope key is updated.
+    criteria:
+      - "_handle_int_list_stmt accepts and uses scope declaration info to resolve the correct target key for global-declared variables"
+      - "_handle_assign resolves global-declared names to module-level key (not function-scoped) for initial assignments like 'global codes; codes = [101]'"
+      - "_extend_tracked resolves global-declared names to module-level key (empty-string scope) instead of function-scoped key"
+      - "_extend_tracked resolves nonlocal-declared names to enclosing function's scope key"
+      - "_collect_int_list_assigns recurses into nested FunctionDef bodies (not just top-level functions)"
+      - "Test: function with 'global codes; codes += [101]' updates module-level key, not 'funcname.codes'"
+      - "Test: nested function with 'nonlocal codes; codes.extend([101])' updates enclosing scope key"
+      - "_ast_split_int_list_tracker.py and _ast_split_comprehension.py stay at or under 300 lines"
+      - "All existing tests in test_ast_split_int_list_tracker.py still pass"
+
+allowed_files:
+  - src/skill_scan/_ast_symbol_table.py
+  - src/skill_scan/_ast_split_int_list_tracker.py
+  - src/skill_scan/_ast_split_comprehension.py
+  - tests/unit/test_ast_symbol_table_scope.py
+  - tests/unit/test_ast_split_int_list_tracker.py
+  - .agent/status/debt.yaml
+
+forbidden:
+  - src/skill_scan/ast_analyzer.py
+  - src/skill_scan/_ast_symbol_table_assignments.py
+
+acceptance_scenarios:
+  - name: "E2E: multilevel nonlocal produces finding"
+    description: |
+      analyze_python() on code with 3-level nested nonlocal building 'eval'
+      via string concatenation produces a finding (the reassembled value is
+      visible in the module-level symbol table after propagation).
+    test_file: tests/unit/test_ast_split_int_list_tracker.py
+    status: written
+  - name: "E2E: global int-list mutation produces finding"
+    description: |
+      analyze_python() on code where a function declares 'global codes' and
+      mutates a module-level int-list via += produces a split-evasion finding
+      (the int-list resolves to a dangerous string via chr/join).
+    test_file: tests/unit/test_ast_split_int_list_tracker.py
+    status: written
+acceptance_criteria:
+  - "All requirements have status: done"
+  - "All parts have status: Done"
+  - "All tests pass"
+  - "DEBT-021-NONLOCAL-MULTILEVEL and DEBT-028-INTLIST-GLOBAL-NONLOCAL marked resolved in debt.yaml"
+stop_condition: "When all requirements are verified and all parts are complete."
+
+work_log:
+  - part: a
+    timestamp: "2026-03-21T12:00:00Z"
+    status: Done
+    notes: "Recursive _process_nested with pass-through nonlocal routing. 297/300 lines. 3543 tests pass."
+    signals:
+      - "DEBT: _ast_symbol_table.py at 297/300 lines — effectively frozen"
+  - part: b
+    timestamp: "2026-03-21T12:30:00Z"
+    status: Done
+    notes: "Added _resolve_scope_key + _collect_fn_body for declaration-aware int-list tracking. 198/300 tracker, 278/300 comprehension. 3551 tests pass."
+    signals: []
+  - part: docs
+    timestamp: "2026-03-21T13:00:00Z"
+    status: Done
+    notes: "Updated CLAUDE.md (Architecture Notes: new _resolve_scope_key, _collect_fn_body, _process_nested recursive invariants, _Decls type alias; Known debt: _ast_symbol_table.py 297/300; updated line counts for tracker and comprehension). Updated ARCHITECTURE-REFERENCE.md (Symbol Table _process_nested, Split-Evasion tracker and comprehension sub-module descriptions)."
+    signals: []
+evidence:
+  - type: manual_verification
+    command: "Read CLAUDE.md, ARCHITECTURE-REFERENCE.md, plan.yaml, context.md, changed source files"
+    result: "All new patterns documented: _resolve_scope_key, _collect_fn_body, recursive _process_nested, _Decls type alias. Debt entries updated with accurate line counts. No gaps found."
+errors: []

@@ -3,16 +3,9 @@
 Resolves ``''.join(...)`` patterns (list/generator/map/reversed) and tracked
 int-list variables used as comprehension iterables via ``_collect_int_list_assigns``.
 
-Public surface
---------------
-``_collect_int_list_assigns(tree)``
-    Pre-pass that collects all ``Name = [int, ...]`` assignments and mutations
-    (``+=``, ``.extend()``) from all scopes.  Returns ``dict[str, list[int]]``
-    keyed by ``scope.name`` (module-level uses empty-string prefix).
-
-``_resolve_join_call(node, symbol_table, scope, ...)``
-    Top-level resolver: returns the decoded string for ``'sep'.join(arg)`` or
-    None if the argument cannot be statically resolved.
+``_collect_int_list_assigns(tree)`` -- pre-pass collecting int-list assignments
+keyed by ``scope.name``.  ``_resolve_join_call(...)`` -- top-level resolver
+returning decoded string or None.
 """
 
 from __future__ import annotations
@@ -20,7 +13,7 @@ from __future__ import annotations
 import ast
 
 from skill_scan._ast_split_format import _resolve_expr_list, _resolve_join_elements, _scoped_lookup
-from skill_scan._ast_split_int_list_tracker import _SHADOW, _handle_int_list_stmt
+from skill_scan._ast_split_int_list_tracker import _SHADOW, _collect_fn_body, _handle_int_list_stmt
 from skill_scan._ast_split_map_resolver import _resolve_call_fn_name, _resolve_map_chr, _resolve_map_join
 from skill_scan._ast_split_star_unpack import _maybe_flatten_starred
 from skill_scan._ast_symbol_table_returns import _sub_bodies
@@ -32,16 +25,20 @@ def _collect_int_list_assigns(tree: ast.Module) -> dict[str, list[int]]:
     _collect_int_lists_from_body(tree.body, "", result)
     for node in tree.body:
         if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
-            _collect_int_lists_from_body(node.body, node.name, result)
+            _collect_fn_body(node, node.name, "", result)
         elif isinstance(node, ast.ClassDef):
             _collect_int_lists_from_body(node.body, node.name, result)
             for stmt in node.body:
                 if isinstance(stmt, ast.FunctionDef | ast.AsyncFunctionDef):
-                    _collect_int_lists_from_body(stmt.body, f"{node.name}.{stmt.name}", result)
+                    _collect_fn_body(stmt, f"{node.name}.{stmt.name}", "", result)
     return result
 
 
-def _collect_int_lists_from_body(body: list[ast.stmt], scope: str, result: dict[str, list[int]]) -> None:
+def _collect_int_lists_from_body(
+    body: list[ast.stmt],
+    scope: str,
+    result: dict[str, list[int]],
+) -> None:
     """Collect assignments; int-lists get values, others get _SHADOW sentinel."""
     for stmt in body:
         _handle_int_list_stmt(stmt, scope, result)

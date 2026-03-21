@@ -20,21 +20,10 @@
 # Resolved by PLAN-027: DEBT-026-CHAINED-UNION, DEBT-026-STRING-TRUTHINESS, DEBT-024-TRACKED-COMPREHENSION
 # Resolved by fix: DEBT-022-CALL-RETURN-DESCRIPTION, DEBT-021-SCOPE-ATTRIBUTION-ASSERTION, DEBT-027-CHR-ALIAS, DEBT-027-MAP-CHR-BUILTINS-ALIAS
 # Resolved by PLAN-028 Part C: DEBT-027-INTLIST-AUGMENTED (red-team confirmed; empty-list sentinel fix)
+# Resolved by PLAN-034: DEBT-021-NONLOCAL-MULTILEVEL (recursive _process_nested), DEBT-028-INTLIST-GLOBAL-NONLOCAL (scope declaration tracking in int-list pre-pass)
 
 # --- Structural / Maintenance Debt ---
 # Resolved by fix branch: DEBT-TYPE-IGNORE-CONFIG (TypedDict for config kwargs), DEBT-021-SCOPE-DECL-CONTROLFLOW (for/while/with/try)
-
-- id: DEBT-021-NONLOCAL-MULTILEVEL
-  description: "_process_nested only routes nonlocal writes one level up; two-level-deep nonlocal (inner -> outer -> grandparent) not handled"
-  type: effectiveness
-  severity: low
-  plan: PLAN-021
-  files:
-    - src/skill_scan/_ast_symbol_table.py:80-100
-  blocker: "Multi-level nonlocal resolution requires a full scope chain; single-level covers the most common evasion pattern."
-  resolution: "Implement scope chain tracking to propagate nonlocal writes through multiple nesting levels."
-
-
 
 # --- PLAN-027 Red-Team Debt ---
 
@@ -50,16 +39,6 @@
   blocker: "Requires resolvers to return (value, label) tuples or track whether any leaf resolution used call-return; changes the resolver signature contract across all _RESOLVERS entries."
   resolution: "Have resolvers return (value, source_label) tuples instead of bare strings. Update _RESOLVERS type alias and all callers. Alternatively, add a thread-local or context flag that resolve_call_return sets when it contributes to a resolution."
 
-
-- id: DEBT-028-INTLIST-GLOBAL-NONLOCAL
-  description: "_extend_tracked writes to scope-qualified key; global/nonlocal declarations not followed, so mutations inside functions with global/nonlocal codes never update the actual binding"
-  type: effectiveness
-  severity: low
-  plan: none
-  files:
-    - src/skill_scan/_ast_split_int_list_tracker.py:65-69
-  blocker: "Requires scope chain tracking to resolve global/nonlocal declarations to their target scope key before writing."
-  resolution: "In _extend_tracked, accept a scope_declarations parameter (or the full scope chain); when the name has a global/nonlocal binding, resolve the key to the target scope before lookup/write."
 
 - id: DEBT-028-INTLIST-BRANCH-MERGE
   description: "_collect_int_list_assigns walks both if/else branches sequentially, merging mutations from mutually exclusive paths into one list — produces impossible combined values and potential false positives"

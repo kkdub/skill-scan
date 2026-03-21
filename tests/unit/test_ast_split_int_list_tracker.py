@@ -1,11 +1,4 @@
-"""Tests for int-list concat, extend-var, and class body tracking (Part A).
-
-Covers:
-- R001: int-list + concat: part1 + part2 resolves in pre-pass
-- R002: int-list extend-var: .extend(tracked_var) resolves tracked variable
-- R003: int-list class body: class-level codes = [ints] tracked in pre-pass
-- R-EFF001 (partial): corpus inputs produce findings when scanned
-"""
+"""Tests for int-list concat, extend-var, class body, and scope declaration tracking."""
 
 from __future__ import annotations
 
@@ -22,9 +15,6 @@ _FILE = "test.py"
 def _collect(code: str) -> dict[str, list[int]]:
     """Helper: parse code and collect int-list assignments."""
     return _collect_int_list_assigns(_PARSE(code))
-
-
-# -- R001: BinOp(Add) concat of two tracked int-lists -------------------------
 
 
 class TestIntListConcat:
@@ -97,9 +87,6 @@ class TestIntListConcat:
         assert result["f.codes"] is _SHADOW
 
 
-# -- R002: .extend(tracked_var) resolves tracked variable ---------------------
-
-
 class TestExtendTrackedVar:
     """.extend(tracked_var) resolves by looking up the variable in result."""
 
@@ -152,9 +139,6 @@ class TestExtendTrackedVar:
         code = "codes = [101, 118]\ncodes += [97, 108]"
         result = _collect(code)
         assert result["codes"] == [101, 118, 97, 108]
-
-
-# -- R003: class-level int-list assignment tracking ----------------------------
 
 
 class TestClassBodyIntList:
@@ -227,3 +211,89 @@ class TestClassBodyIntList:
         result = _collect(code)
         assert result["A.codes"] == [101, 118]
         assert result["B.codes"] == [97, 108]
+
+
+class TestGlobalNonlocalIntList:
+    """_collect_int_list_assigns resolves global/nonlocal declarations to correct scope keys."""
+
+    def test_global_augassign_updates_module_key(self) -> None:
+        """global codes; codes += [118] updates module-level key, not f.codes."""
+        result = _collect("codes = [101]\ndef f():\n    global codes\n    codes += [118]")
+        assert result["codes"] == [101, 118]
+        assert "f.codes" not in result
+
+    def test_global_extend_updates_module_key(self) -> None:
+        """global codes; codes.extend() updates module-level key."""
+        result = _collect("codes = [101, 118]\ndef f():\n    global codes\n    codes.extend([97, 108])")
+        assert result["codes"] == [101, 118, 97, 108]
+        assert "f.codes" not in result
+
+    def test_global_assign_updates_module_key(self) -> None:
+        """global codes; codes = [...] assigns to module-level key."""
+        result = _collect("codes = [1]\ndef f():\n    global codes\n    codes = [101, 118]")
+        assert result["codes"] == [101, 118]
+        assert "f.codes" not in result
+
+    def test_nonlocal_extend_updates_enclosing_key(self) -> None:
+        """nonlocal codes in nested func updates enclosing function's key."""
+        code = (
+            "def outer():\n    codes = [101, 118]\n"
+            "    def inner():\n        nonlocal codes\n"
+            "        codes.extend([97, 108])\n    inner()"
+        )
+        result = _collect(code)
+        assert result["outer.codes"] == [101, 118, 97, 108]
+        assert "outer.inner.codes" not in result
+
+    def test_nonlocal_augassign_updates_enclosing_key(self) -> None:
+        """nonlocal codes; codes += [...] updates enclosing scope key."""
+        code = (
+            "def outer():\n    codes = [101, 118]\n"
+            "    def inner():\n        nonlocal codes\n"
+            "        codes += [97, 108]\n    inner()"
+        )
+        result = _collect(code)
+        assert result["outer.codes"] == [101, 118, 97, 108]
+        assert "outer.inner.codes" not in result
+
+    def test_global_augassign_nested_control_flow(self) -> None:
+        """Global mutation inside nested if/for in function body is tracked."""
+        code = "codes = [101]\ndef f():\n    global codes\n    if True:\n        for _ in [1]:\n            codes += [118]"
+        result = _collect(code)
+        assert result["codes"] == [101, 118]
+
+    def test_mixed_global_and_local_no_contamination(self) -> None:
+        """global x updates module key; local y stays function-scoped."""
+        code = "x = [1, 2]\ndef f():\n    global x\n    x += [3]\n    y = [10, 20]"
+        result = _collect(code)
+        assert result["x"] == [1, 2, 3]
+        assert "f.x" not in result
+        assert result["f.y"] == [10, 20]
+
+
+class TestGlobalNonlocalE2E:
+    """E2E: global/nonlocal int-list mutations produce scanner findings."""
+
+    def test_global_intlist_mutation_produces_finding(self) -> None:
+        """Module-level int-list mutated via global decl -> split-evasion finding."""
+        code = (
+            "codes = [101, 118]\ndef f():\n    global codes\n"
+            "    codes += [97, 108]\nf()\n"
+            "x = ''.join(chr(c) for c in codes)\n"
+        )
+        findings = analyze_python(code, _FILE)
+        rule_ids = [f.rule_id for f in findings]
+        assert any(r.startswith("EXEC-") or r.startswith("OBFS-") for r in rule_ids)
+
+    def test_multilevel_nonlocal_produces_finding(self) -> None:
+        """3-level nested nonlocal building dangerous string -> finding."""
+        code = (
+            "def outer():\n    codes = [101, 118]\n"
+            "    def middle():\n        nonlocal codes\n        codes += [97]\n"
+            "        def inner():\n            nonlocal codes\n"
+            "            codes += [108]\n        inner()\n"
+            "    middle()\n    x = ''.join(chr(c) for c in codes)\n"
+        )
+        findings = analyze_python(code, _FILE)
+        rule_ids = [f.rule_id for f in findings]
+        assert any(r.startswith("EXEC-") or r.startswith("OBFS-") for r in rule_ids)

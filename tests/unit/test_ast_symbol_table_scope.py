@@ -16,9 +16,6 @@ _PARSE = ast.parse
 _FIXTURES = pathlib.Path(__file__).resolve().parent.parent / "fixtures" / "split_evasion"
 
 
-# -- R003: Global declaration routing ----------------------------------------
-
-
 class TestGlobalDeclaration:
     """build_symbol_table routes global-declared writes to module scope (R003)."""
 
@@ -46,9 +43,6 @@ class TestGlobalDeclaration:
         assert "f.b" not in result
 
 
-# -- R005: Last-write-wins for global writes ---------------------------------
-
-
 class TestGlobalLastWriteWins:
     """Global writes use last-write-wins semantics (R005)."""
 
@@ -65,9 +59,6 @@ class TestGlobalLastWriteWins:
         assert result["x"] == "updated"
 
 
-# -- R-IMP006: No duplicate function-scoped key -----------------------------
-
-
 class TestNoDuplicateKey:
     """Global writes must not create duplicate function-scoped key (R-IMP006)."""
 
@@ -76,9 +67,6 @@ class TestNoDuplicateKey:
         result = build_symbol_table(_PARSE(code))
         assert "f.x" not in result
         assert result["x"] == "b"
-
-
-# -- R-IMP007: Per-function scoping -----------------------------------------
 
 
 class TestPerFunctionScoping:
@@ -101,9 +89,6 @@ class TestPerFunctionScoping:
         result = build_symbol_table(_PARSE(code))
         assert result["x"] == "global"
         assert result["f.x"] == "local"
-
-
-# -- R004: Nonlocal declaration routing --------------------------------------
 
 
 class TestNonlocalDeclaration:
@@ -134,9 +119,6 @@ class TestNonlocalDeclaration:
         assert "inner.b" not in result
 
 
-# -- R006: Nonlocal does not affect module scope -----------------------------
-
-
 class TestNonlocalDoesNotAffectModule:
     """Nonlocal writes update enclosing function scope, not module scope (R006)."""
 
@@ -153,9 +135,6 @@ class TestNonlocalDoesNotAffectModule:
         result = build_symbol_table(_PARSE(code))
         assert result["x"] == "module_x"
         assert result["outer.x"] == "inner_x"
-
-
-# -- R-EFF003/R-EFF004: Evasion fixture detection ---------------------------
 
 
 class TestEvasionFixtures:
@@ -182,9 +161,6 @@ class TestEvasionFixtures:
         result = build_symbol_table(_PARSE(code))
         assert result["outer.a"] == "ex"
         assert result["outer.b"] == "ec"
-
-
-# -- Global inside control flow ----------------------------------------------
 
 
 class TestGlobalInControlFlow:
@@ -248,3 +224,56 @@ class TestGlobalInControlFlow:
         code = "x = 'a'\nasync def f():\n    async with ctx() as _:\n        global x\n        x = 'b'\n"
         result = build_symbol_table(_PARSE(code))
         assert result["x"] == "b"
+
+
+class TestMultilevelNonlocal:
+    """Nonlocal writes propagate through arbitrary nesting depth (R001)."""
+
+    def test_two_level_nonlocal_propagates(self) -> None:
+        """Inner nonlocal write propagates through middle to outer scope."""
+        code = (
+            "def outer():\n    x = 'original'\n"
+            "    def middle():\n        def inner():\n"
+            "            nonlocal x\n            x = 'modified'\n"
+        )
+        result = build_symbol_table(_PARSE(code))
+        assert result["outer.x"] == "modified"
+        assert "middle.x" not in result
+        assert "inner.x" not in result
+
+    def test_three_level_nonlocal_chain(self) -> None:
+        """Nonlocal propagates through 3 nesting levels via chain."""
+        code = (
+            "def level0():\n    x = 'start'\n"
+            "    def level1():\n        nonlocal x\n"
+            "        def level2():\n            nonlocal x\n"
+            "            def level3():\n                nonlocal x\n"
+            "                x = 'end'\n"
+        )
+        result = build_symbol_table(_PARSE(code))
+        assert result["level0.x"] == "end"
+        for lvl in ("level1", "level2", "level3"):
+            assert f"{lvl}.x" not in result
+
+    def test_global_from_deeply_nested(self) -> None:
+        """Global from deeply nested function routes to module scope."""
+        code = "def outer():\n    def inner():\n        global x\n        x = 'val'\n"
+        result = build_symbol_table(_PARSE(code))
+        assert result["x"] == "val"
+        assert "inner.x" not in result
+        assert "outer.x" not in result
+
+    def test_mixed_nonlocal_and_global_in_deep_tree(self) -> None:
+        """Nonlocal at one level and global at another in same tree."""
+        code = (
+            "def outer():\n    y = 'orig'\n"
+            "    def middle():\n        nonlocal y\n"
+            "        def inner():\n            global g\n"
+            "            g = 'global_val'\n"
+            "            nonlocal y\n            y = 'nonlocal_val'\n"
+        )
+        result = build_symbol_table(_PARSE(code))
+        assert result["g"] == "global_val"
+        assert result["outer.y"] == "nonlocal_val"
+        assert "inner.g" not in result
+        assert "inner.y" not in result

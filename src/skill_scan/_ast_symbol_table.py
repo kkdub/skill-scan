@@ -65,7 +65,7 @@ def build_symbol_table(tree: ast.Module) -> dict[str, str]:
             if ret_val is not None:
                 result[f"{node.name}()"] = ret_val
             _route_globals(func_scope, global_names, result, module_scope)
-            _process_nested(node.body, func_scope, result)
+            _process_nested(node.body, func_scope, result, node.name)
             for var_name, value in func_scope.items():
                 if isinstance(value, str):
                     result[f"{node.name}.{var_name}"] = value
@@ -102,6 +102,7 @@ def _process_nested(
     body: list[ast.stmt],
     parent_scope: dict[str, str | _Ref],
     result: dict[str, str],
+    scope_prefix: str = "",
 ) -> None:
     """Handle nested functions -- route nonlocal writes to enclosing scope."""
     from skill_scan._ast_symbol_table_assignments import _collect_scope_declarations
@@ -110,9 +111,17 @@ def _process_nested(
     for node in body:
         if not isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
             continue
+        qualified = f"{scope_prefix}.{node.name}" if scope_prefix else node.name
         inner_scope = _collect_assignments(node.body)
         _resolve_indirections(inner_scope, parent_scope=parent_scope)
         global_names, nonlocal_names = _collect_scope_declarations(node.body)
+        own_keys = set(inner_scope)
+        _process_nested(node.body, inner_scope, result, qualified)
+        # Pass-through: deeper nonlocal writes that landed here but belong
+        # to an outer scope (name not owned by this function) keep going up.
+        for k in set(inner_scope) - own_keys:
+            if k not in nonlocal_names:
+                parent_scope[k] = inner_scope.pop(k)
         _route_nested_declarations(
             inner_scope,
             global_names,
@@ -122,11 +131,11 @@ def _process_nested(
         )
         for var_name, value in inner_scope.items():
             if isinstance(value, str):
-                result[f"{node.name}.{var_name}"] = value
-        # Track nested function return value under 'innerfunc()' composite key
+                result[f"{qualified}.{var_name}"] = value
+        # Track nested function return value under qualified composite key
         ret_val = _collect_return_value(node.body, inner_scope)
         if ret_val is not None:
-            result[f"{node.name}()"] = ret_val
+            result[f"{qualified}()"] = ret_val
 
 
 def _route_nested_declarations(

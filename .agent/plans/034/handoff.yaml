@@ -1,0 +1,6 @@
+stopped_at: null
+next_steps:
+  - "All parts complete. Plan is ready for final acceptance review and close."
+active_signals:
+  - "DEBT: _ast_symbol_table.py at 297/300 lines — effectively frozen; any future addition requires extracting a helper"
+blockers: []

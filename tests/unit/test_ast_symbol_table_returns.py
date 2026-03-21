@@ -126,7 +126,7 @@ class TestScopeKeys:
 
     def test_nested_function_key(self) -> None:
         code = "def outer():\n    def inner():\n        return 'val'\n    x = 'test'\n    return x\n"
-        assert build_symbol_table(_PARSE(code))["inner()"] == "val"
+        assert build_symbol_table(_PARSE(code))["outer.inner()"] == "val"
 
     def test_async_function_return(self) -> None:
         assert build_symbol_table(_PARSE("async def f():\n    return 'async_val'"))["f()"] == "async_val"
