@@ -3,7 +3,9 @@
 Detects:
 - subprocess.run/call/check_output/check_call/Popen where the first positional
   arg is an ast.List containing string constants matching network tool names
-  (curl, wget, nc, ncat, netcat) -- EXFIL-008
+  (curl, wget, nc, ncat, netcat) -- EXFIL-008.
+  Note: 'nc' is ambiguous and only flagged when at least one network-related
+  flag (-e, -l, -p, -c, -k, -u, -z) is present in the argument list.
 - socket.getaddrinfo() with non-literal hostname (f-strings, variables,
   concatenation) indicating DNS exfiltration -- EXFIL-006
 
@@ -62,7 +64,10 @@ def _detect_subprocess_list_exfil(
     Catches patterns like:
       subprocess.run(['curl', '-d', data, url])
       subprocess.check_output(['wget', url])
-      sp.Popen(['nc', host, port])  (aliased import)
+      sp.Popen(['nc', '-e', '/bin/sh', host])  (aliased import; 'nc' requires a network flag)
+
+    Note: bare 'nc' without a recognised network flag (e.g. -e, -l, -p) is
+    NOT flagged to avoid false positives on unrelated uses of nc.
     """
     if not isinstance(node, ast.Call):
         return []
