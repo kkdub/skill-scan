@@ -86,10 +86,10 @@ class TestAugAssignExtend:
         assert result["codes"] is _SHADOW
 
     def test_augassign_in_if_block(self) -> None:
-        """AugAssign inside control flow (if block) is tracked."""
+        """AugAssign inside if-only block: if-branch differs from else -> shadow."""
         code = "codes = [101]\nif True:\n    codes += [118]"
         result = _collect(code)
-        assert result == {"codes": [101, 118]}
+        assert result["codes"] is _SHADOW
 
 
 # -- R002: .extend() calls extend tracked int-list ---------------------------
@@ -230,10 +230,10 @@ class TestAdversarialAugmented:
     """Red-team adversarial patterns for augmented int-list tracking."""
 
     def test_nested_if_augassign(self) -> None:
-        """codes += inside nested if blocks is tracked."""
+        """codes += inside nested if-only blocks: branch divergence -> shadow."""
         code = "codes = [101, 118]\nif True:\n    if True:\n        codes += [97, 108]"
         result = _collect(code)
-        assert result["codes"] == [101, 118, 97, 108]
+        assert result["codes"] is _SHADOW
 
     def test_augassign_in_while(self) -> None:
         """codes += inside while loop is tracked."""

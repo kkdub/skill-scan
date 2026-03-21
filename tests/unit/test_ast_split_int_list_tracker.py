@@ -257,10 +257,10 @@ class TestGlobalNonlocalIntList:
         assert "outer.inner.codes" not in result
 
     def test_global_augassign_nested_control_flow(self) -> None:
-        """Global mutation inside nested if/for in function body is tracked."""
+        """Global mutation inside if-only in function body: branch divergence -> shadow."""
         code = "codes = [101]\ndef f():\n    global codes\n    if True:\n        for _ in [1]:\n            codes += [118]"
         result = _collect(code)
-        assert result["codes"] == [101, 118]
+        assert result["codes"] is _SHADOW
 
     def test_mixed_global_and_local_no_contamination(self) -> None:
         """global x updates module key; local y stays function-scoped."""

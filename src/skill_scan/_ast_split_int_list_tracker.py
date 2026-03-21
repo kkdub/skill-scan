@@ -178,20 +178,88 @@ def _extend_with_tracked_var(
     result[target_key] = existing + src
 
 
+def _values_agree(vals: list[list[int]]) -> bool:
+    """Check whether all values agree (identity for _SHADOW, equality otherwise)."""
+    first = vals[0]
+    for v in vals[1:]:
+        if first is _SHADOW:
+            if v is not _SHADOW:
+                return False
+        elif v is _SHADOW or v != first:
+            return False
+    return True
+
+
+def _merge_branches(
+    branches: list[dict[str, list[int]]],
+    result: dict[str, list[int]],
+) -> None:
+    """Merge N branch results conservatively into *result*.
+
+    Keys with identical values across all branches that contain them are
+    kept.  Keys with differing values are replaced with ``_SHADOW``.
+    Keys present in only some branches are kept (security-conservative).
+    """
+    all_keys: set[str] = set()
+    for br in branches:
+        all_keys.update(br)
+    for key in all_keys:
+        vals = [br[key] for br in branches if key in br]
+        result[key] = vals[0] if _values_agree(vals) else _SHADOW
+
+
+def _is_exhaustive_match(node: ast.Match) -> bool:
+    """Return True if the match has a wildcard case (MatchAs with name=None)."""
+    if not node.cases:
+        return False
+    last_pat = node.cases[-1].pattern
+    return isinstance(last_pat, ast.MatchAs) and last_pat.name is None
+
+
 def _walk_fn_body(
     body: list[ast.stmt],
     scope: str,
     result: dict[str, list[int]],
-    decls: _Decls,
-    enclosing: str,
+    decls: _Decls = None,
+    enclosing: str = "",
 ) -> None:
-    """Recursively walk a body for int-list tracking, threading declarations."""
+    """Recursively walk a body for int-list tracking, threading declarations.
+
+    If and Match nodes use snapshot-walk-merge so that mutually exclusive
+    branches do not contaminate each other.  For/While/Try/With are still
+    walked sequentially.
+    """
     from skill_scan._ast_symbol_table_returns import _sub_bodies
 
     for stmt in body:
         _handle_int_list_stmt(stmt, scope, result, decls, enclosing)
-        for child_body in _sub_bodies(stmt):
-            _walk_fn_body(child_body, scope, result, decls, enclosing)
+        if isinstance(stmt, ast.If):
+            snap = result.copy()
+            _walk_fn_body(stmt.body, scope, result, decls, enclosing)
+            after_if = result.copy()
+            result.clear()
+            result.update(snap)
+            _walk_fn_body(stmt.orelse, scope, result, decls, enclosing)
+            after_else = result.copy()
+            result.clear()
+            result.update(snap)
+            _merge_branches([after_if, after_else], result)
+        elif isinstance(stmt, ast.Match):
+            snap = result.copy()
+            branch_results: list[dict[str, list[int]]] = []
+            for case in stmt.cases:
+                result.clear()
+                result.update(snap)
+                _walk_fn_body(case.body, scope, result, decls, enclosing)
+                branch_results.append(result.copy())
+            if not _is_exhaustive_match(stmt):
+                branch_results.append(snap)
+            result.clear()
+            result.update(snap)
+            _merge_branches(branch_results, result)
+        else:
+            for child_body in _sub_bodies(stmt):
+                _walk_fn_body(child_body, scope, result, decls, enclosing)
 
 
 def _collect_fn_body(
