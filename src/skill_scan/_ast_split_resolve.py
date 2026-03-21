@@ -88,6 +88,11 @@ def resolve_call_return(
     """
     func = node.func
     if isinstance(func, ast.Name):
+        # Try scoped key first (nested functions: outer.inner()), then bare
+        if scope:
+            scoped = symbol_table.get(f"{scope}.{func.id}()")
+            if scoped is not None:
+                return scoped
         return symbol_table.get(f"{func.id}()")
     if isinstance(func, ast.Attribute) and isinstance(func.value, ast.Name):
         base, attr = func.value.id, func.attr

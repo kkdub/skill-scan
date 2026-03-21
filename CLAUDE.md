@@ -151,11 +151,11 @@ Key patterns and invariants. For detailed module-level docs, see `.agent/ARCHITE
 
 **Known debt**:
 - PEP 448 spread dicts (`{**base, ...}`) in kwargs are conservatively treated as unresolvable (no tracking planned)
-- `_ast_split_resolve.py` is at 217/300 lines — has headroom after format_map extraction to `_ast_split_format_map.py`
+- `_ast_split_resolve.py` is at 222/300 lines — has headroom after format_map extraction to `_ast_split_format_map.py`
 - `_ast_split_format.py` is at 299/300 lines — effectively frozen; any addition requires offsetting removal first
 - `_ast_imports.py` is at 160/300 lines — has headroom after string-resolver extraction to `_ast_string_resolver.py`
 - `_ast_rot13.py` is at 247/300 lines — has headroom after branch analysis extraction to `_ast_rot13_branch_analysis.py`
-- `_ast_symbol_table.py` is at 297/300 lines — effectively frozen; any future addition requires extracting a helper to a sibling module
+- `_ast_symbol_table.py` is at 299/300 lines — effectively frozen; any future addition requires extracting a helper to a sibling module
 - `_ast_split_comprehension.py` is at 278/300 lines — 22 lines remaining
 - `_ast_symbol_table_assignments.py` is at 288/300 lines — 12 lines remaining
 - `_ast_split_star_unpack.py` is at ~79/300 lines — ample room
