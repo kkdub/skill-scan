@@ -166,6 +166,22 @@ def _extend_with_tracked_var(
     result[target_key] = existing + src
 
 
+def _walk_fn_body(
+    body: list[ast.stmt],
+    scope: str,
+    result: dict[str, list[int]],
+    decls: _Decls,
+    enclosing: str,
+) -> None:
+    """Recursively walk a body for int-list tracking, threading declarations."""
+    from skill_scan._ast_symbol_table_returns import _sub_bodies
+
+    for stmt in body:
+        _handle_int_list_stmt(stmt, scope, result, decls, enclosing)
+        for child_body in _sub_bodies(stmt):
+            _walk_fn_body(child_body, scope, result, decls, enclosing)
+
+
 def _collect_fn_body(
     fn: ast.FunctionDef | ast.AsyncFunctionDef,
     scope: str,
@@ -179,15 +195,10 @@ def _collect_fn_body(
     enclosing function for ``nonlocal``).
     """
     from skill_scan._ast_symbol_table_assignments import _collect_scope_declarations
-    from skill_scan._ast_symbol_table_returns import _sub_bodies
 
     decls = _collect_scope_declarations(fn.body)
     # Walk the function body with scope declarations active.
-    for stmt in fn.body:
-        _handle_int_list_stmt(stmt, scope, result, decls, enclosing)
-        for child_body in _sub_bodies(stmt):
-            for s in child_body:
-                _handle_int_list_stmt(s, scope, result, decls, enclosing)
+    _walk_fn_body(fn.body, scope, result, decls, enclosing)
     # If this function itself has nonlocal decls, it is borrowing from its
     # enclosing scope. Its nested children should use the same enclosing scope
     # so that multi-level nonlocal chains (outer -> middle -> inner) all resolve
