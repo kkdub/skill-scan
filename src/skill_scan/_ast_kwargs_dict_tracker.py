@@ -25,7 +25,7 @@ def _collect_dict_assigns(tree: ast.Module) -> dict[str, dict[str, object]]:
         elif isinstance(node, ast.ClassDef):
             for stmt in node.body:
                 if isinstance(stmt, ast.FunctionDef | ast.AsyncFunctionDef):
-                    _collect_from_body(stmt.body, node.name, result)
+                    _collect_from_body(stmt.body, f"{node.name}.{stmt.name}", result)
     return result
 
 

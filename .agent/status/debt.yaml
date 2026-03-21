@@ -1,6 +1,7 @@
 # .agent/status/debt.yaml
 # Entries are removed when resolved. Git history tracks removals.
-# Last updated: 2026-03-19
+# Last updated: 2026-03-21
+# Resolved by fix: DEBT-032-KWARGS-CLASS-METHOD-SCOPE (scope key changed to ClassName.method)
 # Resolved by PLAN-033 Part A: format_map extracted to _ast_split_format_map.py (was SPLIT-RESOLVE-AT-LIMIT)
 # Resolved by PLAN-032: DEBT-028-INTLIST-CLASS-BODY, DEBT-027-INTLIST-CONCAT, DEBT-027-INTLIST-EXTEND-VAR
 # Resolved by PLAN-019: lone surrogates, null bytes, OBFS-001 catalog, str.format/%-format evasion
@@ -79,15 +80,6 @@
   blocker: "Mitigated by first-element-only check (only the executable name matters), but 'nc' is ambiguous — could be netcat or an unrelated tool. Fixing requires context-aware disambiguation or user-configurable allowlists."
   resolution: "Consider requiring 'nc' to appear with network-related flags (-e, -l, -p) before flagging, or add a configurable allowlist for known-safe tool names."
 
-- id: DEBT-032-KWARGS-CLASS-METHOD-SCOPE
-  description: "_collect_dict_assigns uses class name as scope for all methods; two methods in the same class with same-named local dict collide (last-write-wins)"
-  type: security
-  severity: medium
-  plan: PLAN-030
-  files:
-    - src/skill_scan/_ast_kwargs_dict_tracker.py:28
-  blocker: "Pre-existing from PLAN-030. PLAN-032 expanded dict-assigns usage but did not introduce or worsen this. Fix requires changing scope to ClassName.method but may affect all downstream lookups."
-  resolution: "Use f'{node.name}.{stmt.name}' as scope for class method bodies in _collect_dict_assigns. Update _collect_from_body scope references accordingly."
 
 - id: DEBT-032-INTLIST-CONCAT-UNBOUNDED
   description: "_resolve_binop_concat concatenates tracked int-lists with no size cap; crafted skill with large lists could allocate excessive memory in pre-pass"

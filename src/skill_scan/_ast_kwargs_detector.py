@@ -65,7 +65,7 @@ def detect_kwargs_unpacking(
     Accepts ``_nodes`` to reuse a pre-built ``ast.walk()`` list.
     """
     dict_assigns = _collect_dict_assigns(tree)
-    scope_map = _build_scope_map(tree)
+    scope_map = _build_scope_map(tree, method_scope=True)
     findings: list[Finding] = []
     for node in _nodes if _nodes is not None else ast.walk(tree):
         if not isinstance(node, ast.Call):

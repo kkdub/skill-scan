@@ -108,6 +108,23 @@ def run():
         assert "run.opts" in result
         assert result["run.opts"] == {"shell": True}
 
+    def test_class_methods_get_separate_scopes(self) -> None:
+        """Two methods in the same class with same dict name don't collide."""
+        code = """\
+class Runner:
+    def safe(self):
+        opts = {'shell': False}
+
+    def dangerous(self):
+        opts = {'shell': True}
+"""
+        tree = _PARSE(code)
+        result = _collect_dict_assigns(tree)
+        assert "Runner.safe.opts" in result
+        assert result["Runner.safe.opts"] == {"shell": False}
+        assert "Runner.dangerous.opts" in result
+        assert result["Runner.dangerous.opts"] == {"shell": True}
+
     def test_name_key_mixed_with_constant_keys(self) -> None:
         """Dict with both Name and constant keys resolves all."""
         code = "k = 'shell'\nopts = {k: True, 'stdout': -1}"
