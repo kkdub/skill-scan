@@ -86,17 +86,23 @@ def _handle_assign(
         ints = _extract_int_list(stmt.value.elts)
         result[key] = ints if ints is not None else _SHADOW
     elif isinstance(stmt.value, ast.BinOp) and isinstance(stmt.value.op, ast.Add):
-        result[key] = _resolve_binop_concat(stmt.value, scope, result)
+        result[key] = _resolve_binop_concat(stmt.value, scope, result, declarations, enclosing_scope)
     else:
         result[key] = _SHADOW
 
 
-def _resolve_binop_concat(node: ast.BinOp, scope: str, result: dict[str, list[int]]) -> list[int]:
+def _resolve_binop_concat(
+    node: ast.BinOp,
+    scope: str,
+    result: dict[str, list[int]],
+    declarations: _Decls = None,
+    enclosing_scope: str = "",
+) -> list[int]:
     """Resolve Name + Name where both operands are tracked int-lists."""
     if not (isinstance(node.left, ast.Name) and isinstance(node.right, ast.Name)):
         return _SHADOW
-    left_key = _resolve_scope_key(node.left.id, scope)
-    right_key = _resolve_scope_key(node.right.id, scope)
+    left_key = _resolve_scope_key(node.left.id, scope, declarations, enclosing_scope)
+    right_key = _resolve_scope_key(node.right.id, scope, declarations, enclosing_scope)
     left = result.get(left_key)
     right = result.get(right_key)
     if left is None or left is _SHADOW or right is None or right is _SHADOW:
@@ -135,7 +141,7 @@ def _extend_tracked(
         return
     existing = result[key]
     if isinstance(value, ast.Name):
-        _extend_with_tracked_var(key, value.id, scope, existing, result)
+        _extend_with_tracked_var(key, value.id, scope, existing, result, declarations, enclosing_scope)
         return
     if not isinstance(value, ast.List | ast.Tuple):
         result[key] = _SHADOW
@@ -150,10 +156,16 @@ def _extend_tracked(
 
 
 def _extend_with_tracked_var(
-    target_key: str, var_name: str, scope: str, existing: list[int], result: dict[str, list[int]]
+    target_key: str,
+    var_name: str,
+    scope: str,
+    existing: list[int],
+    result: dict[str, list[int]],
+    declarations: _Decls = None,
+    enclosing_scope: str = "",
 ) -> None:
     """Extend target with a tracked variable's int-list, or shadow if unresolvable."""
-    var_key = _resolve_scope_key(var_name, scope)
+    var_key = _resolve_scope_key(var_name, scope, declarations, enclosing_scope)
     src = result.get(var_key)
     if src is None or src is _SHADOW:
         result[target_key] = _SHADOW
@@ -199,11 +211,16 @@ def _collect_fn_body(
     decls = _collect_scope_declarations(fn.body)
     # Walk the function body with scope declarations active.
     _walk_fn_body(fn.body, scope, result, decls, enclosing)
-    # If this function itself has nonlocal decls, it is borrowing from its
-    # enclosing scope. Its nested children should use the same enclosing scope
-    # so that multi-level nonlocal chains (outer -> middle -> inner) all resolve
-    # to the outermost declared variable.
-    child_enc = enclosing if decls[1] else scope
+    # Determine child_enc per nested function: if ALL of a child's nonlocal
+    # names are also nonlocal in the current function, pass through to our
+    # enclosing scope (multi-level chain).  Otherwise the child's nonlocal
+    # names should resolve to the current scope (locally-bound names).
+    parent_nl = decls[1] if decls else set()
     for stmt in fn.body:
         if isinstance(stmt, ast.FunctionDef | ast.AsyncFunctionDef):
+            child_nl = _collect_scope_declarations(stmt.body)[1]
+            if child_nl and parent_nl and child_nl <= parent_nl:
+                child_enc = enclosing
+            else:
+                child_enc = scope
             _collect_fn_body(stmt, f"{scope}.{stmt.name}", child_enc, result)
