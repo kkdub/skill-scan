@@ -30,6 +30,18 @@ class Verdict(Enum):
 
 
 @dataclass(slots=True, frozen=True)
+class PackageRiskSummary:
+    """Aggregated package-level intent/risk assessment."""
+
+    score: int
+    band: str
+    top_drivers: tuple[str, ...]
+    counts_by_role: dict[str, int]
+    suspicious_url_count: int
+    correlated_signal_count: int
+
+
+@dataclass(slots=True, frozen=True)
 class Finding:
     """A single security finding from a scan."""
 
@@ -75,6 +87,7 @@ class ScanResult:
     degraded_reasons: tuple[str, ...] = ()
     skill_name: str | None = None
     error_message: str | None = None
+    package_risk: PackageRiskSummary | None = None
 
 
 @dataclass(slots=True, frozen=True)

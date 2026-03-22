@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 
-from skill_scan.models import Finding, ScanResult
+from skill_scan.models import Finding, PackageRiskSummary, ScanResult
 
 _SEVERITY_LEVELS: tuple[str, ...] = (
     "critical",
@@ -33,6 +33,7 @@ def format_json(result: ScanResult) -> str:
         "duration": result.duration,
         "files_scanned": result.files_scanned,
         "findings": [_serialize_finding(f) for f in result.findings],
+        "package_risk": _serialize_package_risk(result.package_risk),
         "skill_name": result.skill_name,
         "suppressed_count": result.suppressed_count,
         "verdict": result.verdict.value,
@@ -56,4 +57,18 @@ def _serialize_finding(finding: Finding) -> dict[str, str | int | None]:
         "recommendation": finding.recommendation,
         "rule_id": finding.rule_id,
         "severity": finding.severity.value,
+    }
+
+
+def _serialize_package_risk(summary: PackageRiskSummary | None) -> dict[str, object] | None:
+    """Serialize package-level risk summary for JSON output."""
+    if summary is None:
+        return None
+    return {
+        "band": summary.band,
+        "correlated_signal_count": summary.correlated_signal_count,
+        "counts_by_role": dict(summary.counts_by_role),
+        "score": summary.score,
+        "suspicious_url_count": summary.suspicious_url_count,
+        "top_drivers": list(summary.top_drivers),
     }

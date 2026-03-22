@@ -28,5 +28,7 @@ def make_skill_dir(
     )
     if extra_files:
         for fname, content in extra_files.items():
-            (skill_dir / fname).write_text(content, encoding="utf-8")
+            file_path = skill_dir / fname
+            file_path.parent.mkdir(parents=True, exist_ok=True)
+            file_path.write_text(content, encoding="utf-8")
     return skill_dir

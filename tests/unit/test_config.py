@@ -198,3 +198,24 @@ def test_load_config_bool_not_accepted_as_int(tmp_path: Path) -> None:
     config = load_config(config_file)
 
     assert config.max_file_size == 500_000  # default, not 1
+
+
+def test_load_config_accepts_url_enrichment_placeholders(tmp_path: Path) -> None:
+    """load_config accepts future URL enrichment settings without using them yet."""
+    config_file = tmp_path / "config.toml"
+    config_file.write_text(
+        (
+            "[scan]\n"
+            "url_enrichment = true\n"
+            'url_enrichment_provider = "mock"\n'
+            "[scan.url_enrichment_settings]\n"
+            'api_key = "token"\n'
+        ),
+        encoding="utf-8",
+    )
+
+    config = load_config(config_file)
+
+    assert config.url_enrichment is True
+    assert config.url_enrichment_provider == "mock"
+    assert config.url_enrichment_settings == (("api_key", "token"),)

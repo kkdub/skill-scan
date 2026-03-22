@@ -68,6 +68,17 @@ src/skill_scan/           # Production source code
   _ast_kwargs_dict_tracker.py # Dict-collection pre-pass + .update() tracking; _build_string_table for dynamic key resolution
   _ast_exfil_detector.py  # Subprocess list-arg + DNS exfil detectors (_detect_subprocess_list_exfil, _detect_dns_exfil)
   _ast_loop_unroller.py   # Static for-loop unrolling pre-pass (collect_loop_assigns)
+  package_analyzer.py     # Facade: analyze_package() entry point
+  _package_risk_correlations.py # Cross-file correlation rules (table-driven); apply_correlations, correlation_bonus, has_multi_role_medium_risk
+  _package_risk_inventory.py    # File I/O collection; build_role_map, count_roles, analyze_text_files
+  _package_risk_policy.py       # Scoring policy tables (ROLE_WEIGHT, SEVERITY_POINTS, CATEGORY_DRIVER); weighted_points, final_band, top_drivers
+  _package_text.py        # Facade: TextSignal model, classify_file_role(), analyze_text_content()
+  _package_text_patterns.py     # Compiled regex patterns for text signal detection
+  _package_text_roles.py        # File-role classification + snippet extraction (classify_file_role, extract_command_snippets, has_command)
+  _package_text_signal_utils.py # Signal utility helpers (is_warning_like_reference, deduplicate_signals)
+  _package_text_signals.py      # TextSignal dataclass + build_text_signals(); operator/secret/remote/URL signal builders
+  _package_url_analysis.py      # URL extraction + classify_url_signal(); extract_urls_with_context, has_execution_context
+  _package_url_patterns.py      # Marker tables and regex patterns for URL analysis
   decoder.py              # Facade: EncodedPayload, extract/decode
   _decoder_base64_hex.py  # Base64/hex extraction and decode
   _decoder_url_unicode.py # URL/unicode-escape extraction and decode
@@ -89,6 +100,7 @@ tests/
     test_ast_split_star_unpack.py       # Star-unpack flattening tests (PLAN-032 Part C)
     test_part_d_classvar_dictpop.py     # Class-body scope, classvar assembly, dict.pop tests (PLAN-032 Part D)
     test_hex_escape_resolution.py       # Hex escape .replace() chain + fromhex(var) tests (PLAN-032 Part E)
+    test_package_analyzer.py            # Package-level risk analysis tests (classify_file_role, analyze_text_content, end-to-end scan)
     ...                                 # Other tests mirror src/ structure
 scripts/                  # Quality & analysis scripts
 .agent/                   # Plans, standards, workflow
@@ -98,7 +110,7 @@ scripts/                  # Quality & analysis scripts
 
 Key patterns and invariants. For detailed module-level docs, see `.agent/ARCHITECTURE-REFERENCE.md`.
 
-**Facade Re-export Pattern**: `ast_analyzer.py` and `decoder.py` are facade modules — they re-export from private siblings. Import public names from the facade, not the `_` modules.
+**Facade Re-export Pattern**: `ast_analyzer.py`, `decoder.py`, and `_package_text.py` are facade modules — they re-export from private siblings. Import public names from the facade, not the `_` modules.
 
 **Registration patterns** — follow these when adding new detectors:
 - `_DETECTORS` tuple in `ast_analyzer.py` — node-level detectors (one finding per node)
@@ -127,6 +139,14 @@ Key patterns and invariants. For detailed module-level docs, see `.agent/ARCHITE
 - `collect_loop_assigns(tree)` in `_ast_loop_unroller.py` — pre-pass that resolves `for c in ['e','v','a','l']: name += c` patterns; called in `analyze_python()` and merged into `symbol_table` before `detect_split_evasion` runs; supports inline list literals and local list-literal name references; single-level loops with one AugAssign body only
 - `_handle_update_call` in `_ast_kwargs_dict_tracker.py` — handles `dict.update({...})` in the kwargs pre-pass; follows same pattern as `_track_aug_union`
 - `_try_bodies(node)` in `_ast_imports.py` — returns all body lists from a `Try` node (body, handlers, orelse, finalbody); used by `_collect_imports` to recurse into `try/except` blocks
+- `analyze_package(skill_dir, files, findings)` in `package_analyzer.py` — package-level risk facade called from `scanner.py` after all file findings are collected; returns `PackageRiskSummary`; builds role map, scores findings and text signals, applies cross-file correlations, applies multi-role bonus, then maps total score to a risk band
+- `ROLE_WEIGHT` / `SEVERITY_POINTS` / `CATEGORY_DRIVER` in `_package_risk_policy.py` — table-driven scoring policy; `ROLE_WEIGHT` maps role strings to multipliers (`entrypoint=1.4`, `script=1.35`, `config=1.1`, `support-doc=0.8`, `reference=0.35`); `SEVERITY_POINTS` maps `Severity` enum values to base points; `CATEGORY_DRIVER` maps finding categories to risk driver labels; extend by adding entries
+- `IGNORED_CATEGORIES` in `_package_risk_policy.py` — frozenset of categories excluded from package scoring (`analysis`, `file-safety`, `schema-validation`); extend by adding entries
+- `DIRECT_DANGER_DRIVERS` in `_package_risk_policy.py` — frozenset of driver labels that can trigger direct-danger override (`execution`, `exfiltration`, `remote-bootstrap`, `operator-manipulation`); `is_direct_danger()` returns True only when role is `entrypoint`/`script`, driver is in this set, and severity is HIGH/CRITICAL; extend by adding entries
+- `_CORRELATION_RULES` in `_package_risk_correlations.py` — table-driven tuple of `(fact_a, fact_b, driver_points_dict)` triples; each matched pair adds points to `driver_scores` and increments the correlated signal count; extend by adding tuples; fact names are resolved by `_collect_facts()`
+- `classify_file_role(relative_path)` in `_package_text_roles.py` — maps a package-relative path to one of five roles: `entrypoint` (SKILL.md only), `reference` (any path segment in `_REFERENCE_MARKERS`), `script` (.py/.sh/.bash/.zsh/.ps1/.js/.ts), `config` (.json/.yaml/.yml/.toml/.ini/.cfg/.env/.jinja2), `support-doc` (everything else including .md/.txt/.rst)
+- `TextSignal` in `_package_text_signals.py` — frozen dataclass with fields `rule_id`, `severity`, `driver`, `file`, `role`, `suspicious_urls`; used internally by `package_analyzer.py`; NOT a public `Finding` — do not add it to `__init__.__all__` or formatters; pkg rule IDs are PKG-001 (operator coercion), PKG-002 (remote bootstrap), PKG-003 (secret request), PKG-004 (suspicious URL), PKG-005 (setup context URL)
+- `PackageRiskSummary` in `models.py` — frozen dataclass added to public API; fields: `score` (int, rounded), `band` (str: `low`/`guarded`/`high`/`severe`), `top_drivers` (tuple of up to 3 driver labels), `counts_by_role` (dict[str, int]), `suspicious_url_count` (int), `correlated_signal_count` (int); exported from `__init__.py`; included in JSON and SARIF output when present
 
 **Invariants**:
 - `normalize_text()` in `normalizer.py` applies NFKC normalization (`unicodedata.normalize('NFKC', text)`) as its FIRST step — this decomposes fullwidth Unicode characters (U+FF41-FF5A) and other compatibility characters before zero-width stripping and whitespace canonicalization
@@ -158,6 +178,12 @@ Key patterns and invariants. For detailed module-level docs, see `.agent/ARCHITE
 - `_resolve_binop_concat` in `_ast_split_int_list_tracker.py` — resolves `codes = part1 + part2` where both operands are tracked int-lists in the pre-pass result dict; called from `_handle_assign` when RHS is `BinOp(Add)` of two `Name` nodes
 - `_extend_with_tracked_var` in `_ast_split_int_list_tracker.py` — extends a tracked int-list with the contents of another tracked variable; called from `_extend_tracked` when the extension value is an `ast.Name`; shadows target if source is untracked
 - OBFS-001 TOML entry has `patterns = []` — detection is AST-only via `_detect_rot13_codec`, `_detect_rot13_maketrans`, and `_detect_custom_rot13`; do not add regex patterns (AST handles this more accurately)
+- `final_band()` in `_package_risk_policy.py` applies direct-danger overrides AFTER `risk_band()` maps the numeric score; `severe_direct_danger` (HIGH/CRITICAL signal in entrypoint/script) forces band to `severe`; `direct_danger` (any qualifying signal) raises band from `low`/`guarded` to `high`; do NOT bypass `final_band()` by calling `risk_band()` directly
+- `_format_package_risk()` in `formatters.py` renders the `PackageRiskSummary` block in text output (both default and verbose modes); quiet mode does NOT include package risk — it prints the verdict line only
+- `_serialize_package_risk()` in `json_formatter.py` serializes `PackageRiskSummary` to JSON; returns `None` when `result.package_risk is None`; `top_drivers` serialized as a list, `counts_by_role` as a plain dict
+- Package risk output in SARIF is written to `run.properties.skillScanPackageRisk` (camelCase keys: `band`, `score`, `topDrivers`, `countsByRole`, `suspiciousUrlCount`, `correlatedSignalCount`)
+- `deduplicate_signals()` in `_package_text_signal_utils.py` deduplicates by `(rule_id, file, driver)` triple — same signal type from the same file for the same driver is counted only once; called inside `build_text_signals()` before returning
+- `is_warning_like_reference()` in `_package_text_signal_utils.py` — suppresses coercion, secret, and remote signals for `reference`-role files whose content matches `WARNING_CONTEXT_RE`; prevents false positives from security-warning documentation
 
 **Known debt**:
 - PEP 448 spread dicts (`{**base, ...}`) in kwargs are conservatively treated as unresolvable (no tracking planned)
@@ -174,6 +200,10 @@ Key patterns and invariants. For detailed module-level docs, see `.agent/ARCHITE
 - `_maybe_flatten_starred` in `_ast_split_star_unpack.py` handles `ast.Name`, `ast.Attribute` (single-level), and `ast.Subscript` (constant key) — nested attributes and computed expressions are not supported
 - DEBT-035-TRY-EXCEPT-BRANCH-MERGE: `_walk_fn_body` walks `Try`/`except` sub-bodies sequentially (not branch-aware); `except` handlers are not mutually exclusive with the `try` body, so this is conservative but could produce merged int-lists when a variable is assigned differently in `try` vs `except`; fixing this requires understanding Python exception semantics (partial execution of try body) and is out of scope for PLAN-035
 - `_ast_split_int_list_tracker.py` is at 291/350 lines — 9 lines remaining; `_is_exhaustive_match` moved to `_ast_terminal_body.py` in PLAN-036 which freed the lines previously used by that function
+- `package_analyzer.py` is at ~107/350 lines — ample room
+- `_package_text_signals.py` is at ~147/350 lines — ample room
+- `_package_risk_correlations.py` is at ~80/350 lines — ample room
+- PKG-* rule IDs are used internally by `TextSignal` only — they do not appear in the rules catalog (`rules/data/`) and are not subject to `suppress_rules` config; no TOML entries exist for them
 
 ## Tips
 
