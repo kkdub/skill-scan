@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import pytest
 
-from skill_scan.models import Finding, Rule, ScanResult, Severity, Verdict
+from skill_scan.models import Finding, PackageRiskSummary, Rule, ScanResult, Severity, Verdict
 
 
 class TestFindingDataclass:
@@ -60,3 +60,20 @@ class TestScanResultDataclass:
 
         with pytest.raises(AttributeError, match="cannot assign to field"):
             result.verdict = Verdict.BLOCK  # type: ignore[misc]
+
+
+class TestPackageRiskSummaryDataclass:
+    """Tests for the PackageRiskSummary frozen dataclass."""
+
+    def test_package_risk_summary_is_frozen(self) -> None:
+        summary = PackageRiskSummary(
+            score=12,
+            band="guarded",
+            top_drivers=("operator-manipulation",),
+            counts_by_role={"entrypoint": 1},
+            suspicious_url_count=1,
+            correlated_signal_count=0,
+        )
+
+        with pytest.raises(AttributeError, match="cannot assign to field"):
+            summary.band = "high"  # type: ignore[misc]

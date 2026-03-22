@@ -17,6 +17,8 @@ def test_scan_returns_pass_for_valid_empty_skill(tmp_path: Path) -> None:
     assert result.verdict == Verdict.PASS
     assert result.findings == ()
     assert result.duration > 0
+    assert result.package_risk is not None
+    assert result.package_risk.band == "low"
 
 
 def test_scan_detects_prompt_injection_in_skill_md(tmp_path: Path) -> None:

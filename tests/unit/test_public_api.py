@@ -12,6 +12,7 @@ class TestPublicAPIImports:
         expected = {
             "Finding",
             "OutputMode",
+            "PackageRiskSummary",
             "Rule",
             "ScanResult",
             "Severity",

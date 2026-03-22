@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from click.testing import CliRunner
@@ -18,3 +19,5 @@ class TestCLISarifFormat:
         runner = CliRunner()
         result = runner.invoke(skill_scan_cli, ["scan", "--format", "sarif", str(skill_dir)])
         assert result.exit_code == 0
+        data = json.loads(result.output)
+        assert "skillScanPackageRisk" in data["runs"][0]["properties"]
