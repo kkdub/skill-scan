@@ -10,7 +10,7 @@ import json
 
 from skill_scan.models import Finding, ScanResult, Severity, Verdict
 from skill_scan.sarif_formatter import _severity_to_level, format_sarif
-from tests.unit.formatter_helpers import make_finding
+from tests.unit.formatter_helpers import make_finding, make_package_risk
 
 
 def _make_result(
@@ -55,6 +55,19 @@ class TestSarifStructure:
         result = _make_result()
         data = json.loads(format_sarif(result))
         assert data["runs"][0]["tool"]["driver"]["name"] == "skill-scan"
+
+    def test_sarif_includes_package_risk_run_properties(self) -> None:
+        result = ScanResult(
+            findings=(),
+            counts={},
+            verdict=Verdict.PASS,
+            duration=0.0,
+            package_risk=make_package_risk(band="high", score=25),
+        )
+        data = json.loads(format_sarif(result))
+        props = data["runs"][0]["properties"]["skillScanPackageRisk"]
+        assert props["band"] == "high"
+        assert props["score"] == 25
 
 
 class TestSarifSeverityMapping:

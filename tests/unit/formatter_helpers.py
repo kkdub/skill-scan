@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from skill_scan.models import Finding, Severity
+from skill_scan.models import Finding, PackageRiskSummary, Severity
 
 
 def make_finding(
@@ -25,4 +25,23 @@ def make_finding(
         matched_text=matched_text,
         description=description,
         recommendation=recommendation,
+    )
+
+
+def make_package_risk(
+    score: int = 12,
+    band: str = "guarded",
+    top_drivers: tuple[str, ...] = ("operator-manipulation", "remote-bootstrap"),
+    counts_by_role: dict[str, int] | None = None,
+    suspicious_url_count: int = 1,
+    correlated_signal_count: int = 1,
+) -> PackageRiskSummary:
+    """Create a PackageRiskSummary with sensible defaults for testing."""
+    return PackageRiskSummary(
+        score=score,
+        band=band,
+        top_drivers=top_drivers,
+        counts_by_role=counts_by_role or {"entrypoint": 1, "script": 1},
+        suspicious_url_count=suspicious_url_count,
+        correlated_signal_count=correlated_signal_count,
     )

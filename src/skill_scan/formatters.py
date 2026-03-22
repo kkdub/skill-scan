@@ -70,6 +70,10 @@ def _format_default(result: ScanResult) -> str:
                     parts.append(_format_group_indented(group))
             parts.append("")
 
+    pkg = _format_package_risk(result)
+    if pkg:
+        parts.append(pkg)
+        parts.append("")
     parts.append(_verdict_banner(result))
     return "\n".join(parts)
 
@@ -92,6 +96,9 @@ def _format_verbose(result: ScanResult) -> str:
     else:
         for finding in result.findings:
             parts.append(_format_finding_full(finding))
+    pkg = _format_package_risk(result)
+    if pkg:
+        parts.append(pkg)
     parts.append(_verdict_banner(result))
     return "\n".join(parts)
 
@@ -127,6 +134,25 @@ def _verdict_banner(result: ScanResult) -> str:
     if counts_str:
         lines.append(f"  {counts_str}")
     lines.append(f"  Scanned in {result.duration:.2f}s")
+    return "\n".join(lines)
+
+
+def _format_package_risk(result: ScanResult) -> str:
+    """Format the package-risk summary when present."""
+    summary = result.package_risk
+    if summary is None:
+        return ""
+    drivers = ", ".join(summary.top_drivers) if summary.top_drivers else "none"
+    roles = ", ".join(
+        f"{role}={count}" for role, count in sorted(summary.counts_by_role.items(), key=lambda item: item[0])
+    )
+    lines = [
+        f"Package Risk: {summary.band.upper()} (score {summary.score})",
+        f"  Drivers: {drivers}",
+        f"  Roles: {roles or 'none'}",
+        f"  Suspicious URLs: {summary.suspicious_url_count}",
+        f"  Correlated signals: {summary.correlated_signal_count}",
+    ]
     return "\n".join(lines)
 
 

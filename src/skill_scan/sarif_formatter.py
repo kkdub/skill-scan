@@ -48,6 +48,7 @@ def format_sarif(result: ScanResult) -> str:
                         "rules": _build_driver_rules(result.findings),
                     }
                 },
+                "properties": _build_run_properties(result),
                 "results": [_build_sarif_result(f) for f in result.findings],
             }
         ],
@@ -99,3 +100,20 @@ def _build_driver_rules(findings: tuple[Finding, ...]) -> list[JsonObject]:
                 }
             )
     return rules
+
+
+def _build_run_properties(result: ScanResult) -> JsonObject:
+    """Build run-level SARIF properties."""
+    package_risk = result.package_risk
+    if package_risk is None:
+        return {}
+    return {
+        "skillScanPackageRisk": {
+            "band": package_risk.band,
+            "correlatedSignalCount": package_risk.correlated_signal_count,
+            "countsByRole": dict(package_risk.counts_by_role),
+            "score": package_risk.score,
+            "suspiciousUrlCount": package_risk.suspicious_url_count,
+            "topDrivers": list(package_risk.top_drivers),
+        }
+    }

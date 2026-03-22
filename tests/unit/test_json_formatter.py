@@ -9,7 +9,7 @@ import json
 
 from skill_scan.json_formatter import format_json
 from skill_scan.models import ScanResult, Severity, Verdict
-from tests.unit.formatter_helpers import make_finding
+from tests.unit.formatter_helpers import make_finding, make_package_risk
 
 
 class TestJsonStructure:
@@ -32,6 +32,7 @@ class TestJsonStructure:
             "duration",
             "counts",
             "findings",
+            "package_risk",
             "suppressed_count",
         }
         assert set(data.keys()) == expected_keys
@@ -58,6 +59,18 @@ class TestJsonStructure:
         result = ScanResult(findings=(), counts={}, verdict=Verdict.PASS, duration=0.0, suppressed_count=3)
         data = json.loads(format_json(result))
         assert data["suppressed_count"] == 3
+
+    def test_package_risk_serializes_when_present(self) -> None:
+        result = ScanResult(
+            findings=(),
+            counts={},
+            verdict=Verdict.PASS,
+            duration=0.0,
+            package_risk=make_package_risk(),
+        )
+        data = json.loads(format_json(result))
+        assert data["package_risk"]["band"] == "guarded"
+        assert data["package_risk"]["counts_by_role"] == {"entrypoint": 1, "script": 1}
 
 
 class TestJsonFindings:

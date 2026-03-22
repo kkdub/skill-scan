@@ -17,6 +17,7 @@ from skill_scan.content_scanner import scan_all_files
 from skill_scan.file_classifier import classify_entries
 from skill_scan.file_collector import walk_skill_dir
 from skill_scan.models import Finding, Rule, ScanResult, Severity
+from skill_scan.package_analyzer import analyze_package
 from skill_scan.parser import SkillParseError, parse_skill_frontmatter
 from skill_scan.rules import load_default_rules
 from skill_scan.verdict import count_by_severity, coverage_aware_verdict
@@ -51,6 +52,7 @@ def scan(
     binary_skipped = sum(1 for f in fs_findings if f.rule_id == _RULE_BINARY)
     all_findings = tuple(schema_findings + fs_findings + findings)
     degraded = _build_degraded_reasons(content_skipped, binary_skipped)
+    package_risk = analyze_package(skill_dir, files, all_findings)
     duration = clock() - start
     return ScanResult(
         findings=all_findings,
@@ -63,6 +65,7 @@ def scan(
         suppressed_count=suppressed_count,
         degraded_reasons=degraded,
         skill_name=skill_name,
+        package_risk=package_risk,
     )
 
 

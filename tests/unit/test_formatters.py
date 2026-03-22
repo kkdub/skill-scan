@@ -7,7 +7,7 @@ from __future__ import annotations
 
 from skill_scan.formatters import OutputMode, format_text
 from skill_scan.models import ScanResult, Severity, Verdict
-from tests.unit.formatter_helpers import make_finding
+from tests.unit.formatter_helpers import make_finding, make_package_risk
 
 
 class TestFormatTextDefaultNoFindings:
@@ -45,6 +45,18 @@ class TestFormatTextDefaultNoFindings:
         )
         output = format_text(result)
         assert "Verdict: PASS" in output
+
+    def test_includes_package_risk_section_when_present(self) -> None:
+        result = ScanResult(
+            findings=(),
+            counts={},
+            verdict=Verdict.PASS,
+            duration=0.1,
+            package_risk=make_package_risk(),
+        )
+        output = format_text(result)
+        assert "Package Risk: GUARDED (score 12)" in output
+        assert "Suspicious URLs: 1" in output
 
 
 class TestFormatTextDefaultWithFindings:
@@ -183,6 +195,17 @@ class TestFormatTextVerbose:
         output = format_text(result, mode=OutputMode.VERBOSE)
         assert "skill-scan report: test" in output
         assert "Verdict: PASS" in output
+
+    def test_verbose_includes_package_risk_section(self) -> None:
+        result = ScanResult(
+            findings=(),
+            counts={},
+            verdict=Verdict.PASS,
+            duration=0.0,
+            package_risk=make_package_risk(band="high", score=24),
+        )
+        output = format_text(result, mode=OutputMode.VERBOSE)
+        assert "Package Risk: HIGH (score 24)" in output
 
 
 class TestFormatTextAsciiSafe:

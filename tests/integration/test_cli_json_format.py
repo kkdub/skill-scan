@@ -59,6 +59,7 @@ class TestCLIJsonFormat:
             "recommendation",
         }
         assert set(finding.keys()) == expected_keys
+        assert "package_risk" in data
 
     def test_format_json_exit_code_unchanged(self, tmp_path: Path) -> None:
         skill_dir = make_skill_dir(
