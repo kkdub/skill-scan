@@ -208,15 +208,6 @@ def _merge_branches(
         result[key] = vals[0] if _values_agree(vals) else _SHADOW
 
 
-def _is_exhaustive_match(node: ast.Match) -> bool:
-    """Return True if the match has an unguarded wildcard case."""
-    if not node.cases:
-        return False
-    last_case = node.cases[-1]
-    last_pat = last_case.pattern
-    return isinstance(last_pat, ast.MatchAs) and last_pat.name is None and last_case.guard is None
-
-
 def _walk_fn_body(
     body: list[ast.stmt],
     scope: str,
@@ -224,13 +215,12 @@ def _walk_fn_body(
     decls: _Decls = None,
     enclosing: str = "",
 ) -> None:
-    """Recursively walk a body for int-list tracking, threading declarations.
+    """Walk *body* for int-list tracking; branch-aware merge excludes terminal branches.
 
-    If and Match nodes use snapshot-walk-merge so that mutually exclusive
-    branches do not contaminate each other.  For/While/Try/With are still
-    walked sequentially.
+    Terminal branches (return/raise on all paths) are excluded from merge.
     """
     from skill_scan._ast_symbol_table_returns import _sub_bodies
+    from skill_scan._ast_terminal_body import _is_exhaustive_match, _is_terminal_body
 
     for stmt in body:
         _handle_int_list_stmt(stmt, scope, result, decls, enclosing)
@@ -244,7 +234,12 @@ def _walk_fn_body(
             after_else = result.copy()
             result.clear()
             result.update(snap)
-            _merge_branches([after_if, after_else], result)
+            brs: list[dict[str, list[int]]] = []
+            if not _is_terminal_body(stmt.body):
+                brs.append(after_if)
+            if not _is_terminal_body(stmt.orelse):
+                brs.append(after_else)
+            _merge_branches(brs, result)
         elif isinstance(stmt, ast.Match):
             snap = result.copy()
             branch_results: list[dict[str, list[int]]] = []
@@ -252,7 +247,8 @@ def _walk_fn_body(
                 result.clear()
                 result.update(snap)
                 _walk_fn_body(case.body, scope, result, decls, enclosing)
-                branch_results.append(result.copy())
+                if not _is_terminal_body(case.body):
+                    branch_results.append(result.copy())
             if not _is_exhaustive_match(stmt):
                 branch_results.append(snap)
             result.clear()

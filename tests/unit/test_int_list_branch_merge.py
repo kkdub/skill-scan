@@ -1,7 +1,8 @@
 """Tests for branch-aware merge in int-list pre-pass (PLAN-035 Part A).
 
 Covers If/Match snapshot-merge, sequential walk preservation, declaration
-threading through branches, and the DEBT-028 corpus regression.
+threading through branches, the DEBT-028 corpus regression, and terminal
+branch exclusion integration (PLAN-036 Part C).
 """
 
 from __future__ import annotations
@@ -207,3 +208,50 @@ class TestCorpusRegression:
         """Merged result must NOT be the buggy sequential concatenation."""
         code = "import os\ncodes = [101]\nif os.name == 'nt':\n    codes += [118, 97, 108]\nelse:\n    codes += [120, 101, 99]"
         assert _collect(code)["codes"] != [101, 118, 97, 108, 120, 101, 99]
+
+
+class TestTerminalBranchExclusion:
+    """Integration: terminal branches excluded from merge (PLAN-036 Part C).
+
+    Full per-branch tests live in test_terminal_branch_exclusion.py.
+    Unique here: post-branch continuation, break semantics, declaration scope.
+    """
+
+    def test_if_return_excluded_post_if_uses_else(self) -> None:
+        """if-body returns -> excluded; post-if continues from surviving branch."""
+        code = (
+            "def f():\n    codes = [101]\n    if cond:\n"
+            "        codes = [118, 97, 108]\n        return\n"
+            "    else:\n        codes += [120]\n    codes += [99]"
+        )
+        assert _collect(code)["f.codes"] == [101, 120, 99]
+
+    def test_break_not_excluded(self) -> None:
+        """break is NOT terminal -- mutations visible after loop."""
+        code = (
+            "def f():\n    codes = [101]\n    for x in items:\n"
+            "        if cond:\n            codes += [118]\n            break\n"
+            "        else:\n            codes += [120]"
+        )
+        assert _collect(code)["f.codes"] is _SHADOW
+
+    def test_global_var_in_terminal_branch(self) -> None:
+        """Global variable in terminal branch -- scope routing correct."""
+        code = (
+            "codes = [101]\ndef f():\n    global codes\n    if cond:\n"
+            "        codes += [118, 97, 108]\n        return\n"
+            "    else:\n        codes += [120]"
+        )
+        result = _collect(code)
+        assert result["codes"] == [101, 120]
+        assert "f.codes" not in result
+
+    def test_nonlocal_var_in_terminal_branch(self) -> None:
+        """Nonlocal variable in terminal branch -- scope routing correct."""
+        code = (
+            "def outer():\n    codes = [101]\n    def inner():\n"
+            "        nonlocal codes\n        if cond:\n"
+            "            codes += [118, 97, 108]\n            return\n"
+            "        else:\n            codes += [120]\n    inner()"
+        )
+        assert _collect(code)["outer.codes"] == [101, 120]

@@ -1,15 +1,15 @@
 {
-  "plan_id": "PLAN-035",
-  "timestamp": "2026-03-21T23:30:00Z",
+  "plan_id": "PLAN-036",
+  "timestamp": "2026-03-21T00:04:00Z",
   "gate_results": {
-    "gate_1_requirements": "PASS (8/8 done)",
+    "gate_1_requirements": "PASS (7/7 done)",
     "gate_2_effectiveness": "SKIPPED (no R-EFF* requirements)",
-    "gate_3_verification": "FIXED (plan wording corrected: allowed_files + acceptance scenario description)",
-    "gate_4_dry_review": "PASS (inlined _collect_int_lists_from_body, no dead code)",
-    "gate_5_precommit": "PASS (25/25 hooks, all files under 300 lines)",
-    "gate_6_acceptance": "PASS (26/26 tests including DEBT-028 corpus regression)",
-    "gate_7_combined_review": "APPROVED_WITH_WARNINGS (stale docstring fixed, DEBT-035 filed)",
-    "gate_8_documentation": "COMPLETE (CLAUDE.md, CODE-PATTERNS.md, plan files updated)",
-    "gate_9_debt": "SKIPPED (DEBT-035-TRY-EXCEPT-BRANCH-MERGE already filed in Gate 7)"
+    "gate_3_verification": "VERIFIED (all criteria met across all parts)",
+    "gate_4_dry_review": "FIXED (consolidated _is_exhaustive_match, freed 9 lines in tracker)",
+    "gate_5_precommit": "PASS (make check green, all files under 300 lines)",
+    "gate_6_acceptance": "SKIPPED (no acceptance scenarios)",
+    "gate_7_combined_review": "APPROVED_WITH_WARNINGS (2 minor suggestions, no Fix Now/Needs Plan/Fix Deferred)",
+    "gate_8_documentation": "COMPLETE (CLAUDE.md, ARCHITECTURE-REFERENCE.md, plan files updated)",
+    "gate_9_debt": "PASS (DEBT-035-NON-FALLTHROUGH-BRANCH resolved, try/except line ref updated)"
   }
 }
