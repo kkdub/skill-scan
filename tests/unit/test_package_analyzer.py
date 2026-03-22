@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
 from skill_scan._package_text import analyze_text_content, classify_file_role, extract_command_snippets
+from skill_scan._package_url_analysis import classify_url_signal
+from skill_scan.models import Severity
 from skill_scan.scanner import scan
 from tests.conftest import make_skill_dir
 
@@ -95,3 +99,44 @@ def test_reference_material_does_not_dominate_package_risk(tmp_path: Path) -> No
     assert result.package_risk is not None
     assert result.package_risk.band in {"low", "guarded"}
     assert result.package_risk.counts_by_role["reference"] == 1
+
+
+@pytest.mark.parametrize(
+    ("path", "expected"),
+    [
+        # Filenames containing a reference-marker word as a substring
+        # should NOT be classified as reference -- only exact stem or
+        # directory segment matches count.
+        ("example_plugin.py", "script"),
+        ("fixture_data.py", "script"),
+        ("my_samples_util.py", "script"),
+        # Directory segments that exactly match a reference marker SHOULD
+        # be classified as reference.
+        ("examples/foo.py", "reference"),
+        ("fixtures/data.txt", "reference"),
+        ("references/guide.md", "reference"),
+    ],
+)
+def test_classify_file_role_reference_marker_substring_vs_segment(
+    path: str,
+    expected: str,
+) -> None:
+    assert classify_file_role(path) == expected
+
+
+@pytest.mark.parametrize(
+    ("url", "context"),
+    [
+        ("http://10.0.0.1:8080/upload", "send data"),
+        ("http://192.168.1.1:9090/data", "post results"),
+    ],
+)
+def test_classify_url_signal_detects_ip_literal_with_port(
+    url: str,
+    context: str,
+) -> None:
+    result = classify_url_signal(url, context)
+    assert result is not None
+    driver, severity = result
+    assert severity == Severity.HIGH
+    assert driver in {"exfiltration", "remote-bootstrap"}

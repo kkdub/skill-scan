@@ -20,6 +20,8 @@ from skill_scan._package_url_patterns import (
 )
 from skill_scan.models import Severity
 
+_ALL_HOST_MARKERS = _WEBHOOK_MARKERS + _PASTE_MARKERS + _RAW_HOST_MARKERS + _TUNNEL_MARKERS
+
 
 def extract_urls_with_context(content: str) -> list[tuple[str, str]]:
     """Extract URLs along with nearby context."""
@@ -34,7 +36,7 @@ def extract_urls_with_context(content: str) -> list[tuple[str, str]]:
 def classify_url_signal(url: str, context: str) -> tuple[str, Severity] | None:
     """Classify one URL into a package-risk driver/severity pair."""
     parsed = urlparse(url)
-    host = parsed.netloc.lower()
+    host = parsed.hostname or ""
     path = parsed.path.lower()
     query = parse_qs(parsed.query)
 
@@ -60,8 +62,7 @@ def _has_execution_context(context: str) -> bool:
 def _is_suspicious_destination(host: str) -> bool:
     if not host:
         return False
-    markers = _WEBHOOK_MARKERS + _PASTE_MARKERS + _RAW_HOST_MARKERS + _TUNNEL_MARKERS
-    if any(marker in host for marker in markers):
+    if any(marker in host for marker in _ALL_HOST_MARKERS):
         return True
     if any(shortener == host for shortener in _SHORTENER_DOMAINS):
         return True

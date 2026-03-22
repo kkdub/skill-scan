@@ -9,15 +9,17 @@ FileRole = str
 _SCRIPT_SUFFIXES = frozenset({".py", ".sh", ".bash", ".zsh", ".ps1", ".js", ".ts"})
 _CONFIG_SUFFIXES = frozenset({".json", ".yaml", ".yml", ".toml", ".ini", ".cfg", ".env", ".jinja2"})
 _DOC_SUFFIXES = frozenset({".md", ".txt", ".rst"})
-_REFERENCE_MARKERS = (
-    "reference",
-    "references",
-    "example",
-    "examples",
-    "sample",
-    "samples",
-    "fixture",
-    "fixtures",
+_REFERENCE_MARKERS = frozenset(
+    {
+        "reference",
+        "references",
+        "example",
+        "examples",
+        "sample",
+        "samples",
+        "fixture",
+        "fixtures",
+    }
 )
 _FENCED_BLOCK_RE = re.compile(r"```[^\n`]*\n(.*?)```", re.DOTALL)
 _INLINE_CODE_RE = re.compile(r"`([^`\n]{4,200})`")
@@ -39,7 +41,10 @@ def classify_file_role(relative_path: str) -> FileRole:
     lowered = relative_path.lower()
     if lowered == "skill.md":
         return "entrypoint"
-    if any(part in lowered for part in _REFERENCE_MARKERS):
+    parts = lowered.split("/")
+    stem = parts[-1].rsplit(".", 1)[0] if "." in parts[-1] else parts[-1]
+    dirs = set(parts[:-1])
+    if stem in _REFERENCE_MARKERS or dirs & _REFERENCE_MARKERS:
         return "reference"
     suffix = lowered[lowered.rfind(".") :] if "." in lowered else ""
     if suffix in _SCRIPT_SUFFIXES:
