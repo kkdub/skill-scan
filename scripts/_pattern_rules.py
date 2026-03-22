@@ -2,7 +2,7 @@
 
 Owns the heuristic-to-regex mapping table, the Pattern dataclass,
 and the JSON-to-Pattern loader.  Extracted from check_code_patterns.py
-to keep each module under the 300-line limit.
+to keep each module under the 350-line limit.
 """
 
 from __future__ import annotations

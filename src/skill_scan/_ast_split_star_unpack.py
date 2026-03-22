@@ -27,8 +27,9 @@ def _flatten_starred_list(
 
     For each element:
     - Non-Starred: pass through unchanged.
-    - Starred(Name): look up 'name.__len__' and 'name[0]', 'name[1]', ...
-      in symbol_table. Replace with synthetic ast.Constant nodes.
+    - Starred(Name/Attribute/Subscript): derive base key, look up
+      'key.__len__' and 'key[0]', 'key[1]', ... in symbol_table.
+      Replace with synthetic ast.Constant nodes.
       Returns None if the starred variable is not tracked.
     """
     result: list[ast.expr] = []
@@ -43,6 +44,34 @@ def _flatten_starred_list(
     return result
 
 
+def _starred_key(value: ast.expr, scope: str) -> str | None:
+    """Extract the symbol-table base key from a starred expression's value.
+
+    Handles plain names (``*parts``), attributes (``*self.parts``),
+    and single-key subscripts (``*data[0]``).
+
+    For ``self.attr`` inside a method scope like ``ClassName.method``,
+    resolves to ``ClassName.attr`` to match the symbol table layout.
+    """
+    if isinstance(value, ast.Name):
+        return value.id
+    if isinstance(value, ast.Attribute) and isinstance(value.value, ast.Name):
+        # self.attr inside ClassName.method -> ClassName.attr
+        if value.value.id == "self" and "." in scope:
+            class_name = scope.split(".")[0]
+            return f"{class_name}.{value.attr}"
+        return f"{value.value.id}.{value.attr}"
+    if (
+        isinstance(value, ast.Subscript)
+        and isinstance(value.value, ast.Name)
+        and isinstance(value.slice, ast.Constant)
+    ):
+        key = value.slice.value
+        if isinstance(key, str | int):
+            return f"{value.value.id}[{key}]"
+    return None
+
+
 def _expand_starred(
     node: ast.Starred,
     symbol_table: dict[str, str],
@@ -50,11 +79,11 @@ def _expand_starred(
 ) -> list[ast.expr] | None:
     """Expand a single Starred node into its tracked string-list elements.
 
-    Returns None if the starred value is not a Name or is not tracked.
+    Returns None if the starred value cannot be resolved or is not tracked.
     """
-    if not isinstance(node.value, ast.Name):
+    name = _starred_key(node.value, scope)
+    if name is None:
         return None
-    name = node.value.id
     len_str = _scoped_lookup(f"{name}.__len__", symbol_table, scope)
     if len_str is None:
         return None

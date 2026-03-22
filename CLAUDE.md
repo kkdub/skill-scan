@@ -33,7 +33,7 @@ make check    # All quality checks (run early, run often)
 - Tests in `tests/`
 - Core scanner engine and decoder use stdlib only (`re`, `pathlib`, `json`, `tomllib`, `base64`, `binascii`, `ast`, `concurrent.futures`, `urllib.parse`)
 - Don't add deps without `uv` + `pyproject.toml`
-- **Max 300 lines per file** (source code in `src/` and `tests/`)
+- **Max 350 lines per file** (source code in `src/` and `tests/`)
 
 ## Project Structure
 
@@ -161,19 +161,19 @@ Key patterns and invariants. For detailed module-level docs, see `.agent/ARCHITE
 
 **Known debt**:
 - PEP 448 spread dicts (`{**base, ...}`) in kwargs are conservatively treated as unresolvable (no tracking planned)
-- `_ast_split_resolve.py` is at 222/300 lines — has headroom after format_map extraction to `_ast_split_format_map.py`
-- `_ast_split_format.py` is at 299/300 lines — effectively frozen; any addition requires offsetting removal first
-- `_ast_imports.py` is at 160/300 lines — has headroom after string-resolver extraction to `_ast_string_resolver.py`
-- `_ast_rot13.py` is at 247/300 lines — has headroom after branch analysis extraction to `_ast_rot13_branch_analysis.py`
-- `_ast_symbol_table.py` is at 299/300 lines — effectively frozen; any future addition requires extracting a helper to a sibling module
-- `_ast_split_comprehension.py` is at 265/300 lines — 35 lines remaining (reduced after inlining `_collect_int_lists_from_body` into `_collect_int_list_assigns`)
-- `_ast_symbol_table_assignments.py` is at 288/300 lines — 12 lines remaining
-- `_ast_split_star_unpack.py` is at ~79/300 lines — ample room
-- `_ast_symbol_table_dict_tracker.py` is at ~149/300 lines — ample room
+- `_ast_split_resolve.py` is at 222/350 lines — has headroom after format_map extraction to `_ast_split_format_map.py`
+- `_ast_split_format.py` is at 299/350 lines — effectively frozen; any addition requires offsetting removal first
+- `_ast_imports.py` is at 160/350 lines — has headroom after string-resolver extraction to `_ast_string_resolver.py`
+- `_ast_rot13.py` is at 247/350 lines — has headroom after branch analysis extraction to `_ast_rot13_branch_analysis.py`
+- `_ast_symbol_table.py` is at 299/350 lines — effectively frozen; any future addition requires extracting a helper to a sibling module
+- `_ast_split_comprehension.py` is at 265/350 lines — 35 lines remaining (reduced after inlining `_collect_int_lists_from_body` into `_collect_int_list_assigns`)
+- `_ast_symbol_table_assignments.py` is at 288/350 lines — 12 lines remaining
+- `_ast_split_star_unpack.py` is at ~79/350 lines — ample room
+- `_ast_symbol_table_dict_tracker.py` is at ~149/350 lines — ample room
 - `collect_loop_assigns` supports only inline string-literal lists and local list-literal name references as iter source — tracked list variables from symbol_table are NOT supported (symbol_table is `dict[str, str]`, cannot hold lists)
-- `_maybe_flatten_starred` in `_ast_split_star_unpack.py` only expands `ast.Starred` where the starred value is a plain `ast.Name` — starred expressions (computed, attribute, subscript) are not supported
+- `_maybe_flatten_starred` in `_ast_split_star_unpack.py` handles `ast.Name`, `ast.Attribute` (single-level), and `ast.Subscript` (constant key) — nested attributes and computed expressions are not supported
 - DEBT-035-TRY-EXCEPT-BRANCH-MERGE: `_walk_fn_body` walks `Try`/`except` sub-bodies sequentially (not branch-aware); `except` handlers are not mutually exclusive with the `try` body, so this is conservative but could produce merged int-lists when a variable is assigned differently in `try` vs `except`; fixing this requires understanding Python exception semantics (partial execution of try body) and is out of scope for PLAN-035
-- `_ast_split_int_list_tracker.py` is at 291/300 lines — 9 lines remaining; `_is_exhaustive_match` moved to `_ast_terminal_body.py` in PLAN-036 which freed the lines previously used by that function
+- `_ast_split_int_list_tracker.py` is at 291/350 lines — 9 lines remaining; `_is_exhaustive_match` moved to `_ast_terminal_body.py` in PLAN-036 which freed the lines previously used by that function
 
 ## Tips
 

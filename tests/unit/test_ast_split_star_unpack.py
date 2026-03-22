@@ -13,6 +13,7 @@ from __future__ import annotations
 import ast
 
 from skill_scan._ast_split_detector import detect_split_evasion
+from skill_scan._ast_split_star_unpack import _starred_key
 from skill_scan._ast_symbol_table import build_symbol_table
 from skill_scan.ast_analyzer import analyze_python
 from skill_scan.models import Finding
@@ -31,6 +32,55 @@ def _detect(code: str) -> list[Finding]:
 def _analyze(code: str) -> list[Finding]:
     """Helper: run full analyze_python pipeline."""
     return analyze_python(code, _FILE)
+
+
+# -- _starred_key: key extraction from starred values -------------------------
+
+
+class TestStarredKey:
+    """_starred_key extracts symbol-table base keys from AST nodes."""
+
+    def test_name(self) -> None:
+        node = ast.Name(id="parts")
+        assert _starred_key(node, "") == "parts"
+
+    def test_attribute(self) -> None:
+        node = ast.Attribute(value=ast.Name(id="obj"), attr="data")
+        assert _starred_key(node, "") == "obj.data"
+
+    def test_self_attribute_in_method_scope(self) -> None:
+        node = ast.Attribute(value=ast.Name(id="self"), attr="parts")
+        assert _starred_key(node, "MyClass.run") == "MyClass.parts"
+
+    def test_self_attribute_no_scope(self) -> None:
+        """self.attr without method scope falls back to self.attr."""
+        node = ast.Attribute(value=ast.Name(id="self"), attr="parts")
+        assert _starred_key(node, "") == "self.parts"
+
+    def test_subscript_int(self) -> None:
+        node = ast.Subscript(
+            value=ast.Name(id="data"),
+            slice=ast.Constant(value=0),
+        )
+        assert _starred_key(node, "") == "data[0]"
+
+    def test_subscript_str(self) -> None:
+        node = ast.Subscript(
+            value=ast.Name(id="data"),
+            slice=ast.Constant(value="key"),
+        )
+        assert _starred_key(node, "") == "data[key]"
+
+    def test_complex_expr_returns_none(self) -> None:
+        """BinOp or other complex expressions return None."""
+        node = ast.BinOp(left=ast.Name(id="a"), op=ast.Add(), right=ast.Name(id="b"))
+        assert _starred_key(node, "") is None
+
+    def test_nested_attribute_returns_none(self) -> None:
+        """a.b.c (nested attribute) returns None — only single-level supported."""
+        inner = ast.Attribute(value=ast.Name(id="a"), attr="b")
+        node = ast.Attribute(value=inner, attr="c")
+        assert _starred_key(node, "") is None
 
 
 # -- R006: String-list element tracking in symbol table -----------------------
@@ -158,6 +208,18 @@ class TestStarUnpackJoin:
         code = "import unknown\n''.join([*unknown_var])\n"
         findings = _detect(code)
         # Should not crash; may or may not have findings but no exception
+        assert isinstance(findings, list)
+
+    def test_starred_attribute_non_tracked_no_crash(self) -> None:
+        """Starred attribute of non-tracked variable does not crash."""
+        code = "''.join([*obj.unknown])\n"
+        findings = _detect(code)
+        assert isinstance(findings, list)
+
+    def test_starred_subscript_non_tracked_no_crash(self) -> None:
+        """Starred subscript of non-tracked variable does not crash."""
+        code = "''.join([*data[0]])\n"
+        findings = _detect(code)
         assert isinstance(findings, list)
 
     def test_starred_in_tuple_join(self) -> None:

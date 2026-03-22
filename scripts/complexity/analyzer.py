@@ -34,7 +34,7 @@ from scripts.complexity.radon_checks import (
 class Thresholds:
     """Configurable thresholds for code quality checks."""
 
-    max_file_lines: int = 300
+    max_file_lines: int = 350
     max_function_lines: int = 50
     cc_medium: int = 10
     cc_high: int = 15

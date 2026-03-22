@@ -1,6 +1,6 @@
 """Radon-based complexity and maintainability checks.
 
-Extracted from analyzer.py to keep files under 300 lines.
+Extracted from analyzer.py to keep files under 350 lines.
 Provides cyclomatic complexity and maintainability index analysis.
 """
 
