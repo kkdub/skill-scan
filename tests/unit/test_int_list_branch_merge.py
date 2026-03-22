@@ -98,6 +98,18 @@ class TestMatchBranchMerge:
         result = _collect(code)
         assert result["codes"] == [101, 118]
 
+    def test_match_guarded_wildcard_not_exhaustive(self) -> None:
+        """Guarded wildcard (case _ if cond:) is NOT exhaustive; snapshot included."""
+        code = "codes = [101]\nmatch x:\n    case _ if cond:\n        codes = [1, 2]"
+        # Guard can fail -> pre-match snapshot [101] is extra branch -> disagrees -> shadow
+        assert _collect(code)["codes"] is _SHADOW
+
+    def test_match_unguarded_wildcard_is_exhaustive(self) -> None:
+        """Unguarded wildcard with all cases agreeing -> kept (no snapshot branch)."""
+        code = "match x:\n    case 1:\n        codes = [1, 2]\n    case _:\n        codes = [1, 2]"
+        result = _collect(code)
+        assert result["codes"] == [1, 2]
+
     def test_match_non_exhaustive_new_key_preserved(self) -> None:
         """Non-exhaustive match: new key in single case -> preserved."""
         code = "match x:\n    case 1:\n        fresh = [101, 118]"

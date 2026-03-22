@@ -209,11 +209,12 @@ def _merge_branches(
 
 
 def _is_exhaustive_match(node: ast.Match) -> bool:
-    """Return True if the match has a wildcard case (MatchAs with name=None)."""
+    """Return True if the match has an unguarded wildcard case."""
     if not node.cases:
         return False
-    last_pat = node.cases[-1].pattern
-    return isinstance(last_pat, ast.MatchAs) and last_pat.name is None
+    last_case = node.cases[-1]
+    last_pat = last_case.pattern
+    return isinstance(last_pat, ast.MatchAs) and last_pat.name is None and last_case.guard is None
 
 
 def _walk_fn_body(

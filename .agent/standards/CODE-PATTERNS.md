@@ -711,7 +711,7 @@ def _walk_fn_body(body, scope, result, decls=None, enclosing=""):
             _merge_branches(branch_results, result)
 ```
 
-> Trap: non-exhaustive match (no wildcard case) must include the pre-match snapshot as an extra branch — otherwise a variable assigned only in one case appears to have a definite value when none of the cases may have matched.
+> Trap: non-exhaustive match (no unguarded wildcard case — specifically, no `case _:` with `guard is None`) must include the pre-match snapshot as an extra branch — otherwise a variable assigned only in one case appears to have a definite value when none of the cases may have matched.
 
 ## Facade Re-export Pattern
 

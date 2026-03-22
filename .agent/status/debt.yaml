@@ -41,6 +41,17 @@
   resolution: "Have resolvers return (value, source_label) tuples instead of bare strings. Update _RESOLVERS type alias and all callers. Alternatively, add a thread-local or context flag that resolve_call_return sets when it contributes to a resolution."
 
 
+- id: DEBT-035-NON-FALLTHROUGH-BRANCH
+  description: "_walk_fn_body merges both branch snapshots even when one branch cannot reach the post-if statement (e.g. if cond: return). The return path should not contribute to the post-if state, but the pre-branch snapshot still gets merged and shadows the variable."
+  type: effectiveness
+  severity: medium
+  plan: none
+  files:
+    - src/skill_scan/_ast_split_int_list_tracker.py:243
+  blocker: "Requires control-flow analysis to detect terminal statements (return, raise, break, continue, sys.exit) in branch bodies; must handle nested if/try that may also terminate; same analysis needed for Match cases."
+  resolution: "Before merging, check each branch body for terminal statements. If a branch always exits (last statement is return/raise/break/continue or every if-path terminates), exclude its snapshot from the merge. Consider a _is_terminal_branch(body) helper."
+
+
 - id: DEBT-035-TRY-EXCEPT-BRANCH-MERGE
   description: "try/except bodies are walked sequentially (not branch-aware); try:codes+=[A];except:codes+=[B] produces [init,A,B] — a nonsense merge of mutually exclusive paths, same class of bug as the if/else case fixed in PLAN-035"
   type: effectiveness

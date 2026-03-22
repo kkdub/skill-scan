@@ -1,7 +1,7 @@
 id: "PLAN-035"
 title: "Branch-aware int-list pre-pass (DEBT-028)"
 type: implementation
-status: Proposed
+status: Done
 created: 2026-03-21
 linked_spec: null
 description: |
