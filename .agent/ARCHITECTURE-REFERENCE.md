@@ -155,3 +155,84 @@ Detailed module-level documentation for skill-scan internals. For key patterns a
 ## Evasion Corpus
 
 Test fixtures at `tests/fixtures/split_evasion/` — positive (`pos_`) files should detect, negative (`neg_`) should not trigger. Corpus test filter uses `rule_id` matching (`f.rule_id in ('EXEC-002', 'EXEC-006')`). Format/%-format fixtures use `UP030`/`UP031`/`UP032` ruff ignores (intentional old-style syntax).
+
+## Package Risk Analysis
+
+Added in commit 48a499a on branch `feat/package-risk-analysis`. Holistic risk scoring for complete skill packages beyond individual file findings.
+
+### Entry Point
+
+- `analyze_package(skill_dir, files, findings)` in `package_analyzer.py` — called from `scanner.py` after all file findings are assembled; returns `PackageRiskSummary`; the result is stored in `ScanResult.package_risk`
+- `_RiskState` — mutable inner dataclass holding `score`, `driver_scores`, `direct_danger`, `severe_direct_danger`, `suspicious_url_count` for one analysis pass; not exported
+
+### Data Flow
+
+1. `build_role_map(skill_dir, files)` → `dict[str, str]` mapping relative path to role
+2. `analyze_text_files(skill_dir, files)` → `tuple[TextSignal, ...]` — reads each file and extracts heuristic signals
+3. `_score_findings(findings, role_map, state)` — accumulates finding points into `state`
+4. `_score_text_signals(text_signals, state)` — accumulates text-signal points
+5. `apply_correlations(text_signals, findings, role_map, driver_scores)` → `int` (count of matched correlation rules)
+6. `correlation_bonus(count) → float` — flat 6 points per matched correlation pair
+7. `_apply_multi_role_bonus(...)` — adds 6 points when medium-or-higher signals span 2+ distinct roles (split evenly between `operator-manipulation` and `remote-bootstrap` drivers)
+8. `final_band(score, direct_danger, severe_direct_danger)` → `str` — maps score to band with direct-danger overrides
+
+### Scoring Policy (`_package_risk_policy.py`)
+
+- `ROLE_WEIGHT` — `entrypoint=1.4`, `script=1.35`, `config=1.1`, `support-doc=0.8`, `reference=0.35`; a reference-role signal with operator-manipulation or remote-bootstrap driver gets an additional 0.6x multiplier
+- `SEVERITY_POINTS` — `CRITICAL=10.0`, `HIGH=7.0`, `MEDIUM=4.0`, `LOW=2.0`, `INFO=0.5`
+- `CATEGORY_DRIVER` — maps finding categories to risk driver labels: `prompt-injection` → `operator-manipulation`, `malicious-code` → `execution`, `data-exfiltration` → `exfiltration`, `credential-exposure` → `credential-access`, `supply-chain` → `remote-bootstrap`, `tool-abuse` → `execution`, `obfuscation` → `stealth/obfuscation`
+- `IGNORED_CATEGORIES` — `analysis`, `file-safety`, `schema-validation` are skipped (not scored)
+- `risk_band(score)` — `score >= 40` → `severe`, `>= 20` → `high`, `>= 8` → `guarded`, else `low`
+- `final_band()` — applies direct-danger overrides: `severe_direct_danger` forces `severe`; `direct_danger` raises `low`/`guarded` to `high`; `direct_danger` requires role in `{entrypoint, script}` + driver in `DIRECT_DANGER_DRIVERS` + severity in `{HIGH, CRITICAL}`
+- `top_drivers(driver_scores)` — returns up to 3 drivers sorted descending by score (ties broken alphabetically)
+
+### File Role Classification (`_package_text_roles.py`)
+
+- `classify_file_role(relative_path: str) -> FileRole` — five roles: `entrypoint` (exact match `skill.md`), `reference` (any path segment in `_REFERENCE_MARKERS`), `script` (`.py/.sh/.bash/.zsh/.ps1/.js/.ts`), `config` (`.json/.yaml/.yml/.toml/.ini/.cfg/.env/.jinja2`), `support-doc` (all others)
+- `_REFERENCE_MARKERS` — path segment words that classify a file as reference material: `reference`, `references`, `example`, `examples`, `sample`, `samples`, `fixture`, `fixtures`
+- `extract_command_snippets(content)` — extracts fenced code blocks, inline code, and shell-prompt lines; used to populate `has_command` for signal building
+- `has_command(snippets)` — returns True if any snippet matches `_COMMAND_HINTS` (curl, wget, pip install, python, bash, sh, powershell, invoke-webrequest)
+
+### Text Signals (`_package_text_signals.py`)
+
+`TextSignal` — frozen dataclass: `rule_id: str`, `severity: Severity`, `driver: str`, `file: str`, `role: FileRole`, `suspicious_urls: int = 0`
+
+Signal types:
+- `PKG-001` (`operator-manipulation`) — coercion language (CRITICAL regex) or bare "run" in entrypoint/support-doc; requires a command snippet to be present; suppressed for warning-like reference material
+- `PKG-002` (`remote-bootstrap`) — `REMOTE_SOURCE_RE` (config URL fields) triggers HIGH; `REMOTE_BOOTSTRAP_RE` with command context triggers HIGH or CRITICAL (CRITICAL when `PIPE_TO_SHELL_RE` also matches); suppressed for warning-like reference material
+- `PKG-003` (`credential-access`) — `SECRET_REQUEST_RE` triggers HIGH; suppressed for warning-like reference material
+- `PKG-004` (`remote-bootstrap` or `exfiltration`) — per suspicious URL classified by `classify_url_signal()`; increments `suspicious_urls` count
+- `PKG-005` (`operator-manipulation`) — MEDIUM when setup/diagnostic language (`SETUP_WORD_RE`) AND a URL sits in an execution context; suppressed for warning-like reference material
+
+Deduplication: `deduplicate_signals()` in `_package_text_signal_utils.py` removes duplicate `(rule_id, file, driver)` triples before returning.
+
+### URL Analysis (`_package_url_analysis.py` + `_package_url_patterns.py`)
+
+- `extract_urls_with_context(content)` — finds all HTTP/S URLs via `URL_RE`; returns each URL with 80 chars of surrounding context; trailing punctuation (`.`, `,`, `;`, `)`) is stripped
+- `classify_url_signal(url, context)` — categorizes URL as `(driver, severity) | None`:
+  - Suspicious destination (webhook sites, paste bins, IP literals, ngrok/cloudflare tunnels, URL shorteners) → HIGH; exfiltration if webhook marker or `webhook/callback/beacon/c2/exfil` in path/context
+  - Suspicious payload (`.sh/.ps1/.bat/.cmd/.exe/.dll/.pkg/.dmg/.zip/.tar.gz` suffix, or encoded/sensitive query params) → `remote-bootstrap` MEDIUM
+  - Execution context (`EXECUTION_CONTEXT_RE` or `REMOTE_SOURCE_RE`) → `remote-bootstrap` MEDIUM
+  - Otherwise `None` (not suspicious)
+- `SHORTENER_DOMAINS` — `bit.ly`, `tinyurl.com`, `t.co`, `goo.gl`; extend by adding entries
+- `WEBHOOK_MARKERS` — `webhook.site`, `discord.com`, `hooks.slack.com`; extend by adding entries
+- `PASTE_MARKERS` — `pastebin.com`, `paste.rs`, `paste.ee`, `transfer.sh`, `0x0.st`; extend by adding entries
+- `TUNNEL_MARKERS` — `ngrok`, `trycloudflare`, `loca.lt`; extend by adding entries
+- `RAW_HOST_MARKERS` — `raw.githubusercontent.com`, `gist.githubusercontent.com`, `gitlab.com`; extend by adding entries
+
+### Cross-File Correlation Rules (`_package_risk_correlations.py`)
+
+- `_CORRELATION_RULES` — 3 rules as `(fact_a, fact_b, driver_points)` tuples:
+  1. `doc_bootstrap + script_danger` → +6 execution, +6 operator-manipulation
+  2. `config_remote + script_danger` → +4 execution, +6 remote-bootstrap
+  3. `secret_request + outbound_danger` → +6 exfiltration, +6 credential-access
+- Each matched pair also adds a flat 6.0 bonus via `correlation_bonus(count)`
+- `_collect_facts()` — derives boolean facts from text signals and findings for rule evaluation; facts: `doc_bootstrap`, `config_remote`, `secret_request`, `script_danger`, `outbound_danger`
+- `has_multi_role_medium_risk()` — True when medium-or-higher signals (findings + text signals) touch 2+ distinct roles; triggers the multi-role bonus in `_apply_multi_role_bonus()`
+
+### Output Integration
+
+- **JSON**: `_serialize_package_risk()` in `json_formatter.py` — outputs `null` when absent, else `{band, score, topDrivers (list), countsByRole (dict), suspiciousUrlCount, correlatedSignalCount}`; keys are snake_case with sort_keys=True
+- **SARIF**: written to `run.properties.packageRisk` with camelCase keys (`topDrivers`, `countsByRole`, `suspiciousUrlCount`, `correlatedSignalCount`)
+- **Text**: `_format_package_risk()` in `formatters.py` — renders a block after findings in default and verbose modes; quiet mode omits it
+- **Public API**: `PackageRiskSummary` exported from `__init__.py` and included in `__all__`
