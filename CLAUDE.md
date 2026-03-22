@@ -181,7 +181,7 @@ Key patterns and invariants. For detailed module-level docs, see `.agent/ARCHITE
 - `final_band()` in `_package_risk_policy.py` applies direct-danger overrides AFTER `risk_band()` maps the numeric score; `severe_direct_danger` (HIGH/CRITICAL signal in entrypoint/script) forces band to `severe`; `direct_danger` (any qualifying signal) raises band from `low`/`guarded` to `high`; do NOT bypass `final_band()` by calling `risk_band()` directly
 - `_format_package_risk()` in `formatters.py` renders the `PackageRiskSummary` block in text output (both default and verbose modes); quiet mode does NOT include package risk — it prints the verdict line only
 - `_serialize_package_risk()` in `json_formatter.py` serializes `PackageRiskSummary` to JSON; returns `None` when `result.package_risk is None`; `top_drivers` serialized as a list, `counts_by_role` as a plain dict
-- Package risk output in SARIF is written to `run.properties.packageRisk` (camelCase keys: `band`, `score`, `topDrivers`, `countsByRole`, `suspiciousUrlCount`, `correlatedSignalCount`)
+- Package risk output in SARIF is written to `run.properties.skillScanPackageRisk` (camelCase keys: `band`, `score`, `topDrivers`, `countsByRole`, `suspiciousUrlCount`, `correlatedSignalCount`)
 - `deduplicate_signals()` in `_package_text_signal_utils.py` deduplicates by `(rule_id, file, driver)` triple — same signal type from the same file for the same driver is counted only once; called inside `build_text_signals()` before returning
 - `is_warning_like_reference()` in `_package_text_signal_utils.py` — suppresses coercion, secret, and remote signals for `reference`-role files whose content matches `WARNING_CONTEXT_RE`; prevents false positives from security-warning documentation
 

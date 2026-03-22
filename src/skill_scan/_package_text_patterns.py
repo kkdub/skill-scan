@@ -13,7 +13,7 @@ SECRET_REQUEST_RE = re.compile(
     r"(api[_ -]?key|token|secret|password|cookie|private key|ssh key|\.env)"
 )
 REMOTE_SOURCE_RE = re.compile(
-    r"(?is)(source|config[_-]?url|instruction[_-]?url|skill[_-]?url|manifest[_-]?url)\s*[:=]\s*https?://"
+    r"(?is)(source|config[_-]?url|instruction[_-]?url|skill[_-]?url|manifest[_-]?url)\s*[:=]\s*[\"']?https?://"
 )
 REMOTE_BOOTSTRAP_RE = re.compile(
     r"(?is)(curl|wget|invoke-webrequest|iwr|irm)\b.*https?://|https?://.*\|\s*(bash|sh|zsh|python|powershell|pwsh)"

@@ -37,11 +37,13 @@ def make_package_risk(
     correlated_signal_count: int = 1,
 ) -> PackageRiskSummary:
     """Create a PackageRiskSummary with sensible defaults for testing."""
+    if counts_by_role is None:
+        counts_by_role = {"entrypoint": 1, "script": 1}
     return PackageRiskSummary(
         score=score,
         band=band,
         top_drivers=top_drivers,
-        counts_by_role=counts_by_role or {"entrypoint": 1, "script": 1},
+        counts_by_role=counts_by_role,
         suspicious_url_count=suspicious_url_count,
         correlated_signal_count=correlated_signal_count,
     )

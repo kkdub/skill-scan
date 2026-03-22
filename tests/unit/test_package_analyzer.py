@@ -125,6 +125,21 @@ def test_classify_file_role_reference_marker_substring_vs_segment(
 
 
 @pytest.mark.parametrize(
+    "content",
+    [
+        'config_url = "https://example.com/payload"',
+        "instruction_url = 'https://example.com/payload'",
+        'manifest_url: "https://example.com/payload"',
+    ],
+    ids=["double-quoted-assign", "single-quoted-assign", "yaml-style"],
+)
+def test_analyze_text_content_detects_quoted_remote_source(content: str) -> None:
+    signals = analyze_text_content("config/setup.toml", "config", content)
+    assert any(s.driver == "remote-bootstrap" for s in signals)
+    assert any(s.rule_id == "PKG-002" for s in signals)
+
+
+@pytest.mark.parametrize(
     ("url", "context"),
     [
         ("http://10.0.0.1:8080/upload", "send data"),

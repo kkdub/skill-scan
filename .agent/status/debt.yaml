@@ -41,6 +41,14 @@
   blocker: "_check_self_assign calls try_resolve_string which only handles string constants; extending it to call _handle_string_list_literal requires importing from _ast_symbol_table_dict_tracker and adapting the result dict type (currently dict[str, str], list tracking uses composite keys)."
   resolution: "Add a list/tuple branch in _check_self_assign that calls _handle_string_list_literal with the ClassName.attr prefix, storing ClassName.attr[i] and ClassName.attr.__len__ entries alongside the existing string tracking."
 
+- description: "REMOTE_SOURCE_RE does not match JSON-style quoted keys — e.g. {\"manifest_url\": \"https://...\"} misses PKG-002 because the key name itself is quoted; only quoted values after unquoted keys are handled"
+  type: technical
+  plan: none
+  files:
+    - src/skill_scan/_package_text_patterns.py:15-17
+  blocker: "Adding [\"']? around the key capture group risks false positives on prose that quotes variable names; needs careful boundary analysis to avoid matching documentation examples."
+  resolution: "Extend REMOTE_SOURCE_RE to optionally match quoted key names: [\"']?(source|config[_-]?url|...)[\"']?\\s*[:=]\\s*[\"']?https?://. Add test cases for JSON config files with quoted keys."
+
 - description: "try/except bodies are walked sequentially (not branch-aware); try:codes+=[A];except:codes+=[B] produces [init,A,B] — a nonsense merge of mutually exclusive paths, same class of bug as the if/else case fixed in PLAN-035"
   type: technical
   plan: none

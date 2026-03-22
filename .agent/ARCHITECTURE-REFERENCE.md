@@ -232,7 +232,7 @@ Deduplication: `deduplicate_signals()` in `_package_text_signal_utils.py` remove
 
 ### Output Integration
 
-- **JSON**: `_serialize_package_risk()` in `json_formatter.py` — outputs `null` when absent, else `{band, score, topDrivers (list), countsByRole (dict), suspiciousUrlCount, correlatedSignalCount}`; keys are snake_case with sort_keys=True
-- **SARIF**: written to `run.properties.packageRisk` with camelCase keys (`topDrivers`, `countsByRole`, `suspiciousUrlCount`, `correlatedSignalCount`)
+- **JSON**: `_serialize_package_risk()` in `json_formatter.py` — outputs `null` when absent, else `{band, score, top_drivers (list), counts_by_role (dict), suspicious_url_count, correlated_signal_count}`; keys are snake_case with `sort_keys=True`
+- **SARIF**: written to `run.properties.skillScanPackageRisk` with camelCase keys (`topDrivers`, `countsByRole`, `suspiciousUrlCount`, `correlatedSignalCount`)
 - **Text**: `_format_package_risk()` in `formatters.py` — renders a block after findings in default and verbose modes; quiet mode omits it
 - **Public API**: `PackageRiskSummary` exported from `__init__.py` and included in `__all__`
