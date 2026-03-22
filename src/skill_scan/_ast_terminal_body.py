@@ -47,8 +47,7 @@ def _stmt_is_terminal(stmt: ast.stmt) -> bool:
     if isinstance(stmt, ast.Match):
         return _match_is_terminal(stmt)
     # Loops (for/while) might not execute -- can't guarantee exit.
-    # break/continue are Expr-level, not stmt-level control flow
-    # that guarantees scope exit.
+    # break/continue only exit loop iteration, not scope.
     # FunctionDef, ClassDef, Import, etc. are not terminal.
     return False
 

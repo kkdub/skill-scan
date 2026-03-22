@@ -107,6 +107,20 @@ class TestIfTerminalBodyExclusion:
         result = _collect(code)
         assert "f.fresh" not in result
 
+    def test_both_terminal_dead_code_ignored(self) -> None:
+        """Both branches terminal -> dead code after if is not tracked."""
+        code = """\
+        def f():
+            codes = [101]
+            if cond:
+                return
+            else:
+                return
+            codes += [118, 97, 108]
+        """
+        result = _collect(code)
+        assert result["f.codes"] == [101]
+
     def test_non_terminal_branches_still_merge(self) -> None:
         """Neither branch terminal -> normal merge (disagree = shadow)."""
         code = """\
@@ -233,6 +247,21 @@ class TestMatchTerminalCaseExclusion:
         result = _collect(code)
         # Only the pre-match snapshot survives (the terminal case is excluded,
         # and the snapshot branch is added because non-exhaustive).
+        assert result["f.codes"] == [101]
+
+    def test_all_terminal_exhaustive_dead_code_ignored(self) -> None:
+        """All cases terminal + exhaustive -> dead code after match ignored."""
+        code = """\
+        def f():
+            codes = [101]
+            match x:
+                case 1:
+                    return
+                case _:
+                    raise ValueError
+            codes += [118, 97, 108]
+        """
+        result = _collect(code)
         assert result["f.codes"] == [101]
 
     def test_non_terminal_cases_still_merge_normally(self) -> None:

@@ -1,23 +1,24 @@
 """Int-list tracking helpers for the pre-pass collector.
 
 Handles assignment, AugAssign (+=), and .extend() mutations on tracked
-int-list variables. Imported by ``_ast_split_comprehension``.
-
-Shadow marker: ``_SHADOW`` is a module-level sentinel list used to mark
-variables that were assigned a non-int-list value.  We compare by identity
-(``existing is _SHADOW``) so that a legitimate empty int list (``codes = []``)
-is not confused with a shadowed variable.
+int-list variables.  Shadow marker ``_SHADOW`` marks non-int-list
+reassignments; compare by identity to avoid confusing it with ``[]``.
 """
 
 from __future__ import annotations
 
 import ast
 
+from skill_scan._ast_terminal_body import _is_exhaustive_match, _is_terminal_body
+
 _SHADOW: list[int] = []
 """Identity sentinel -- never mutate.  Used as shadow marker in int-list table."""
 
 _MAX_INT_LIST_SIZE = 10000
 """Cap combined int-list size to prevent allocation spikes on untrusted input."""
+
+_IntMap = dict[str, list[int]]
+"""Result dict type: scope-qualified name -> int-list or _SHADOW."""
 
 _Decls = tuple[set[str], set[str]] | None
 """Type alias for optional (global_names, nonlocal_names) tuple."""
@@ -56,7 +57,7 @@ def _extract_int_list(elts: list[ast.expr]) -> list[int] | None:
 def _handle_int_list_stmt(
     stmt: ast.stmt,
     scope: str,
-    result: dict[str, list[int]],
+    result: _IntMap,
     declarations: _Decls = None,
     enclosing_scope: str = "",
 ) -> None:
@@ -73,7 +74,7 @@ def _handle_int_list_stmt(
 def _handle_assign(
     stmt: ast.Assign,
     scope: str,
-    result: dict[str, list[int]],
+    result: _IntMap,
     declarations: _Decls = None,
     enclosing_scope: str = "",
 ) -> None:
@@ -94,7 +95,7 @@ def _handle_assign(
 def _resolve_binop_concat(
     node: ast.BinOp,
     scope: str,
-    result: dict[str, list[int]],
+    result: _IntMap,
     declarations: _Decls = None,
     enclosing_scope: str = "",
 ) -> list[int]:
@@ -115,7 +116,7 @@ def _resolve_binop_concat(
 def _handle_extend_call(
     call: ast.Call,
     scope: str,
-    result: dict[str, list[int]],
+    result: _IntMap,
     declarations: _Decls = None,
     enclosing_scope: str = "",
 ) -> None:
@@ -131,7 +132,7 @@ def _extend_tracked(
     name: str,
     value: ast.expr,
     scope: str,
-    result: dict[str, list[int]],
+    result: _IntMap,
     declarations: _Decls = None,
     enclosing_scope: str = "",
 ) -> None:
@@ -160,7 +161,7 @@ def _extend_with_tracked_var(
     var_name: str,
     scope: str,
     existing: list[int],
-    result: dict[str, list[int]],
+    result: _IntMap,
     declarations: _Decls = None,
     enclosing_scope: str = "",
 ) -> None:
@@ -190,37 +191,42 @@ def _values_agree(vals: list[list[int]]) -> bool:
     return True
 
 
-def _merge_branches(
-    branches: list[dict[str, list[int]]],
-    result: dict[str, list[int]],
-) -> None:
+def _merge_branches(branches: list[_IntMap], result: _IntMap) -> None:
     """Merge N branch results conservatively into *result*.
 
     Keys with identical values across all branches that contain them are
     kept.  Keys with differing values are replaced with ``_SHADOW``.
     Keys present in only some branches are kept (security-conservative).
     """
+    # Collect all keys across branches, then reconcile per-key.
     all_keys: set[str] = set()
     for br in branches:
         all_keys.update(br)
     for key in all_keys:
         vals = [br[key] for br in branches if key in br]
+        # Identical across branches → keep; divergent → shadow.
         result[key] = vals[0] if _values_agree(vals) else _SHADOW
+
+
+def _filter_if_branches(stmt: ast.If, after_if: _IntMap, after_else: _IntMap) -> list[_IntMap] | None:
+    """Non-terminal if/else branch results, or None if both terminal."""
+    brs: list[_IntMap] = []
+    if not _is_terminal_body(stmt.body):
+        brs.append(after_if)
+    if not _is_terminal_body(stmt.orelse):
+        brs.append(after_else)
+    return brs or None
 
 
 def _walk_fn_body(
     body: list[ast.stmt],
     scope: str,
-    result: dict[str, list[int]],
+    result: _IntMap,
     decls: _Decls = None,
     enclosing: str = "",
 ) -> None:
-    """Walk *body* for int-list tracking; branch-aware merge excludes terminal branches.
-
-    Terminal branches (return/raise on all paths) are excluded from merge.
-    """
+    """Walk *body* for int-list tracking; branch-aware merge excludes terminal branches."""
     from skill_scan._ast_symbol_table_returns import _sub_bodies
-    from skill_scan._ast_terminal_body import _is_exhaustive_match, _is_terminal_body
 
     for stmt in body:
         _handle_int_list_stmt(stmt, scope, result, decls, enclosing)
@@ -234,15 +240,13 @@ def _walk_fn_body(
             after_else = result.copy()
             result.clear()
             result.update(snap)
-            brs: list[dict[str, list[int]]] = []
-            if not _is_terminal_body(stmt.body):
-                brs.append(after_if)
-            if not _is_terminal_body(stmt.orelse):
-                brs.append(after_else)
+            brs = _filter_if_branches(stmt, after_if, after_else)
+            if brs is None:
+                break  # Both branches exit scope; rest is dead code
             _merge_branches(brs, result)
         elif isinstance(stmt, ast.Match):
             snap = result.copy()
-            branch_results: list[dict[str, list[int]]] = []
+            branch_results: list[_IntMap] = []
             for case in stmt.cases:
                 result.clear()
                 result.update(snap)
@@ -253,6 +257,8 @@ def _walk_fn_body(
                 branch_results.append(snap)
             result.clear()
             result.update(snap)
+            if not branch_results:
+                break  # All paths exit scope; rest is dead code
             _merge_branches(branch_results, result)
         else:
             for child_body in _sub_bodies(stmt):
@@ -263,7 +269,7 @@ def _collect_fn_body(
     fn: ast.FunctionDef | ast.AsyncFunctionDef,
     scope: str,
     enclosing: str,
-    result: dict[str, list[int]],
+    result: _IntMap,
 ) -> None:
     """Collect int-lists from a function body, recursing into nested functions.
 
