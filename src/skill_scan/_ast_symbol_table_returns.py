@@ -14,6 +14,7 @@ import ast
 from collections.abc import Mapping
 
 from skill_scan._ast_imports import try_resolve_string
+from skill_scan._ast_terminal_body import _is_exhaustive_match
 
 
 def _collect_return_value(
@@ -202,18 +203,7 @@ def _try_definitely_returns(node: ast.Try) -> bool:
 
 def _match_definitely_returns(node: ast.Match) -> bool:
     """Check if a match statement definitely returns on all branches."""
-    if not node.cases:
-        return False
-
-    # Need a wildcard/default case to guarantee exhaustive matching
-    has_wildcard = False
-    for case in node.cases:
-        # A wildcard with a guard (case _ if cond:) can fail to match,
-        # so only treat unguarded wildcards as guaranteeing exhaustiveness.
-        if isinstance(case.pattern, ast.MatchAs) and case.pattern.name is None and case.guard is None:
-            has_wildcard = True
-
-    if not has_wildcard:
+    if not _is_exhaustive_match(node):
         return False
 
     return all(_definitely_returns(case.body) for case in node.cases)

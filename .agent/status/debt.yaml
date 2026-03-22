@@ -1,6 +1,7 @@
-# .agent/status/debt.yaml
-# Entries are removed when resolved. Git history tracks removals.
-# Last updated: 2026-03-21
+# Technical Debt Tracking
+# Schema: .agent/standards/debt-tracking.md
+# Policy: Only genuinely broken/incorrect items with concrete blockers.
+# Resolved items are deleted; git tracks history.
 # Resolved by fix: DEBT-032-KWARGS-CLASS-METHOD-SCOPE (scope key changed to ClassName.method)
 # Resolved by fix: DEBT-032-INTLIST-CONCAT-UNBOUNDED (_MAX_INT_LIST_SIZE cap in extend paths)
 # Resolved by fix: DEBT-030-NC-FALSE-POSITIVE ('nc' now requires network flags)
@@ -11,8 +12,6 @@
 # Resolved by PR-034 review: DEBT-020-RESUB-BACKSLASH (lambda replacement), DEBT-020-UNBOUNDED-MULT (_MAX_REPEAT=1000 cap)
 # Resolved by PLAN-021: DEBT-018-T2-LIST-INDEX, DEBT-018-T3-GLOBAL-NONLOCAL, DEBT-018-T3-CLASS-SCOPE
 # Resolved by PLAN-022: DEBT-018-T3-CROSS-FUNCTION (function return-value tracking + call resolution)
-
-# --- PLAN-018 Red-Team Debt (Tier 2-4) ---
 # Resolved by PLAN-023: string slicing, reversal, bytes concat/decode, attribute chains, chr/ord
 # Resolved by PLAN-024: lambda/reduce building, comprehension assembly, replace chains, decorator evasion
 # Resolved by PLAN-025: DEBT-024-KWARGS-UNPACKING (detect_kwargs_unpacking + _DANGEROUS_KWARGS table)
@@ -22,17 +21,11 @@
 # Resolved by PLAN-028 Part C: DEBT-027-INTLIST-AUGMENTED (red-team confirmed; empty-list sentinel fix)
 # Resolved by PLAN-034: DEBT-021-NONLOCAL-MULTILEVEL (recursive _process_nested), DEBT-028-INTLIST-GLOBAL-NONLOCAL (scope declaration tracking in int-list pre-pass)
 # Resolved by PLAN-035: DEBT-028-INTLIST-BRANCH-MERGE (branch-aware snapshot/merge for If and Match in int-list pre-pass)
-
-# --- Structural / Maintenance Debt ---
+# Resolved by PLAN-036: DEBT-035-NON-FALLTHROUGH-BRANCH (terminal branch exclusion in int-list merge — return/raise branches excluded from _merge_branches)
 # Resolved by fix branch: DEBT-TYPE-IGNORE-CONFIG (TypedDict for config kwargs), DEBT-021-SCOPE-DECL-CONTROLFLOW (for/while/with/try)
 
-# --- PLAN-027 Red-Team Debt ---
-
-
-- id: DEBT-045-CALL-RETURN-LABEL-PROPAGATION
-  description: "Call-return label only applies when the resolved Call node matches resolve_call_return; for mixed patterns like a()+b() (binop) or f'{a()}{b()}' (fstring), leaf call-return resolutions still get labeled 'split variable'"
-  type: effectiveness
-  severity: low
+- description: "Call-return label only applies when the resolved Call node matches resolve_call_return; for mixed patterns like a()+b() (binop) or f'{a()}{b()}' (fstring), leaf call-return resolutions still get labeled 'split variable'"
+  type: technical
   plan: none
   files:
     - src/skill_scan/_ast_split_detector.py:175-196
@@ -40,24 +33,10 @@
   blocker: "Requires resolvers to return (value, label) tuples or track whether any leaf resolution used call-return; changes the resolver signature contract across all _RESOLVERS entries."
   resolution: "Have resolvers return (value, source_label) tuples instead of bare strings. Update _RESOLVERS type alias and all callers. Alternatively, add a thread-local or context flag that resolve_call_return sets when it contributes to a resolution."
 
-
-- id: DEBT-035-NON-FALLTHROUGH-BRANCH
-  description: "_walk_fn_body merges both branch snapshots even when one branch cannot reach the post-if statement (e.g. if cond: return). The return path should not contribute to the post-if state, but the pre-branch snapshot still gets merged and shadows the variable."
-  type: effectiveness
-  severity: medium
+- description: "try/except bodies are walked sequentially (not branch-aware); try:codes+=[A];except:codes+=[B] produces [init,A,B] — a nonsense merge of mutually exclusive paths, same class of bug as the if/else case fixed in PLAN-035"
+  type: technical
   plan: none
   files:
-    - src/skill_scan/_ast_split_int_list_tracker.py:243
-  blocker: "Requires control-flow analysis to detect terminal statements (return, raise, break, continue, sys.exit) in branch bodies; must handle nested if/try that may also terminate; same analysis needed for Match cases."
-  resolution: "Before merging, check each branch body for terminal statements. If a branch always exits (last statement is return/raise/break/continue or every if-path terminates), exclude its snapshot from the merge. Consider a _is_terminal_branch(body) helper."
-
-
-- id: DEBT-035-TRY-EXCEPT-BRANCH-MERGE
-  description: "try/except bodies are walked sequentially (not branch-aware); try:codes+=[A];except:codes+=[B] produces [init,A,B] — a nonsense merge of mutually exclusive paths, same class of bug as the if/else case fixed in PLAN-035"
-  type: effectiveness
-  severity: low
-  plan: none
-  files:
-    - src/skill_scan/_ast_split_int_list_tracker.py:261
+    - src/skill_scan/_ast_split_int_list_tracker.py:258
   blocker: "try/except is more nuanced than if/else — the try body may partially execute before the except fires, so the branches are not strictly mutually exclusive; needs careful analysis of which mutations are reachable in each handler."
   resolution: "Extend _walk_fn_body to snapshot before try body, walk each handler independently from post-try snapshot, then N-way merge; must account for partial try execution (some mutations may already be applied before exception)."
