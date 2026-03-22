@@ -42,7 +42,7 @@ def _stmt_is_terminal(stmt: ast.stmt) -> bool:
         return _if_is_terminal(stmt)
     if isinstance(stmt, ast.Try):
         return _try_is_terminal(stmt)
-    if isinstance(stmt, ast.With):
+    if isinstance(stmt, ast.With | ast.AsyncWith):
         return _is_terminal_body(stmt.body)
     if isinstance(stmt, ast.Match):
         return _match_is_terminal(stmt)

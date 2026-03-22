@@ -253,6 +253,14 @@ class TestWithTerminals:
         code = "with open('f') as f:\n    data = f.read()"
         assert _is_terminal_body(_body(code)) is False
 
+    def test_async_with_body_returns_is_terminal(self) -> None:
+        code = "async with open('f') as f:\n    return f.read()"
+        assert _is_terminal_body(_body(code)) is True
+
+    def test_async_with_body_no_return_not_terminal(self) -> None:
+        code = "async with open('f') as f:\n    data = f.read()"
+        assert _is_terminal_body(_body(code)) is False
+
 
 class TestConservativeDefault:
     """R005: Unrecognized or ambiguous structures return False."""
