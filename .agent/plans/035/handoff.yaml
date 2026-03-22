@@ -1,0 +1,7 @@
+stopped_at: docs
+next_steps:
+  - "PR review and merge (branch plan/035)"
+active_signals:
+  - "[INFO] _ast_split_int_list_tracker.py at 294/300 lines — any future addition requires extracting a helper first"
+  - "[INFO] DEBT-035-TRY-EXCEPT-BRANCH-MERGE recorded in CLAUDE.md Known debt — Try/except bodies still walked sequentially"
+blockers: []

@@ -681,6 +681,38 @@ def _extend_tracked(name, value, scope, result):
 
 > Trap: compare shadow markers by identity (`existing is _SHADOW`), not equality — a legitimate empty list (`codes = []`) is `== _SHADOW` but is NOT `is _SHADOW`. Using equality would prevent tracking variables that start empty and grow via `+=`.
 
+## Branch-Aware Int-List Body Walker
+
+When a pre-pass result dict must remain sound across `if/else` and `match/case` branches, use snapshot-walk-merge: copy the result before entering each mutually exclusive branch, walk each branch independently from that snapshot, then merge conservatively. Keys that differ across branches get `_SHADOW`; keys present in only some branches are kept (security-conservative). For/While/Try/With sub-bodies are not mutually exclusive — walk them sequentially without snapshotting.
+
+```python
+def _walk_fn_body(body, scope, result, decls=None, enclosing=""):
+    for stmt in body:
+        _handle_int_list_stmt(stmt, scope, result, decls, enclosing)
+        if isinstance(stmt, ast.If):
+            snap = result.copy()
+            _walk_fn_body(stmt.body, scope, result, decls, enclosing)
+            after_if = result.copy()
+            result.clear(); result.update(snap)
+            _walk_fn_body(stmt.orelse, scope, result, decls, enclosing)
+            after_else = result.copy()
+            result.clear(); result.update(snap)
+            _merge_branches([after_if, after_else], result)
+        elif isinstance(stmt, ast.Match):
+            snap = result.copy()
+            branch_results = []
+            for case in stmt.cases:
+                result.clear(); result.update(snap)
+                _walk_fn_body(case.body, scope, result, decls, enclosing)
+                branch_results.append(result.copy())
+            if not _is_exhaustive_match(stmt):
+                branch_results.append(snap)  # model "no case matched"
+            result.clear(); result.update(snap)
+            _merge_branches(branch_results, result)
+```
+
+> Trap: non-exhaustive match (no unguarded wildcard case — specifically, no `case _:` with `guard is None`) must include the pre-match snapshot as an extra branch — otherwise a variable assigned only in one case appears to have a definite value when none of the cases may have matched.
+
 ## Facade Re-export Pattern
 
 When splitting a large module into sibling files, keep the original file as a facade: it retains the orchestrator/entry-point functions and types, then re-exports all names from sibling files at the BOTTOM. This preserves every existing import path and mock.patch target.
