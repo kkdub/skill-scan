@@ -92,7 +92,7 @@ def _print_violations_by_file(result: AnalysisResult, min_severity: Severity) ->
 def _print_guidelines_footer(radon_available: bool) -> None:
     """Print guidelines footer with standards reference."""
     print("Guidelines (see .agent/standards/CODE-PATTERNS.md):", file=sys.stderr)
-    print("  - SIZE-001: Files should be under 300 lines", file=sys.stderr)
+    print("  - SIZE-001: Files should be under 350 lines", file=sys.stderr)
     print("  - SIZE-002: Functions should be under 50 lines", file=sys.stderr)
     if radon_available:
         print(

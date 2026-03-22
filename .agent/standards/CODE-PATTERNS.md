@@ -357,7 +357,7 @@ if relative_path.endswith(".py"):
 return regex_findings
 ```
 
-> Trap: `ast_analyzer.py` is a facade — new detector functions go in `_ast_detectors.py` (malicious-code category), a dedicated category module like `_ast_rot13.py` (obfuscation) or `_ast_exfil_detector.py` (data-exfiltration), or a new module when the target file is near the 300-line limit. New detectors must be added to the `_DETECTORS` tuple in `ast_analyzer.py` and re-exported from it.
+> Trap: `ast_analyzer.py` is a facade — new detector functions go in `_ast_detectors.py` (malicious-code category), a dedicated category module like `_ast_rot13.py` (obfuscation) or `_ast_exfil_detector.py` (data-exfiltration), or a new module when the target file is near the 350-line limit. New detectors must be added to the `_DETECTORS` tuple in `ast_analyzer.py` and re-exported from it.
 
 ## _DETECTORS Tuple for AST Detector Registration
 
