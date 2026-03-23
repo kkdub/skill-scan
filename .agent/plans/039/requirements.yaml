@@ -1,0 +1,39 @@
+- id: R001
+  description: "Detect chained dunder attribute access patterns that walk the MRO (__class__.__base__.__subclasses__() and variants) — rule EXEC-011, severity HIGH, category malicious-code"
+  status: done
+  verify: "test::tests/unit/test_dunder_chain_detector.py"
+
+- id: R002
+  description: "Detect dunder chains reaching execution-enabling attributes (__globals__, __builtins__, __import__) — same rule EXEC-011, severity CRITICAL when execution attrs present"
+  status: done
+  verify: "test::tests/unit/test_dunder_chain_detector.py"
+
+- id: R003
+  description: "No false positives on isolated single-dunder access (obj.__class__, cls.__bases__, cls.__subclasses__()) — only chains of 2+ from the dangerous set trigger"
+  status: done
+  verify: "test::tests/unit/test_dunder_chain_detector.py"
+
+- id: R-IMP001
+  description: "New detector follows _DETECTORS registration pattern, registered in ast_analyzer.py, re-exported from facade"
+  status: done
+  verify: "grep::_detect_dunder_chain"
+
+- id: R-IMP002
+  description: "New module stays within 350-line file limit; no new dependencies (stdlib only)"
+  status: done
+  verify: "inspect"
+
+- id: R-IMP003
+  description: "TOML rule entry for EXEC-011 with patterns=[] (AST-only detection)"
+  status: done
+  verify: "grep::EXEC-011"
+
+- id: R-EFF001
+  description: "Catches 3 canonical chain forms: ().__class__.__base__.__subclasses__(), ''.__class__.__mro__[x].__subclasses__(), [].__class__.__bases__[0].__subclasses__()"
+  status: done
+  verify: "test::tests/unit/test_dunder_chain_detector.py"
+
+- id: R-EFF002
+  description: "Zero false positives on isolated dunder access (obj.__class__, cls.__subclasses__())"
+  status: done
+  verify: "test::tests/unit/test_dunder_chain_detector.py"

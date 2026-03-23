@@ -28,7 +28,7 @@ class TestRuleFileValidation:
         assert len(rules) > 0, f"{toml_file.name} produced zero rules"
 
     # AST-only rules have detection in Python code, not regex patterns
-    _AST_ONLY_RULES = frozenset({"OBFS-001", "EXFIL-008"})
+    _AST_ONLY_RULES = frozenset({"OBFS-001", "EXFIL-008", "EXEC-011"})
 
     def test_rules_have_patterns(self, toml_file: Path) -> None:
         """Every rule must have at least one detection pattern (AST-only rules exempt)."""
@@ -100,7 +100,7 @@ class TestRulesCatalog:
     def test_no_missing_ast_procedural_rules(self) -> None:
         """All AST-only rule IDs are covered by _PROCEDURAL_RULES or TOML rules."""
         # AST detectors emit these rule IDs
-        ast_rule_ids = {"EXEC-002", "EXEC-006", "EXEC-007", "OBFS-001", "EXFIL-008"}
+        ast_rule_ids = {"EXEC-002", "EXEC-006", "EXEC-007", "EXEC-011", "OBFS-001", "EXFIL-008"}
         # Collect all rule IDs from TOML + procedural
         groups = self._catalog_mod.collect_rules()
         all_catalog_ids = {r.rule_id for rules in groups.values() for r in rules}

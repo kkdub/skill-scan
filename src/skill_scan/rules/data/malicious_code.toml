@@ -1,6 +1,6 @@
 # Malicious Code Detection Rules
 # Category: malicious-code
-# Rules EXEC-001 through EXEC-008
+# Rules EXEC-001 through EXEC-011
 
 [rules.EXEC-001]
 severity = "critical"
@@ -218,3 +218,10 @@ exclude_patterns = [
   'safe_exec',
   'ast\.literal_eval'
 ]
+
+[rules.EXEC-011]
+severity = "high"
+category = "malicious-code"
+description = "Object-graph walking via chained dunder attributes (MRO traversal) — used in sandbox escapes and SSTI exploits"
+recommendation = "Do not chain __class__, __base__, __mro__, __subclasses__ or similar dunder attributes; use explicit imports instead"
+patterns = []
