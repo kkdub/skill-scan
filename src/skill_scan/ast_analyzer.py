@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import ast
 
+from skill_scan._ast_dunder_chain_detector import _detect_dunder_chain as _detect_dunder_chain
 from skill_scan._ast_dynamic_exec_detector import detect_dynamic_exec as detect_dynamic_exec
 from skill_scan._ast_exfil_detector import _detect_dns_exfil as _detect_dns_exfil
 from skill_scan._ast_exfil_detector import _detect_subprocess_list_exfil as _detect_subprocess_list_exfil
@@ -149,4 +150,5 @@ _DETECTORS = (
     _detect_rot13_maketrans,
     _detect_subprocess_list_exfil,
     _detect_dns_exfil,
+    _detect_dunder_chain,
 )

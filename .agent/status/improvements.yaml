@@ -24,3 +24,10 @@
   files:
     - src/skill_scan/_ast_ref_tracker.py
   resolution: "Switch to linear body walk (respecting assignment order) or track last-assignment-wins per scope key; design-level change needs its own plan"
+
+- description: "Dunder chain detector transparent bridge semantics may produce false positives on legitimate metaprogramming — non-dangerous dunders (e.g., __init__, __weakref__, __doc__) bridge between dangerous dunders, so obj.__class__.__weakref__.__class__ fires EXEC-011 HIGH; acceptable for agent-skill scanner domain but undocumented"
+  type: enhancement
+  plan: PLAN-039
+  files:
+    - src/skill_scan/_ast_dunder_chain_detector.py
+  resolution: "Add docstring noting transparent bridge FP surface; optionally add a suppression set for common benign bridge patterns (e.g., __class__.__class__ exact chain); low priority — realistic FP rate in agent skills is minimal"

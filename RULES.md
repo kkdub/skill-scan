@@ -6,7 +6,7 @@ Procedural rules are implemented directly in Python modules.
 
 To add a custom rule, copy a section from [template.toml](src/skill_scan/rules/template.toml) into a new `.toml` file or your `--config` file.
 
-**79 rules** across 9 categories.
+**80 rules** across 9 categories.
 
 ## Prompt Injection
 
@@ -61,6 +61,7 @@ To add a custom rule, copy a section from [template.toml](src/skill_scan/rules/t
 | EXEC-008 | high | PowerShell cradle or LOLBin download — uses system tools to fetch and execute remote payloads | stable |
 | EXEC-009 | critical | Multi-line encoded execution — exec/eval of base64-decoded content spanning multiple lines | stable |
 | EXEC-010 | high | Dynamic code execution with strict exclusion — eval/exec calls resistant to comment-based suppression | stable |
+| EXEC-011 | high | Object-graph walking via chained dunder attributes (MRO traversal) — used in sandbox escapes and SSTI exploits | stable |
 | JSEXEC-001 | critical | Node.js code execution -- child_process, spawn, or dynamic Function constructor | stable |
 | JSEXEC-002 | critical | JavaScript eval and dynamic execution -- eval, string setTimeout/setInterval, DOM injection | stable |
 | JSEXEC-003 | high | Script injection and dynamic loading -- external scripts, dynamic import/require | stable |

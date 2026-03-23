@@ -70,6 +70,7 @@ src/skill_scan/           # Production source code
   _ast_dynamic_exec_detector.py # Tree-level dynamic exec detector (detect_dynamic_exec); symbol-table resolution + taint-sink (EXEC-006) + ref_table depth-2/3 detection (EXEC-002); imports helpers from _ast_dynamic_exec_depth3.py
   _ast_ref_tracker.py     # Ref-table pre-pass: RefEntry frozen dataclass + build_ref_table(); tracks __import__/importlib.import_module return values as module refs
   _ast_dynamic_exec_depth3.py # Depth-3 detection helpers: _track_getattr_ref, _check_bare_func_call; shared constants _EXEC_ATTR_NAMES, _DANGEROUS_QUALIFIED; _ref_lookup, _is_dangerous_ref_attr
+  _ast_dunder_chain_detector.py # MRO walk / dunder chain detector (_detect_dunder_chain); EXEC-011; uses _dunder_inner marker for dedup; registered in _DETECTORS
   _ast_loop_unroller.py   # Static for-loop unrolling pre-pass (collect_loop_assigns)
   package_analyzer.py     # Facade: analyze_package() entry point
   _package_risk_correlations.py # Cross-file correlation rules (table-driven); apply_correlations, correlation_bonus, has_multi_role_medium_risk
@@ -110,6 +111,7 @@ tests/
     test_ref_tracker.py                 # build_ref_table unit tests — scope-aware keys, module ref extraction (PLAN-038 Part B, 21 tests)
     test_depth2_ref_detection.py        # Depth-2 ref_table detection tests — m.system() on tracked refs (PLAN-038 Part C, 16 tests)
     test_depth3_ref_detection.py        # Depth-3 detection tests — getattr on tracked ref + bare call resolution; 4 acceptance scenarios (PLAN-038 Part D, 20 tests)
+    test_dunder_chain_detector.py       # EXEC-011 dunder chain detector tests — canonical MRO walk, execution escape, benign single/multi-dunder, edge cases, scanner e2e (PLAN-039, 23 tests)
     ...                                 # Other tests mirror src/ structure
 scripts/                  # Quality & analysis scripts
 .agent/                   # Plans, standards, workflow
@@ -142,6 +144,8 @@ Key patterns and invariants. For detailed module-level docs, see `.agent/ARCHITE
 - `_maybe_flatten_starred` in `_ast_split_star_unpack.py` — expands `ast.Starred` elements in join argument lists by looking up `name.__len__` and `name[i]` entries in the symbol table; called from `_resolve_join_call` before `_resolve_join_elements`
 - `_build_string_table(body)` in `_ast_kwargs_dict_tracker.py` — local pre-pass that tracks `name = 'literal'` and `name = 'a' + 'b'` string assignments within a body; passed to `_extract_dict_literal` for Name key resolution in kwargs dict tracking
 - `_CASE_METHODS` frozenset + `_is_case_method` / `_resolve_case_method_chain` in `_ast_split_method_chains.py` — resolves `.lower()`, `.upper()`, `.title()`, `.swapcase()`, `.capitalize()`, `.casefold()` chains; registered in `_RESOLVERS` before `_is_call` (follows `_is_replace_call` / `_resolve_replace_chain` pattern)
+- `MRO_WALK_DUNDERS` / `EXEC_ESCAPE_DUNDERS` in `_ast_dunder_chain_detector.py` — two frozensets defining the two tiers of dangerous dunders; `MRO_WALK_DUNDERS` = `{__class__, __base__, __bases__, __mro__, __subclasses__}`; `EXEC_ESCAPE_DUNDERS` = `{__globals__, __builtins__, __import__, __getattr__, __code__}`; extend by adding entries to the appropriate set — severity logic (`CRITICAL` vs `HIGH`) is derived automatically
+- `_detect_dunder_chain` in `_ast_dunder_chain_detector.py` — node-level detector registered in `_DETECTORS`; emits EXEC-011; uses `_collect_chain` to walk inward from an `ast.Attribute` node, collecting consecutive dangerous dunders; non-dangerous dunders (e.g., `__init__`, `__new__`) are transparent bridges; `ast.Subscript` and `ast.Call` nodes are also transparent (skipped through); non-dunder attribute names break the chain; chains of 2+ dangerous dunders emit a finding; inner `ast.Attribute` nodes in the chain are marked with `_dunder_inner = True` to prevent duplicate findings when `ast.walk` visits them later
 - `_SUBPROCESS_CALLS` / `_NETWORK_TOOLS` in `_ast_exfil_detector.py` — frozensets defining which subprocess variants and tool names trigger EXFIL-008; extend by adding entries, no code changes needed
 - `_DNS_EXFIL_TARGETS` in `_ast_exfil_detector.py` — frozenset defining which calls trigger EXFIL-006 DNS exfil detection (`socket.getaddrinfo`); non-literal first arg triggers finding; extend by adding entries
 - `_STAR_IMPORT_EXPANSIONS` dict in `_ast_imports.py` — allowlist mapping dangerous modules to their dangerous exports; `from os import *` expands to `os.system`, `os.popen`, etc. in `alias_map`; extend by adding module entries
@@ -200,6 +204,10 @@ Key patterns and invariants. For detailed module-level docs, see `.agent/ARCHITE
 - `_handle_string_list_literal` and `_handle_dict_literal` live in `_ast_symbol_table_dict_tracker.py` — import them from the dict-tracker module
 - `_resolve_binop_concat` in `_ast_split_int_list_tracker.py` — resolves `codes = part1 + part2` where both operands are tracked int-lists in the pre-pass result dict; called from `_handle_assign` when RHS is `BinOp(Add)` of two `Name` nodes
 - `_extend_with_tracked_var` in `_ast_split_int_list_tracker.py` — extends a tracked int-list with the contents of another tracked variable; called from `_extend_tracked` when the extension value is an `ast.Name`; shadows target if source is untracked
+- EXEC-011 TOML entry has `patterns = []` — detection is AST-only via `_detect_dunder_chain`; do not add regex patterns (the chain structure requires AST traversal)
+- `_detect_dunder_chain` uses `Finding()` directly — do NOT use `_make_finding` because `_ast_detectors.py` is frozen (349/350 lines) and `_RECOMMENDATIONS` cannot be extended; this follows the same constraint as `_detect_subprocess_list_exfil` and `_detect_dns_exfil`
+- `_dunder_inner = True` marker on `ast.Attribute` nodes — set by `_detect_dunder_chain` on inner nodes of a multi-node chain; `_detect_dunder_chain` checks `getattr(node, "_dunder_inner", False)` first and returns `[]` immediately if set; this prevents the same chain from emitting N findings (one per dangerous Attribute) when `ast.walk` visits each node
+- `_detect_dunder_chain` severity rule: CRITICAL if any dunder in the chain is in `EXEC_ESCAPE_DUNDERS`; HIGH if all dunders are from `MRO_WALK_DUNDERS` only; minimum chain length is 2 dangerous dunders
 - OBFS-001 TOML entry has `patterns = []` — detection is AST-only via `_detect_rot13_codec`, `_detect_rot13_maketrans`, and `_detect_custom_rot13`; do not add regex patterns (AST handles this more accurately)
 - `final_band()` in `_package_risk_policy.py` applies direct-danger overrides AFTER `risk_band()` maps the numeric score; `severe_direct_danger` (HIGH/CRITICAL signal in entrypoint/script) forces band to `severe`; `direct_danger` (any qualifying signal) raises band from `low`/`guarded` to `high`; do NOT bypass `final_band()` by calling `risk_band()` directly
 - `_format_package_risk()` in `formatters.py` renders the `PackageRiskSummary` block in text output (both default and verbose modes); quiet mode does NOT include package risk — it prints the verdict line only
@@ -234,6 +242,7 @@ Key patterns and invariants. For detailed module-level docs, see `.agent/ARCHITE
 - `_ast_dynamic_exec_depth3.py` is at ~174/350 lines — ample room
 - `_ast_ref_tracker.py` is at ~103/350 lines — ample room
 - `_ast_detectors.py` is at 349/350 lines — effectively frozen; any future addition requires extracting a helper to a sibling module (reached from 311 after PLAN-038 Part A additions)
+- `_ast_dunder_chain_detector.py` is at 153/350 lines — ample room
 - Known false-positive pathway in `detect_dynamic_exec`: `getattr(os.path, var)` fires MEDIUM because `_resolve_first_arg` returns `"os"` (outer module name) which is in `_SENSITIVE_MODULES`; `getattr(sys, var)` fires MEDIUM because `sys` is in `_SENSITIVE_MODULES` even though many `sys` attributes are benign; both are intentional (MEDIUM not HIGH — uncertain threat)
 - Class-method local variables are not in the symbol table for `detect_dynamic_exec` resolution — `_process_class` in `_ast_symbol_table.py` does not export method-local vars; only module-level and class-level (non-method) vars resolve
 - `_INLINE_CHAIN_ATTRS` in `_ast_detectors.py` is missing subprocess family names (`call`, `run`, `Popen`) — these inline chains are only caught by depth-2 ref_table detection, not by the inline chain node-level detector; filed as improvement in PLAN-038
