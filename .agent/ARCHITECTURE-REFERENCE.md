@@ -1,6 +1,6 @@
 # Architecture Reference
 
-Detailed module-level documentation for skill-scan internals. For key patterns and invariants, see the Architecture Notes section in `CLAUDE.md`.
+Detailed module-level documentation for skill-scan internals.
 
 ## Scanner Pipeline
 
@@ -12,6 +12,9 @@ Detailed module-level documentation for skill-scan internals. For key patterns a
 - `_line_phase_findings(content, file_path, line_rules)` — extracted helper that runs per-line matching and then the multi-line PI pass; called from `_match_content_recursive`
 - `_multiline_pi_findings(lines, file_path, pi_rules, existing, make_finding, is_excluded)` — sliding window (sizes 3, 4, 5) that joins consecutive lines with a space and applies prompt-injection rules; only `category == 'prompt-injection'` rules are used; findings are attributed to the first line of the window; deduplicates against `existing` findings by `(rule_id, any_line_in_window)`; returns only NEW findings not already found by per-line scan
 - `_scan_window_rule(rule, joined, file_path, first_line_num, window_line_nums, found_lines, results, make_finding, is_excluded)` — extracted helper for checking one rule against one window; updates `found_lines` tracking on match
+- `normalize_text()` in `normalizer.py` applies NFKC normalization as its FIRST step — decomposes fullwidth Unicode and compatibility characters before zero-width stripping
+- `_deduplicate()` prefers AST findings over regex when both exist for the same `(rule_id, line)` key — AST carries more precise severity and matched_text; do NOT revert to regex-preferred order
+- Rule ID namespaces: OBFS-* = obfuscation; EXEC-* = malicious code execution; EXFIL-* = data exfiltration; PKG-* = package risk (internal, not in rules catalog)
 
 ## AST Analyzer
 
@@ -20,7 +23,7 @@ Detailed module-level documentation for skill-scan internals. For key patterns a
 - `MAX_AST_RESOLVE_DEPTH = 50` in `_ast_imports.py` — recursive string-resolution helpers return `None` instead of crashing at depth > 50
 - `build_alias_map(tree)` in `_ast_imports.py` returns `dict[str, str]` mapping local alias to canonical module name; called by `analyze_python()` and threaded to all `_detect_*` functions via `alias_map` kwarg; recurses into `ast.Try` blocks (body, handlers, orelse, finalbody) via `_collect_imports` / `_try_bodies` so imports inside `try/except` are captured; `from X import *` is expanded for known-dangerous modules via `_STAR_IMPORT_EXPANSIONS` (os, subprocess, shutil, socket)
 - `get_call_name(node, alias_map=None)` resolves aliased call names (e.g. `c.encode` with `alias_map={'c': 'codecs'}` → `'codecs.encode'`); all `_detect_*` functions accept `alias_map` kwarg (empty-dict default, backward-compatible)
-- `ast_analyzer.py` uses a `_DETECTORS` tuple to register all detector functions; current detectors: `_detect_unsafe_calls`, `_detect_dynamic_imports`, `_detect_unsafe_deserialization`, `_detect_string_concat_evasion`, `_detect_dynamic_access`, `_detect_decorator_evasion`, `_detect_rot13_codec`, `_detect_rot13_maketrans`, `_detect_subprocess_list_exfil`, `_detect_dns_exfil`; add new detectors to this tuple
+- `ast_analyzer.py` uses a `_DETECTORS` tuple to register all detector functions; current detectors: `_detect_unsafe_calls`, `_detect_dynamic_imports`, `_detect_unsafe_deserialization`, `_detect_string_concat_evasion`, `_detect_dynamic_access`, `_detect_decorator_evasion`, `_detect_rot13_codec`, `_detect_rot13_maketrans`, `_detect_subprocess_list_exfil`, `_detect_dns_exfil`, `_detect_inline_import_chain`, `_detect_dunder_chain`; add new detectors to this tuple
 - `analyze_python()` also calls `build_symbol_table(tree)`, `collect_loop_assigns(tree)` (merged into `symbol_table`), `_collect_int_list_assigns(tree)`, `detect_split_evasion(...)`, and `detect_kwargs_unpacking(...)` separately from the `_DETECTORS` loop — tree-level detectors that need the full symbol table go here, not in `_DETECTORS`; `_detect_custom_rot13` is called in a separate loop over `ast.FunctionDef | ast.AsyncFunctionDef` nodes
 
 ## Symbol Table
@@ -32,6 +35,7 @@ Detailed module-level documentation for skill-scan internals. For key patterns a
 - `_handle_dict_pop(stmt, table)` in `_ast_symbol_table_dict_tracker.py` — resolves `target = d.pop('key')` by looking up `d[key]` in the symbol table; called first in `_process_stmt`, returns `True` if the pattern matched (so `_handle_assign` is skipped)
 - `_resolve_replace_chain_simple(node, table)` in `_ast_symbol_table_dict_tracker.py` — resolves chained `.replace(old, new)` calls on string constants or tracked variables; allows symbol table to track `clean = hex_str.replace('\t', '').replace('\n', '')` patterns; up to 20 replace levels
 - `_handle_assign` in `_ast_symbol_table_assignments.py` now resolves `BinOp(Add)` of two tracked `Name` references eagerly (before `_resolve_indirections`) — class-level `func_name = prefix + suffix` resolves to the concatenated string in the first pass
+- `_handle_assign` iterates ALL targets in `stmt.targets` — multi-target assignments (`a = b = 'eval'`) track every target name with the same resolved value
 - Handles `global`/`nonlocal` declarations via pre-pass (`_collect_scope_declarations`)
 - Composite key format `'varname[key]'` (brackets) prevents collision with plain variable names; integer index `0` and string key `'0'` produce the same composite key `'varname[0]'` (documented collision edge case, not guarded)
 - `_Ref` sentinel class marks unresolved variable references during the pre-pass; resolved to `str` or dropped before `build_symbol_table()` returns
@@ -116,6 +120,45 @@ Detailed module-level documentation for skill-scan internals. For key patterns a
 - `_DNS_EXFIL_TARGETS` — frozenset of DNS exfil function names: `socket.getaddrinfo`; extend by adding entries
 - Uses `Finding()` directly with `category='data-exfiltration'` — do NOT use `_make_finding` (which hardcodes `'malicious-code'`)
 
+## Inline Import Chain Detector
+
+- `_detect_inline_import_chain` in `_ast_detectors.py` — node-level detector matching `Call(func=Attribute(value=Call, attr=dangerous))` where inner call is in `_IMPORT_CALL_NAMES` and outer attr is in `_INLINE_CHAIN_ATTRS`; emits EXEC-002 CRITICAL; registered in `_DETECTORS`
+- `_INLINE_CHAIN_ATTRS` frozenset — `eval`, `exec`, `system`, `popen`; deliberately excludes `getattr` and `__import__` (indirection names, not execution names); distinct from `_EXEC_ATTR_NAMES` in `_ast_dynamic_exec_depth3.py`
+- `_IMPORT_CALL_NAMES` frozenset in `_ast_detectors.py` — `__import__`, `importlib.import_module`, `builtins.__import__`, `__builtins__.__import__`; shared by `_detect_dynamic_imports`, `_detect_inline_import_chain`, and `build_ref_table`; import from `_ast_detectors`, do NOT duplicate
+
+## Dynamic Exec Detector
+
+- `detect_dynamic_exec(tree, file_path, alias_map, symbol_table, *, _nodes=None, ref_table=None)` in `_ast_dynamic_exec_detector.py` — tree-level detector called from `analyze_python()` after `detect_kwargs_unpacking`; mutates `ref_table` in-place when provided (adds `func_ref` entries via `_track_func_ref` and `_track_getattr_ref`)
+- **Depth-1** (EXEC-006): walks `getattr` Call nodes — (1) if 2nd arg is a `Name` resolving to dangerous name via `_scoped_lookup` → HIGH; (2) if unresolvable AND 1st arg is sensitive module → MEDIUM taint sink
+- **Depth-2** (EXEC-002): walks `Call(func=Attribute(value=Name))` checking `ref_table` for tracked module refs; dangerous attribute → CRITICAL
+- **Depth-3** (EXEC-002): handles bare `Call(func=Name)` on tracked `func_ref` entries; dangerous resolved → CRITICAL
+- `_SENSITIVE_MODULES` frozenset in `_ast_detectors.py` — `os`, `sys`, `subprocess`, `shutil`, `socket`, `builtins`, `__builtins__`, `importlib`, `ctypes`, `code`, `codeop`; used for taint-sink classification; distinct from `_STAR_IMPORT_EXPANSIONS` (sensitivity vs expansion)
+- `_resolve_first_arg(node, alias_map)` — resolves first arg of `getattr` Call to module name; handles `ast.Name` (alias lookup) and `ast.Attribute` where `.value` is `ast.Name` (returns outer module name — `getattr(os.path, var)` resolves to `"os"`)
+- `_check_resolved_name` / `_check_taint_sink` — extracted helpers; `_check_resolved_name` emits EXEC-006 HIGH for dangerous names; `_check_taint_sink` emits EXEC-006 MEDIUM for sensitive module + unresolvable arg
+- Helpers in `_ast_dynamic_exec_depth3.py`: `_EXEC_ATTR_NAMES` = `frozenset({'eval', 'exec', 'system', 'popen'})`; `_DANGEROUS_QUALIFIED = _UNSAFE_EXEC_CALLS | _SUBPROCESS_CALLS`; one-directional import from `_ast_dynamic_exec_detector.py`, never reverse
+- `_ref_lookup(name, ref_table, scope)` — scope-aware lookup mirroring `_scoped_lookup` for `RefEntry` values; checks `scope.name` first, falls back to bare `name`
+- `_track_getattr_ref(node, ref_table, scope_map, alias_map, file_path)` — handles `e = getattr(mod, 'attr')` where `mod` is a tracked module ref; always stores as `func_ref`; emits EXEC-002 CRITICAL when attribute is dangerous
+- `_check_bare_func_call(node, ref_table, scope_map, file_path)` — handles `Call(func=Name)` where `Name` resolves as `func_ref` with dangerous `resolved`; emits EXEC-002 CRITICAL
+- `ref_table` is parallel to `symbol_table` — NEVER merged; same scope-key convention (`funcname.varname`) but different value types (`RefEntry` vs `str`)
+- `ast.walk` BFS order guarantees Assign nodes visited before sibling Call at same nesting level — `detect_dynamic_exec` relies on this for `ref_table` population before consumption; do NOT switch to DFS
+- `build_ref_table` (pre-pass) produces only `module` entries; `func_ref` entries are added exclusively by `detect_dynamic_exec` during its walk; callers needing an unmodified copy must pass `dict(ref_table)`
+
+## Ref Tracker
+
+- `RefEntry` in `_ast_ref_tracker.py` — frozen dataclass with `slots=True`; fields `kind` (`Literal['module', 'func_ref']`) and `resolved` (str, e.g. `'os'`, `'os.system'`); re-exported from `ast_analyzer.py`
+- `build_ref_table(tree, alias_map)` — pre-pass tracking `x = __import__('mod')` and `x = importlib.import_module('mod')` patterns; uses `_build_scope_map` for scope-aware keys (`funcname.varname` format); recognizes all four patterns in `_IMPORT_CALL_NAMES`; returns `dict[str, RefEntry]`; called in `analyze_python()` after `build_symbol_table`
+- Limitations: tracks only single-assignment patterns; no augmented assignment, tuple unpack, walrus operator; depth-4+ alias chains (`g = f; g('cmd')`) not tracked
+
+## Dunder Chain Detector
+
+- `_detect_dunder_chain` in `_ast_dunder_chain_detector.py` — node-level detector registered in `_DETECTORS`; emits EXEC-011
+- `MRO_WALK_DUNDERS` = `{__class__, __base__, __bases__, __mro__, __subclasses__}`; `EXEC_ESCAPE_DUNDERS` = `{__globals__, __builtins__, __import__, __getattr__, __code__}`; extend by adding entries — severity derived automatically
+- `_collect_chain` walks inward from `ast.Attribute`, collecting consecutive dangerous dunders; non-dangerous dunders (e.g., `__init__`, `__new__`) are transparent bridges; `ast.Subscript` and `ast.Call` nodes are also transparent (skipped through); non-dunder attribute names break the chain
+- Chains of 2+ dangerous dunders emit a finding; CRITICAL if any dunder in `EXEC_ESCAPE_DUNDERS`, HIGH if all from `MRO_WALK_DUNDERS` only
+- `_dunder_inner = True` marker on inner `ast.Attribute` nodes prevents duplicate findings when `ast.walk` visits them
+- EXEC-011 in `obfuscation.toml` has `patterns = []` — detection is AST-only; do not add regex patterns
+- Uses `Finding()` directly — do NOT use `_make_finding` (`_ast_detectors.py` is frozen at 349/350 lines and `_RECOMMENDATIONS` cannot be extended)
+
 ## Decoder
 
 - `decode_payload()` has two return paths: bytes→UTF-8 for `base64`/`hex`; direct `str` for `url`/`unicode_escape` (via `_decode_str_payload()`)
@@ -151,6 +194,10 @@ Detailed module-level documentation for skill-scan internals. For key patterns a
 - `collect_loop_assigns` supports only inline string-literal lists and local list-literal name references as iter source; tracked list variables from `symbol_table` are NOT supported (`symbol_table` is `dict[str, str]`); int-list iter sources (e.g., `for c in int_codes`) are also unsupported via this pre-pass
 - `resolve_fromhex_concat` handles only inline `(bytes.fromhex('XX') + bytes.fromhex('YY')).decode()` expressions — tracked-variable fromhex (e.g., `a = bytes.fromhex('6576'); b = bytes.fromhex('616c'); (a + b).decode()`) requires a separate bytes-tracking pre-pass (not yet implemented)
 - Nested comprehension support is limited to exactly 2 generators with the inner iter being a plain `Name` matching the outer target variable; 3+ generators return `None`
+- Known false-positive: `getattr(os.path, var)` fires EXEC-006 MEDIUM (`_resolve_first_arg` returns outer module `os`); `getattr(sys, var)` also fires MEDIUM; both intentional (uncertain threat, MEDIUM not HIGH)
+- Class-method local variables not in symbol table for `detect_dynamic_exec` — `_process_class` doesn't export method-local vars; only module-level and class-level (non-method) vars resolve
+- `_INLINE_CHAIN_ATTRS` missing subprocess family names (`call`, `run`, `Popen`) — caught by depth-2 ref_table detection instead
+- `build_ref_table` tracks only single-assignment patterns — no augmented assignment, tuple unpack, walrus operator; depth-4+ alias chains not tracked
 
 ## Evasion Corpus
 
