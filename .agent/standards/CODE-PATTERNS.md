@@ -570,6 +570,37 @@ from skill_scan._ast_symbol_table import _Ref  # safe: facade already loaded
 
 > Trap: deferred imports incur a minor per-call cost; only use when the circular dependency cannot be resolved by restructuring (e.g. moving the shared type to a third module).
 
+## Parallel Pre-Pass Tables for Non-String Tracked Values
+
+When dataflow tracking needs to track non-string values (module references, function references), create a parallel pre-pass dict alongside `symbol_table` rather than widening `symbol_table`'s type. This keeps `symbol_table: dict[str, str]` intact for all existing consumers.
+
+```python
+# _ast_ref_tracker.py — parallel pre-pass
+@dataclass(slots=True, frozen=True)
+class RefEntry:
+    kind: Literal["module", "func_ref"]
+    resolved: str  # e.g. 'os', 'os.system'
+
+def build_ref_table(tree, alias_map) -> dict[str, RefEntry]:
+    scope_map = _build_scope_map(tree)
+    result: dict[str, RefEntry] = {}
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Assign):
+            entry = _try_extract_import(node.value, alias_map)
+            if entry:
+                scope = scope_map.get(id(node), "")
+                key = f"{scope}.{node.targets[0].id}" if scope else node.targets[0].id
+                result[key] = entry
+    return result
+
+# ast_analyzer.py — built alongside symbol_table, passed separately
+symbol_table = build_symbol_table(tree)
+ref_table = build_ref_table(tree, alias_map)
+findings.extend(detect_dynamic_exec(tree, file_path, alias_map, symbol_table, ref_table=ref_table))
+```
+
+> Trap: do NOT merge `ref_table` entries into `symbol_table`. The detector that consumes `ref_table` mutates it in-place during its walk (adding `func_ref` entries). Callers needing an unmodified copy must pass `dict(ref_table)`.
+
 ## Parentheses-Suffix Composite Key for Return-Value Tracking
 
 Store function return values in the same flat symbol table as variable assignments, using a `'funcname()'` key. Parentheses cannot appear in Python identifiers, preventing collision with plain variable names and subscript keys.

@@ -19,6 +19,8 @@ from skill_scan._ast_exfil_detector import _detect_subprocess_list_exfil as _det
 from skill_scan._ast_imports import build_alias_map
 from skill_scan._ast_kwargs_detector import detect_kwargs_unpacking as detect_kwargs_unpacking
 from skill_scan._ast_loop_unroller import collect_loop_assigns as collect_loop_assigns
+from skill_scan._ast_ref_tracker import RefEntry as RefEntry
+from skill_scan._ast_ref_tracker import build_ref_table as build_ref_table
 from skill_scan._ast_split_detector import detect_split_evasion as detect_split_evasion
 from skill_scan._ast_split_comprehension import _collect_int_list_assigns as _collect_int_list_assigns
 from skill_scan._ast_symbol_table import build_symbol_table as build_symbol_table
@@ -43,6 +45,7 @@ def analyze_python(content: str, file_path: str) -> list[Finding]:
     symbol_table = build_symbol_table(tree)
     symbol_table.update(collect_loop_assigns(tree))
     int_list_table = _collect_int_list_assigns(tree)
+    ref_table = build_ref_table(tree, alias_map)
     findings: list[Finding] = []
     try:
         all_nodes = list(ast.walk(tree))
@@ -55,7 +58,16 @@ def analyze_python(content: str, file_path: str) -> list[Finding]:
             )
         )
         findings.extend(detect_kwargs_unpacking(tree, file_path, alias_map, symbol_table, _nodes=all_nodes))
-        findings.extend(detect_dynamic_exec(tree, file_path, alias_map, symbol_table, _nodes=all_nodes))
+        findings.extend(
+            detect_dynamic_exec(
+                tree,
+                file_path,
+                alias_map,
+                symbol_table,
+                _nodes=all_nodes,
+                ref_table=ref_table,
+            )
+        )
         for node in all_nodes:
             if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
                 findings.extend(_detect_custom_rot13(node, file_path))
@@ -102,6 +114,7 @@ from skill_scan._ast_detectors import (  # noqa: E402
     _detect_decorator_evasion as _detect_decorator_evasion,
     _detect_dynamic_access as _detect_dynamic_access,
     _detect_dynamic_imports as _detect_dynamic_imports,
+    _detect_inline_import_chain as _detect_inline_import_chain,
     _detect_string_concat_evasion as _detect_string_concat_evasion,
     _detect_unsafe_calls as _detect_unsafe_calls,
     _detect_unsafe_deserialization as _detect_unsafe_deserialization,
@@ -131,6 +144,7 @@ _DETECTORS = (
     _detect_string_concat_evasion,
     _detect_dynamic_access,
     _detect_decorator_evasion,
+    _detect_inline_import_chain,
     _detect_rot13_codec,
     _detect_rot13_maketrans,
     _detect_subprocess_list_exfil,

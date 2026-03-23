@@ -2,3 +2,10 @@
 # Schema: .agent/standards/debt-tracking.md
 # Policy: Aspirational items, feature gaps, and enhancements — not broken things.
 # Resolved items are deleted; git tracks history.
+
+- description: "_INLINE_CHAIN_ATTRS in _ast_detectors.py does not include subprocess family names (call, check_output, Popen, run); inline non-assigned form __import__('subprocess').call(['cmd']) only emits EXEC-006 (for __import__), not EXEC-002 — the depth-2 path catches assigned forms via _DANGEROUS_QUALIFIED"
+  type: enhancement
+  plan: PLAN-038
+  files:
+    - src/skill_scan/_ast_detectors.py
+  resolution: "Add subprocess family attrs to _INLINE_CHAIN_ATTRS frozenset; _ast_detectors.py is at 349/350 so this requires extracting a helper first to free lines"
