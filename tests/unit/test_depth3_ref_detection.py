@@ -69,7 +69,7 @@ class TestGetattrOnTrackedRef:
     def test_getattr_tracked_mod_stores_func_ref(self) -> None:
         """getattr(os_mod, 'system') stores func_ref in ref_table."""
         code = "m = __import__('os')\nf = getattr(m, 'system')\n"
-        findings, ref_table = _run_detector(code)
+        _findings, ref_table = _run_detector(code)
         assert "f" in ref_table, f"Expected 'f' in ref_table, got {list(ref_table.keys())}"
         entry = ref_table["f"]
         assert entry.kind == "func_ref"
@@ -84,7 +84,7 @@ class TestGetattrOnTrackedRef:
     def test_getattr_tracked_mod_safe_attr_stores_ref(self) -> None:
         """getattr(os_mod, 'path') stores func_ref even though not dangerous."""
         code = "m = __import__('os')\np = getattr(m, 'path')\n"
-        findings, ref_table = _run_detector(code)
+        _findings, ref_table = _run_detector(code)
         assert "p" in ref_table, f"Expected 'p' in ref_table, got {list(ref_table.keys())}"
         entry = ref_table["p"]
         assert entry.kind == "func_ref"

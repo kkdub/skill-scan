@@ -9,3 +9,18 @@
   files:
     - src/skill_scan/_ast_detectors.py
   resolution: "Add subprocess family attrs to _INLINE_CHAIN_ATTRS frozenset; _ast_detectors.py is at 349/350 so this requires extracting a helper first to free lines"
+
+- description: "build_ref_table and detect_dynamic_exec use _build_scope_map with method_scope=False — class methods share one ref namespace, so sibling methods can poison each other's ref_table entries (e.g. one method's m = __import__('os') leaks to another method's m.system())"
+  type: enhancement
+  plan: PLAN-038
+  files:
+    - src/skill_scan/_ast_ref_tracker.py
+    - src/skill_scan/_ast_dynamic_exec_detector.py
+  resolution: "Change both call sites to _build_scope_map(tree, method_scope=True); verify _ref_lookup scope keys still match; needs dedicated plan to validate test coverage"
+
+- description: "build_ref_table uses ast.walk pre-pass and never clears rebindings — if same variable is reassigned (m = __import__('os'); m = Wrapper()), the first entry persists and can cause false positives on later m.system() calls"
+  type: enhancement
+  plan: PLAN-038
+  files:
+    - src/skill_scan/_ast_ref_tracker.py
+  resolution: "Switch to linear body walk (respecting assignment order) or track last-assignment-wins per scope key; design-level change needs its own plan"
