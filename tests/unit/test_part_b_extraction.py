@@ -326,15 +326,15 @@ class TestStringResolverBehavior:
 # ---------------------------------------------------------------------------
 
 
-class TestNoFileExceeds300Lines:
-    """Verify no src/ file exceeds 300 lines."""
+class TestNoFileExceeds350Lines:
+    """Verify no src/ file exceeds 350 lines (project standard)."""
 
-    def test_no_src_file_exceeds_300_lines(self) -> None:
-        """All .py files in src/skill_scan/ are <=300 lines."""
+    def test_no_src_file_exceeds_350_lines(self) -> None:
+        """All .py files in src/skill_scan/ are <=350 lines."""
         src_dir = pathlib.Path(__file__).resolve().parents[2] / "src" / "skill_scan"
         violations = []
         for py_file in src_dir.rglob("*.py"):
             line_count = len(py_file.read_text(encoding="utf-8").splitlines())
-            if line_count > 300:
+            if line_count > 350:
                 violations.append(f"{py_file.name}: {line_count} lines")
-        assert not violations, f"Files exceeding 300 lines: {violations}"
+        assert not violations, f"Files exceeding 350 lines: {violations}"

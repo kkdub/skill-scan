@@ -1,0 +1,116 @@
+id: "PLAN-038"
+title: "Module return value and function reference tracking"
+type: implementation
+status: Proposed
+created: 2026-03-22
+linked_spec: null
+depends_on: ["PLAN-037"]
+
+description: |
+  Follow-up to PLAN-037 (dynamic execution & attribute obfuscation detection).
+  Extends the symbol table to track non-string values — specifically module
+  objects from __import__() and function references from getattr() — enabling
+  detection of multi-step dynamic execution chains.
+
+  PLAN-037 closes the immediate gaps (literal getattr, symbol-table variable
+  resolution, taint sinks, dynamic import args).  This plan addresses the
+  deeper evasion patterns that require tracking what __import__() returns and
+  what getattr() resolves to as callable references.
+
+  This is a STUB — research and detailed parts will be defined after PLAN-037
+  is implemented and its limitations are evaluated in practice.
+
+  Skeleton opt-out: brownfield single-layer change (extending existing symbol
+  table infrastructure).
+
+motivation: |
+  Attackers chain dynamic calls to avoid detection:
+    m = __import__('os')       # m is a module, not tracked by symbol table
+    m.system('whoami')         # looks like method call on unknown object
+    f = getattr(os, 'system') # f is a function ref, not tracked
+    f('whoami')                # looks like call to unknown function
+
+  After PLAN-037, the individual __import__ and getattr calls are flagged, but
+  the USAGE of their return values is invisible.  This plan makes the return
+  values visible.
+
+evasion_patterns_covered:
+  - pattern: "m = __import__('os'); m.system('cmd')"
+    description: "Module return value assigned to variable, then used for attribute access"
+    current_detection: "__import__('os') flagged by PLAN-037; m.system() NOT detected"
+    after_this_plan: "m tracked as module 'os'; m.system() resolved to os.system -> EXEC-002"
+
+  - pattern: "f = getattr(os, 'system'); f('cmd')"
+    description: "Function reference assigned via getattr, then called"
+    current_detection: "getattr(os, 'system') flagged by PLAN-037; f('cmd') NOT detected"
+    after_this_plan: "f tracked as reference to os.system; f() call resolved -> EXEC-002"
+
+  - pattern: "mod = importlib.import_module('subprocess'); mod.call(['rm', '-rf'])"
+    description: "importlib return value used for method access"
+    current_detection: "importlib.import_module() flagged; mod.call() NOT detected"
+    after_this_plan: "mod tracked as module 'subprocess'; mod.call() resolved"
+
+  - pattern: "b = __import__('builtins'); e = b.eval; e('code')"
+    description: "Two-hop chain: import -> attribute -> call"
+    current_detection: "__import__ flagged; b.eval and e() NOT detected"
+    after_this_plan: "Full chain tracked and flagged"
+
+research_questions:
+  - question: "Should symbol_table become dict[str, str | ModuleRef | FuncRef]?"
+    context: |
+      Currently symbol_table is dict[str, str] — string values only.  Tracking
+      module objects and function references requires either: (a) extending the
+      value type to a union, or (b) creating a parallel tracking dict.
+      Option (a) is cleaner but touches every consumer of symbol_table.
+      Option (b) is safer but adds complexity.
+    recommendation: "Likely option (b) — a separate module_refs dict avoids breaking existing consumers"
+
+  - question: "How deep should the reference chain go?"
+    context: |
+      m = __import__('os')      # depth 1: module ref
+      f = m.system              # depth 2: function ref from module
+      g = f                     # depth 3: alias of function ref
+      g('cmd')                  # depth 4: call of aliased ref
+    recommendation: "Depth 2 covers 90%+ of real attacks; depth 3+ is diminishing returns"
+
+  - question: "Should attribute access on tracked modules (m.system) be resolved eagerly or lazily?"
+    context: |
+      Eager: when processing `f = m.system`, immediately resolve m to 'os' and
+      store f as 'os.system' in symbol_table (string form).
+      Lazy: store f as ModuleAttrRef(module='os', attr='system') and resolve at call site.
+      Eager is simpler and compatible with existing string-based symbol_table.
+    recommendation: "Eager — converts back to string form, works with existing infrastructure"
+
+  - question: "Impact on _ast_symbol_table.py line budget?"
+    context: |
+      _ast_symbol_table.py is at 299/350 (effectively frozen).
+      _ast_symbol_table_assignments.py is at 288/350 (12 lines free).
+      Any significant addition requires extracting to a new sibling module.
+    recommendation: "New _ast_symbol_table_refs.py module for module/function ref tracking"
+
+estimated_scope:
+  new_files:
+    - path: src/skill_scan/_ast_symbol_table_refs.py
+      purpose: "Module and function reference tracking (parallel to string symbol table)"
+      estimated_lines: 150-200
+    - path: tests/unit/test_symbol_table_refs.py
+      purpose: "Tests for reference tracking"
+      estimated_lines: 150-200
+  modified_files:
+    - path: src/skill_scan/ast_analyzer.py
+      changes: "Build ref table, pass to detectors"
+    - path: src/skill_scan/_ast_dynamic_exec_detector.py
+      changes: "Consume ref table for call-site resolution (from PLAN-037)"
+
+parts: []  # To be defined after PLAN-037 completion
+
+acceptance_scenarios: []
+acceptance_criteria:
+  - "All parts have status: Done"
+  - "All tests pass"
+  - "m = __import__('os'); m.system('cmd') produces EXEC-002 finding"
+  - "f = getattr(os, 'system'); f('cmd') produces EXEC-002 finding"
+
+work_log: []
+evidence: []
+errors: []

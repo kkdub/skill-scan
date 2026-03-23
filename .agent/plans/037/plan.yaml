@@ -1,0 +1,341 @@
+id: "PLAN-037"
+title: "Dynamic execution detection — symbol-table resolution and scanner precision"
+type: implementation
+status: Done
+created: 2026-03-22
+linked_spec: null
+
+description: |
+  Improve precision of dynamic execution detection for getattr() patterns.
+
+  Current state: regex EXEC-006 patterns catch ALL getattr/import calls at HIGH severity,
+  producing false positives for safe patterns (getattr(config, 'debug'), getattr(self, 'name')).
+  AST detectors are more precise but _deduplicate() masks them in favor of regex.
+
+  Two actual gaps:
+  (1) getattr with symbol-table-resolvable variable args (node-level can't access symbol_table),
+  (2) getattr as a taint sink on sensitive modules (no concept of sensitive modules exists).
+
+  Two-part approach: add a tree-level detector for symbol-table resolution and taint-sink
+  detection, then fix dedup to prefer AST findings so precision reaches scanner output.
+
+  Skeleton opt-out: brownfield single-layer change (adding detector + adjusting dedup).
+
+  Codex review (2026-03-22) corrected false assumptions in the original plan:
+  - try_resolve_string() already handles plain constants (gap #1 was not a real gap)
+  - _detect_dynamic_imports already catches __import__(var) by call name (gap #4/5 not real)
+  - Dedup masking identified as the critical integration issue
+
+alternatives:
+  - id: ALT-001
+    description: "Merge everything into _detect_dynamic_access (node-level only)"
+    rejected_because: "Node-level detectors don't receive symbol_table; can't resolve variable args"
+  - id: ALT-002
+    description: "Full taint analysis / dataflow framework"
+    rejected_because: "Over-engineering; lightweight symbol-table lookup covers most real attacks"
+  - id: ALT-003
+    description: "Module return value tracking (m = __import__('os'); m.system())"
+    rejected_because: "Requires symbol table to track non-string values; separate plan"
+  - id: ALT-004
+    description: "Narrow regex patterns instead of fixing dedup"
+    rejected_because: "Fragile; could miss edge cases; regex serves as a safety net for non-Python-aware contexts"
+
+risks:
+  - id: RISK-001
+    description: "False positives from getattr taint sink on sensitive modules"
+    mitigation: "MEDIUM severity (not HIGH); symbol table resolution attempted first; only fires when module IS sensitive AND arg IS non-resolvable"
+    severity: medium
+  - id: RISK-002
+    description: "_ast_detectors.py line budget (294/350, 56 free)"
+    mitigation: "Only _SENSITIVE_MODULES + _resolve_first_arg added (~10 lines); tree-level detector in separate module"
+    severity: low
+  - id: RISK-003
+    description: "Dedup preference change could surface AST MEDIUM where regex was HIGH"
+    mitigation: "This is intentional — MEDIUM for taint sinks is correct severity. Security-conservative: uncertain threats get flagged MEDIUM, not suppressed"
+    severity: low
+  - id: RISK-004
+    description: "Class-method local variables not in symbol table"
+    mitigation: "Pre-existing limitation; symbol table tracks function-level and class-level but not method-local vars. Documented in context.md, tests will not claim class-method-local resolution"
+    severity: low
+
+requirements:
+  file: null
+  ids: []
+  uncovered: []
+
+utilities_audit:
+  status: complete
+  search_performed:
+    - query: "getattr detection in _ast_detectors.py"
+      found: "_detect_dynamic_access at lines 184-207; handles constant + concat 2nd arg via try_resolve_string (includes plain constants)"
+    - query: "__import__ detection"
+      found: "_detect_dynamic_imports at lines 95-114; fires on call name regardless of arg type"
+    - query: "sensitive module lists in codebase"
+      found: "_STAR_IMPORT_EXPANSIONS in _ast_imports.py tracks os, subprocess, shutil, socket (different purpose — star import expansion, not sensitivity classification)"
+    - query: "_DANGEROUS_NAMES usage"
+      found: "frozenset in _ast_detectors.py line 22; includes eval, exec, system, popen, getattr, __import__"
+    - query: "symbol table integration pattern"
+      found: "detect_split_evasion and detect_kwargs_unpacking are tree-level detectors called from analyze_python() with symbol_table; follow this pattern"
+    - query: "_build_scope_map availability"
+      found: "_build_scope_map in _ast_split_detector.py:121; not exported but importable. _scoped_lookup in _ast_split_format.py:17; importable"
+    - query: "dedup behavior"
+      found: "_deduplicate in content_scanner.py:199; seeds seen from regex, drops AST with same (rule_id, line)"
+    - query: "line counts (verified 2026-03-22)"
+      found: "_ast_detectors.py=294/350; ast_analyzer.py=135/350; content_scanner.py=239/350; _ast_symbol_table_assignments.py=267/350"
+  categories:
+    error_handling:
+      needed: false
+    validation:
+      needed: false
+    logging:
+      needed: false
+    types:
+      needed: false
+    configuration:
+      needed: false
+    sensitive_module_registry:
+      needed: true
+      exists: false
+      gaps: "Need _SENSITIVE_MODULES frozenset; partially overlaps _STAR_IMPORT_EXPANSIONS but different purpose"
+      action: create
+      location: "src/skill_scan/_ast_detectors.py"
+    dangerous_attrs:
+      needed: true
+      exists: "src/skill_scan/_ast_detectors.py:_DANGEROUS_NAMES"
+      gaps: "Existing set covers the right names; reuse via import"
+      action: use
+    scope_map:
+      needed: true
+      exists: "src/skill_scan/_ast_split_detector.py:_build_scope_map"
+      gaps: "Importable but not currently exported; import directly from _ast_split_detector"
+      action: use
+    scoped_lookup:
+      needed: true
+      exists: "src/skill_scan/_ast_split_format.py:_scoped_lookup"
+      gaps: "Importable; handles scope.name lookup in symbol_table"
+      action: use
+  infrastructure_parts: []
+
+environment:
+  status: assessed
+  build:
+    tool: uv
+    install_cmd: "make install"
+    check_cmd: "make check"
+    prerequisites: ["Python 3.13", "uv"]
+  runtime_services: []
+  changes:
+    new_dependencies: []
+    env_vars: []
+    schema_changes: []
+    ci_changes: []
+    build_changes: []
+
+parts:
+  - id: a
+    title: "Tree-level dynamic exec detector (symbol table + taint sink)"
+    status: Done
+    requirements_covered: []
+    approach:
+      - step: "Add _SENSITIVE_MODULES frozenset and _resolve_first_arg helper to _ast_detectors.py"
+        files: [src/skill_scan/_ast_detectors.py]
+        notes: |
+          _SENSITIVE_MODULES = frozenset({"os", "sys", "subprocess", "shutil", "socket",
+          "builtins", "__builtins__", "importlib", "ctypes", "code", "codeop"}).
+          _resolve_first_arg(node, alias_map) resolves the first arg of getattr to a
+          module name via alias_map (handles Name and Attribute nodes).
+          ~10 lines added; well within 294→350 budget.
+      - step: "Create _ast_dynamic_exec_detector.py with detect_dynamic_exec()"
+        files: [src/skill_scan/_ast_dynamic_exec_detector.py]
+        notes: |
+          New tree-level detector following detect_split_evasion pattern.
+          Signature: detect_dynamic_exec(tree, file_path, alias_map, symbol_table, *, _nodes=None) -> list[Finding].
+          Import _build_scope_map from _ast_split_detector, _scoped_lookup from _ast_split_format,
+          _DANGEROUS_NAMES and _SENSITIVE_MODULES from _ast_detectors.
+          Walks getattr Call nodes checking:
+          (1) Symbol-table resolution: 2nd arg is Name, look up via _scoped_lookup;
+              if resolves to dangerous name -> EXEC-006 HIGH with resolved name in message.
+          (2) Taint sink: 1st arg resolves to sensitive module (via alias_map + _resolve_first_arg),
+              2nd arg is Name that can't resolve via symbol table -> EXEC-006 MEDIUM.
+          (3) Skip: 2nd arg is Constant (already handled by _detect_dynamic_access node-level).
+          (4) Skip: not getattr, or < 2 args.
+          Use Finding() directly with category='malicious-code'.
+      - step: "Wire detect_dynamic_exec into analyze_python()"
+        files: [src/skill_scan/ast_analyzer.py]
+        notes: |
+          Add import and call after detect_kwargs_unpacking. Pass tree, file_path,
+          alias_map, symbol_table, _nodes=all_nodes.
+      - step: "Create tests for symbol-table and taint-sink detection"
+        files: [tests/unit/test_dynamic_exec_detector.py]
+        notes: |
+          Test cases (all at analyze_python level):
+          - getattr(os, var) where var='system' -> EXEC-006 HIGH with 'system' in matched_text
+          - getattr(os, var) where var='path' -> no finding from this detector
+          - getattr(os, unknown_var) -> EXEC-006 MEDIUM (taint sink)
+          - getattr(config, unknown_var) -> no finding (not sensitive module)
+          - import os as o; getattr(o, var) where var='system' -> detected via alias
+          - getattr(self, unknown) -> no finding (self not a sensitive module)
+          - hasattr(os, 'system') -> no finding (not getattr)
+          - getattr(os, 'system') -> NOT detected by this detector (handled by node-level)
+    criteria:
+      - "getattr(os, var) where var='system' detected as EXEC-006 HIGH with 'system' in matched_text"
+      - "getattr(os, var) where var='path' does NOT produce a finding from detect_dynamic_exec"
+      - "getattr(os, unknown_var) detected as EXEC-006 MEDIUM (taint sink)"
+      - "getattr(config, unknown_var) does NOT produce a finding (non-sensitive module)"
+      - "Aliased modules resolve: import os as o; getattr(o, var) where var='system' detected"
+      - "getattr(self, unknown) does NOT produce a finding"
+      - "hasattr(os, 'system') does NOT produce a finding"
+      - "detect_dynamic_exec is called from analyze_python() and findings are included"
+      - "_ast_dynamic_exec_detector.py stays at or under 350 lines"
+      - "_ast_detectors.py stays at or under 350 lines"
+      - "make check passes"
+
+  - id: b
+    title: "Scanner-level precision — dedup preference and end-to-end validation"
+    status: Done
+    depends_on: [a]
+    requirements_covered: []
+    approach:
+      - step: "Change _deduplicate() to prefer AST findings over regex"
+        files: [src/skill_scan/content_scanner.py]
+        notes: |
+          Current: seeds seen from regex findings, drops AST with same (rule_id, line).
+          New: for each (rule_id, line) pair, prefer AST finding over regex when both exist.
+          Implementation: build AST lookup dict by (rule_id, line), then iterate regex
+          findings replacing with AST version when available, then add remaining AST-only
+          findings. This ensures AST precision (resolved names, correct severity) reaches
+          scanner output while regex findings remain for lines AST doesn't cover.
+          content_scanner.py is at 239/350 — ample room.
+      - step: "Create end-to-end scanner tests"
+        files: [tests/unit/test_dynamic_exec_scanner.py]
+        notes: |
+          Test cases using _apply_rules (full regex+AST+dedup pipeline):
+          - getattr(os, var='system') -> finding has 'system' in matched_text (AST precision)
+          - getattr(os, unknown) -> finding severity is MEDIUM (not regex HIGH)
+          - getattr(config, 'debug') -> finding is still HIGH (regex only, AST produces nothing)
+          - getattr(os, 'system') -> finding source is AST (preferred over regex)
+          - getattr(self, 'process') -> finding is regex HIGH (AST doesn't flag benign attrs)
+    criteria:
+      - "getattr(os, var='system') scanner finding has 'system' in matched_text (AST preferred)"
+      - "getattr(os, unknown_param) scanner finding severity is MEDIUM (AST taint sink preferred over regex HIGH)"
+      - "getattr(config, 'debug') scanner finding is still HIGH (regex, no AST finding)"
+      - "getattr(os, 'system') scanner finding comes from AST (preferred over regex)"
+      - "No regression in existing test suite"
+      - "content_scanner.py stays at or under 350 lines"
+      - "make check passes"
+
+allowed_files:
+  - src/skill_scan/_ast_detectors.py
+  - src/skill_scan/_ast_dynamic_exec_detector.py
+  - src/skill_scan/ast_analyzer.py
+  - src/skill_scan/content_scanner.py
+  - tests/unit/test_ast_detectors.py
+  - tests/unit/test_dynamic_exec_detector.py
+  - tests/unit/test_dynamic_exec_scanner.py
+
+forbidden:
+  - src/skill_scan/_ast_symbol_table.py  # frozen at 299/350
+  - src/skill_scan/_ast_symbol_table_assignments.py  # 267/350 but out of scope
+  - src/skill_scan/rules/data/malicious_code.toml  # regex patterns unchanged
+  - ".env*"
+
+acceptance_scenarios:
+  - scenario: "Symbol-table resolution: getattr with variable arg resolved to dangerous name"
+    invoke: "analyze_python('import os\\nattr = \"system\"\\ngetattr(os, attr)', 'test.py')"
+    expect: "Finding with rule_id=EXEC-006, severity=HIGH, 'system' in matched_text"
+    test_file: tests/unit/test_dynamic_exec_scanner.py
+    status: passing
+
+  - scenario: "Taint sink: getattr on sensitive module with non-resolvable arg"
+    invoke: "analyze_python('import os\\ndef f(x):\\n    getattr(os, x)', 'test.py')"
+    expect: "Finding with rule_id=EXEC-006, severity=MEDIUM"
+    test_file: tests/unit/test_dynamic_exec_scanner.py
+    status: passing
+
+  - scenario: "No taint sink on non-sensitive module"
+    invoke: "analyze_python('def f(x):\\n    getattr(config, x)', 'test.py')"
+    expect: "No EXEC-006 finding from detect_dynamic_exec"
+    test_file: tests/unit/test_dynamic_exec_scanner.py
+    status: passing
+
+  - scenario: "Scanner-level: AST precision survives dedup for resolved variable"
+    invoke: "_apply_rules('import os\\nattr = \"system\"\\ngetattr(os, attr)', 'test.py', rules)"
+    expect: "EXEC-006 finding with 'system' in matched_text (AST, not regex excerpt)"
+    test_file: tests/unit/test_dynamic_exec_scanner.py
+    status: passing
+
+  - scenario: "Scanner-level: taint sink shows MEDIUM not HIGH"
+    invoke: "_apply_rules('import os\\ndef f(x):\\n    getattr(os, x)', 'test.py', rules)"
+    expect: "EXEC-006 finding with severity=MEDIUM"
+    test_file: tests/unit/test_dynamic_exec_scanner.py
+    status: passing
+
+acceptance_criteria:
+  - "All parts have status: Done"
+  - "All tests pass"
+  - "All acceptance scenarios have status: passing"
+  - "No regression in existing test suite"
+
+stop_condition: "When all parts are complete and make check passes."
+
+work_log:
+  - part: a
+    timestamp: "2026-03-22T12:00:00Z"
+    status: Done
+    summary: "Tree-level dynamic exec detector implemented. 10 tests, all criteria verified."
+    signals: []
+  - part: b
+    timestamp: "2026-03-22T13:00:00Z"
+    status: Done
+    summary: "Dedup preference flipped to AST-over-regex. 15 scanner tests + acceptance scenarios. Complexity fix in detector."
+    signals: []
+  - part: docs
+    timestamp: "2026-03-22T14:00:00Z"
+    status: Done
+    summary: "Updated CLAUDE.md: added _ast_dynamic_exec_detector.py to Project Structure, added test file entries, updated registration pattern for detect_dynamic_exec, added _SENSITIVE_MODULES entry, added _resolve_first_arg/_check_resolved_name/_check_taint_sink entries, added _deduplicate() preference invariant, added known debt entries for line counts and false-positive pathways. Updated plan status to Done with evidence records."
+    signals: []
+evidence:
+  - type: test_output
+    command: "make check"
+    result: "All tests pass; 10 unit tests in test_dynamic_exec_detector.py, 15 scanner tests in test_dynamic_exec_scanner.py, 2 updated tests in test_ast_integration.py"
+  - type: manual_verification
+    command: "wc -l src/skill_scan/_ast_dynamic_exec_detector.py"
+    result: "124 lines (well under 350 limit)"
+  - type: manual_verification
+    command: "wc -l src/skill_scan/_ast_detectors.py"
+    result: "311 lines (within 350 limit)"
+  - type: manual_verification
+    command: "wc -l src/skill_scan/content_scanner.py"
+    result: "246 lines (within 350 limit)"
+  - type: manual_verification
+    command: "All 5 acceptance scenarios"
+    result: "status: passing (symbol-table resolution HIGH, taint-sink MEDIUM, non-sensitive no finding, AST precision survives dedup, MEDIUM preferred over regex HIGH)"
+
+handoff:
+  stopped_at: null
+  current_state: null
+  next_steps: []
+  blockers: []
+  scope:
+    files:
+      - src/skill_scan/_ast_detectors.py
+      - src/skill_scan/_ast_dynamic_exec_detector.py
+      - src/skill_scan/ast_analyzer.py
+      - src/skill_scan/content_scanner.py
+      - tests/unit/test_dynamic_exec_detector.py
+      - tests/unit/test_dynamic_exec_scanner.py
+    functions: []
+    components: ["AST detection pipeline", "scanner dedup"]
+  decisions:
+    - "Gap #1 (literal constant getattr) already works — removed from plan"
+    - "Gap #4/#5 (__import__/importlib with var args) already detected by call name — removed"
+    - "Dedup masking identified as critical scanner-level issue — added as Part B"
+    - "_SENSITIVE_MODULES placed in _ast_detectors.py (resolved contradiction)"
+  open_questions: []
+  cross_part_knowledge:
+    - "Part B depends on Part A producing AST findings with correct severity/matched_text"
+  active_signals: []
+
+unlocks: ["PLAN-038"]  # Module return value and function reference tracking
+
+errors: []

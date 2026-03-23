@@ -202,11 +202,18 @@ def _deduplicate(
 ) -> list[Finding]:
     """Merge regex and AST findings, deduplicating by (rule_id, line).
 
-    Regex findings take priority — AST findings are only appended when
-    no regex finding exists with the same (rule_id, line) pair.
+    AST findings take priority — they carry more precise severity and
+    matched_text from symbol-table resolution.  For each (rule_id, line)
+    pair present in both lists the AST version is kept; regex-only and
+    AST-only findings are preserved as-is.
     """
-    seen: set[tuple[str, int | None]] = {(f.rule_id, f.line) for f in regex_findings}
-    merged = list(regex_findings)
+    ast_lookup: dict[tuple[str, int | None], Finding] = {(f.rule_id, f.line): f for f in ast_findings}
+    seen: set[tuple[str, int | None]] = set()
+    merged: list[Finding] = []
+    for f in regex_findings:
+        key = (f.rule_id, f.line)
+        seen.add(key)
+        merged.append(ast_lookup.get(key, f))
     for f in ast_findings:
         key = (f.rule_id, f.line)
         if key not in seen:

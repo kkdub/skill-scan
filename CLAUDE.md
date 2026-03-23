@@ -67,6 +67,7 @@ src/skill_scan/           # Production source code
   _ast_kwargs_detector.py # Kwargs unpacking detector (detect_kwargs_unpacking); re-exports from _ast_kwargs_dict_tracker.py
   _ast_kwargs_dict_tracker.py # Dict-collection pre-pass + .update() tracking; _build_string_table for dynamic key resolution
   _ast_exfil_detector.py  # Subprocess list-arg + DNS exfil detectors (_detect_subprocess_list_exfil, _detect_dns_exfil)
+  _ast_dynamic_exec_detector.py # Tree-level dynamic exec detector (detect_dynamic_exec); symbol-table resolution + taint-sink detection for getattr()
   _ast_loop_unroller.py   # Static for-loop unrolling pre-pass (collect_loop_assigns)
   package_analyzer.py     # Facade: analyze_package() entry point
   _package_risk_correlations.py # Cross-file correlation rules (table-driven); apply_correlations, correlation_bonus, has_multi_role_medium_risk
@@ -101,6 +102,8 @@ tests/
     test_part_d_classvar_dictpop.py     # Class-body scope, classvar assembly, dict.pop tests (PLAN-032 Part D)
     test_hex_escape_resolution.py       # Hex escape .replace() chain + fromhex(var) tests (PLAN-032 Part E)
     test_package_analyzer.py            # Package-level risk analysis tests (classify_file_role, analyze_text_content, end-to-end scan)
+    test_dynamic_exec_detector.py       # detect_dynamic_exec unit tests — symbol-table resolution + taint-sink (PLAN-037, 10 tests)
+    test_dynamic_exec_scanner.py        # Scanner-level e2e tests for AST-over-regex dedup preference (PLAN-037, 15 tests)
     ...                                 # Other tests mirror src/ structure
 scripts/                  # Quality & analysis scripts
 .agent/                   # Plans, standards, workflow
@@ -115,7 +118,7 @@ Key patterns and invariants. For detailed module-level docs, see `.agent/ARCHITE
 **Registration patterns** — follow these when adding new detectors:
 - `_DETECTORS` tuple in `ast_analyzer.py` — node-level detectors (one finding per node)
 - `_RESOLVERS` tuple in `_ast_split_detector.py` — string resolvers for split-evasion; signature: `(node, symbol_table, scope, *, alias_map=None) -> str | None`
-- Tree-level detectors needing the full symbol table (`detect_split_evasion`, `detect_kwargs_unpacking`) go in `analyze_python()` directly, not in `_DETECTORS`; `_detect_custom_rot13` is walked separately over `ast.FunctionDef | ast.AsyncFunctionDef` nodes (requires full function body, not per-node dispatch)
+- Tree-level detectors needing the full symbol table (`detect_split_evasion`, `detect_kwargs_unpacking`, `detect_dynamic_exec`) go in `analyze_python()` directly, not in `_DETECTORS`; `_detect_custom_rot13` is walked separately over `ast.FunctionDef | ast.AsyncFunctionDef` nodes (requires full function body, not per-node dispatch)
 - `_NAME_RULE` / `_DECORATOR_RULE` — lookup tables mapping dangerous names to `(rule_id, severity, prefix)`; use when one detector emits different rule IDs per name
 - `_DANGEROUS_KWARGS` — table-driven config for kwargs detector; extend by adding entries, no code changes needed
 - `_collect_int_list_assigns(tree)` in `_ast_split_comprehension.py` — parallel pre-pass collecting `Name = [int, ...]` assignments AND tracking `+=`/`.extend()` mutations; built in `analyze_python()` and threaded to `detect_split_evasion` via `int_list_table` kwarg; mutation helpers live in `_ast_split_int_list_tracker.py`; also walks ClassDef body directly (class-level int-lists tracked under `ClassName.varname` key); delegates body walking to `_walk_fn_body` and nested function traversal to `_collect_fn_body` (handles global/nonlocal declarations)
@@ -139,6 +142,10 @@ Key patterns and invariants. For detailed module-level docs, see `.agent/ARCHITE
 - `collect_loop_assigns(tree)` in `_ast_loop_unroller.py` — pre-pass that resolves `for c in ['e','v','a','l']: name += c` patterns; called in `analyze_python()` and merged into `symbol_table` before `detect_split_evasion` runs; supports inline list literals and local list-literal name references; single-level loops with one AugAssign body only
 - `_handle_update_call` in `_ast_kwargs_dict_tracker.py` — handles `dict.update({...})` in the kwargs pre-pass; follows same pattern as `_track_aug_union`
 - `_try_bodies(node)` in `_ast_imports.py` — returns all body lists from a `Try` node (body, handlers, orelse, finalbody); used by `_collect_imports` to recurse into `try/except` blocks
+- `detect_dynamic_exec(tree, file_path, alias_map, symbol_table, *, _nodes=None)` in `_ast_dynamic_exec_detector.py` — tree-level detector called from `analyze_python()` after `detect_kwargs_unpacking`; walks `getattr` Call nodes checking: (1) if 2nd arg is a `Name` that resolves via `_scoped_lookup` to a dangerous name → EXEC-006 HIGH with resolved name in `matched_text`; (2) if 2nd arg is a `Name` that cannot resolve AND 1st arg is a sensitive module (via `_resolve_first_arg` + alias_map) → EXEC-006 MEDIUM taint sink; (3) skips when 2nd arg is a `Constant` (already handled by `_detect_dynamic_access` node-level); re-exported from `ast_analyzer.py`
+- `_SENSITIVE_MODULES` frozenset in `_ast_detectors.py` — set of module names where dynamic attribute access is security-sensitive (`os`, `sys`, `subprocess`, `shutil`, `socket`, `builtins`, `__builtins__`, `importlib`, `ctypes`, `code`, `codeop`); used by `detect_dynamic_exec` for taint-sink classification; re-exported from `ast_analyzer.py`; distinct from `_STAR_IMPORT_EXPANSIONS` in `_ast_imports.py` (which is for star-import expansion, not sensitivity classification)
+- `_resolve_first_arg(node, alias_map)` in `_ast_dynamic_exec_detector.py` — resolves the first arg of a `getattr` Call to a module name via `alias_map`; handles `ast.Name` (resolves via alias) and `ast.Attribute` where `.value` is an `ast.Name` (returns outer module name — `getattr(os.path, var)` resolves to `"os"`, which is in `_SENSITIVE_MODULES`); returns `None` for other node types
+- `_check_resolved_name` / `_check_taint_sink` in `_ast_dynamic_exec_detector.py` — extracted helpers within the detector; `_check_resolved_name` emits EXEC-006 HIGH when resolved name is in `_DANGEROUS_NAMES`; `_check_taint_sink` emits EXEC-006 MEDIUM when module is in `_SENSITIVE_MODULES` and arg is unresolvable; called from `detect_dynamic_exec` after the `_scoped_lookup` attempt
 - `analyze_package(skill_dir, files, findings)` in `package_analyzer.py` — package-level risk facade called from `scanner.py` after all file findings are collected; returns `PackageRiskSummary`; builds role map, scores findings and text signals, applies cross-file correlations, applies multi-role bonus, then maps total score to a risk band
 - `ROLE_WEIGHT` / `SEVERITY_POINTS` / `CATEGORY_DRIVER` in `_package_risk_policy.py` — table-driven scoring policy; `ROLE_WEIGHT` maps role strings to multipliers (`entrypoint=1.4`, `script=1.35`, `config=1.1`, `support-doc=0.8`, `reference=0.35`); `SEVERITY_POINTS` maps `Severity` enum values to base points; `CATEGORY_DRIVER` maps finding categories to risk driver labels; extend by adding entries
 - `IGNORED_CATEGORIES` in `_package_risk_policy.py` — frozenset of categories excluded from package scoring (`analysis`, `file-safety`, `schema-validation`); extend by adding entries
@@ -165,6 +172,7 @@ Key patterns and invariants. For detailed module-level docs, see `.agent/ARCHITE
 - `_walk_fn_body` branch-aware merge rule: `If` branches are two-way (if-body vs else-body); `Match` branches are N-way (one per case); terminal branches (those where `_is_terminal_body` returns True) are excluded from the merge before `_merge_branches` is called — if all branches are terminal the merge receives an empty list (no-op, result stays at pre-branch snapshot); non-exhaustive match always adds the pre-match snapshot as an extra branch; `For`/`While`/`Try`/`With` sub-bodies are walked sequentially (not branch-aware) — they are not mutually exclusive; `break`/`continue` are NOT excluded as terminal (mutations are visible after the loop); `_merge_branches` uses identity (`is`) for `_SHADOW` and value equality (`==`) for concrete int-lists; this invariant must not be changed without updating the corresponding test_int_list_branch_merge.py tests
 - `build_alias_map(tree)` recurses into `ast.Try` blocks via `_collect_imports` → `_try_bodies` — imports inside `try/except/else/finally` are captured; do not flatten `tree.body` iteration without preserving this recursion
 - `_is_lambda_chr(node)` in `_ast_split_map_resolver.py` validates exactly: single positional arg, no vararg, no kwonly args, body is `chr(arg)` with matching param name — do not relax these checks without a test for the edge case
+- `_deduplicate()` in `content_scanner.py` prefers AST findings over regex when both exist for the same `(rule_id, line)` key — AST findings carry more precise severity and matched_text from symbol-table resolution; regex-only and AST-only findings are preserved as-is; do NOT revert to regex-preferred order or AST precision will be masked
 - `_detect_subprocess_list_exfil` uses `Finding()` directly with `category='data-exfiltration'` — do NOT use `_make_finding` (hardcodes `'malicious-code'`); follows the same constraint as `_make_rot13_finding()`
 - `_detect_dns_exfil` uses `Finding()` directly with `category='data-exfiltration'` — same constraint; flags `socket.getaddrinfo()` only when first arg is NOT a plain string constant (f-strings, variables, and concatenation all trigger)
 - `_resolve_format_map_call` in `_ast_split_format_map.py` is registered in `resolve_call()` after `_resolve_format_call`; format_map resolves `template.format_map(dict_expr)` via `_extract_dict_literal` or symbol table lookup
@@ -204,6 +212,10 @@ Key patterns and invariants. For detailed module-level docs, see `.agent/ARCHITE
 - `_package_text_signals.py` is at ~147/350 lines — ample room
 - `_package_risk_correlations.py` is at ~80/350 lines — ample room
 - PKG-* rule IDs are used internally by `TextSignal` only — they do not appear in the rules catalog (`rules/data/`) and are not subject to `suppress_rules` config; no TOML entries exist for them
+- `_ast_dynamic_exec_detector.py` is at 124/350 lines — ample room
+- `_ast_detectors.py` is at 311/350 lines — 39 lines remaining (increased from 294 after `_SENSITIVE_MODULES` addition)
+- Known false-positive pathway in `detect_dynamic_exec`: `getattr(os.path, var)` fires MEDIUM because `_resolve_first_arg` returns `"os"` (outer module name) which is in `_SENSITIVE_MODULES`; `getattr(sys, var)` fires MEDIUM because `sys` is in `_SENSITIVE_MODULES` even though many `sys` attributes are benign; both are intentional (MEDIUM not HIGH — uncertain threat)
+- Class-method local variables are not in the symbol table for `detect_dynamic_exec` resolution — `_process_class` in `_ast_symbol_table.py` does not export method-local vars; only module-level and class-level (non-method) vars resolve
 
 ## Tips
 
