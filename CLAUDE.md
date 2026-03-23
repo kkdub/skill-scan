@@ -98,6 +98,13 @@ For detailed module-level docs, see `.agent/ARCHITECTURE-REFERENCE.md`.
 - Deferred imports in `_ast_symbol_table.py` break circular deps — don't reorganize without checking
 - `_process_nested` in `_ast_symbol_table.py`: recurses into inner bodies BEFORE routing nonlocal declarations — do NOT reorder
 
+## Code Indexing
+
+codebase-memory-mcp is available for structural code queries — use it for call-graph tracing,
+function/class search, and architecture overview. Especially useful in this repo due to the
+30+ tightly coupled private modules. Use `trace_call_path` before modifying any detector to
+understand the full caller/callee chain through the facade layers.
+
 ## Tips
 
 - Uncertainty is fine — flag what you find, suggest improvements.
