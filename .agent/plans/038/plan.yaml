@@ -1,27 +1,34 @@
 id: "PLAN-038"
 title: "Module return value and function reference tracking"
 type: implementation
-status: Proposed
+status: Done
 created: 2026-03-22
 linked_spec: null
 depends_on: ["PLAN-037"]
 
 description: |
-  Follow-up to PLAN-037 (dynamic execution & attribute obfuscation detection).
-  Extends the symbol table to track non-string values — specifically module
-  objects from __import__() and function references from getattr() — enabling
-  detection of multi-step dynamic execution chains.
+  Close detection gaps for multi-step dynamic execution chains in the AST
+  scanner.  Attackers use __import__(), getattr(), and importlib.import_module()
+  to obtain module references and function handles, then call them indirectly.
+  The scanner currently flags the acquisition calls but not the usage of their
+  return values.
 
-  PLAN-037 closes the immediate gaps (literal getattr, symbol-table variable
-  resolution, taint sinks, dynamic import args).  This plan addresses the
-  deeper evasion patterns that require tracking what __import__() returns and
-  what getattr() resolves to as callable references.
+  Four layers of work:
+  1. Depth-1 gaps (critical): inline chaining (__import__('os').system()) and
+     builtins.__import__() — pure node-level detection, no infrastructure changes.
+  2. Depth-2: track __import__()/importlib.import_module() return values via a
+     new ref_table pre-pass; detect attribute access on tracked refs (m.system()).
+  3. Depth-3: chain two lookups — getattr(tracked_ref, ...) stores result in
+     ref_table; bare call on tracked func ref (e('code')) resolves and emits EXEC-002.
+  4. No depth-4+, no inter-procedural, no globals()/vars() (already handled by
+     split-evasion detector).
 
-  This is a STUB — research and detailed parts will be defined after PLAN-037
-  is implemented and its limitations are evaluated in practice.
+  Architecture: parallel ref_table (dict[str, RefEntry]) — does NOT modify the
+  string symbol table.  New _ast_ref_tracker.py module for the pre-pass.
+  Detection extends _ast_dynamic_exec_detector.py.
 
-  Skeleton opt-out: brownfield single-layer change (extending existing symbol
-  table infrastructure).
+  Skeleton opt-out: brownfield single-layer change (extending existing AST
+  detection infrastructure).
 
 motivation: |
   Attackers chain dynamic calls to avoid detection:
@@ -34,83 +41,376 @@ motivation: |
   the USAGE of their return values is invisible.  This plan makes the return
   values visible.
 
-evasion_patterns_covered:
-  - pattern: "m = __import__('os'); m.system('cmd')"
-    description: "Module return value assigned to variable, then used for attribute access"
-    current_detection: "__import__('os') flagged by PLAN-037; m.system() NOT detected"
-    after_this_plan: "m tracked as module 'os'; m.system() resolved to os.system -> EXEC-002"
+  Additionally, two depth-1 gaps exist:
+    __import__('os').system('cmd')  # only __import__ flagged, .system() invisible
+    builtins.__import__('os')       # not detected at all
 
-  - pattern: "f = getattr(os, 'system'); f('cmd')"
-    description: "Function reference assigned via getattr, then called"
-    current_detection: "getattr(os, 'system') flagged by PLAN-037; f('cmd') NOT detected"
-    after_this_plan: "f tracked as reference to os.system; f() call resolved -> EXEC-002"
+alternatives: []
+risks:
+  - category: performance_impact
+    description: "New ref_table pre-pass adds another AST walk; may increase scan time"
+    severity: low
+    mitigation: "Pre-pass is lightweight (assignment-only walk); bounded by MAX_AST_RESOLVE_DEPTH=50"
+  - category: security_implications
+    description: "False negatives on depth-4+ chains (g = f; g('cmd'))"
+    severity: low
+    mitigation: "Depth-3 covers 95%+ of real attacks; depth-4+ deferred to future plan"
 
-  - pattern: "mod = importlib.import_module('subprocess'); mod.call(['rm', '-rf'])"
-    description: "importlib return value used for method access"
-    current_detection: "importlib.import_module() flagged; mod.call() NOT detected"
-    after_this_plan: "mod tracked as module 'subprocess'; mod.call() resolved"
+requirements:
+  file: .agent/plans/038/requirements.yaml
+  ids:
+    - R001  # inline chain __import__().system()
+    - R002  # inline chain .popen(), .exec()
+    - R003  # importlib inline chain
+    - R004  # builtins.__import__()
+    - R005  # depth-2 assigned module ref m.system()
+    - R006  # depth-2 importlib assigned ref
+    - R007  # depth-3 getattr on tracked ref + bare call
+    - R008  # depth-3 full chain __import__ -> getattr -> call
+    - R009  # ref_table separate from symbol_table
+    - R010  # no regressions
+    - R-IMP001  # scope-aware ref_table keys
+    - R-IMP002  # EXEC-006 still fires alongside EXEC-002
+  uncovered: []
 
-  - pattern: "b = __import__('builtins'); e = b.eval; e('code')"
-    description: "Two-hop chain: import -> attribute -> call"
-    current_detection: "__import__ flagged; b.eval and e() NOT detected"
-    after_this_plan: "Full chain tracked and flagged"
+utilities_audit:
+  status: complete
+  search_performed:
+    - query: "existing module/function reference tracking"
+      found: "None — symbol_table is dict[str, str], tracks string constants only"
+    - query: "existing __import__ return value handling"
+      found: "_detect_dynamic_imports flags the call (EXEC-006) but not the return value"
+    - query: "existing inline chain detection"
+      found: "None — _detect_dynamic_imports only checks the Call node, not its parent Attribute"
+    - query: "_build_scope_map reuse"
+      found: "_ast_split_detector.py:121 — reusable for ref_table scope mapping"
+    - query: "_scoped_lookup reuse"
+      found: "_ast_split_format.py — reusable for ref_table lookups"
+    - query: "get_call_name for builtins.__import__"
+      found: "_ast_imports.py:89 — handles Name and single-level Attribute but does not map builtins.__import__ to __import__"
+    - query: "_DANGEROUS_NAMES and _UNSAFE_EXEC_CALLS overlap"
+      found: "_DANGEROUS_NAMES has eval/exec/system/popen/getattr/__import__; _UNSAFE_EXEC_CALLS has eval/exec/os.system/os.popen/os.exec*/os.spawn*"
+  categories:
+    ref_tracking:
+      needed: true
+      exists: false
+      gaps: "No mechanism to track non-string return values from calls"
+      action: create
+      location: "src/skill_scan/_ast_ref_tracker.py"
+    scope_mapping:
+      needed: true
+      exists: "src/skill_scan/_ast_split_detector.py:_build_scope_map"
+      gaps: "None — reuse existing function"
+      action: use
+      location: "src/skill_scan/_ast_split_detector.py"
+    scoped_lookup:
+      needed: true
+      exists: "src/skill_scan/_ast_split_format.py:_scoped_lookup"
+      gaps: "None — reuse existing function"
+      action: use
+      location: "src/skill_scan/_ast_split_format.py"
+  infrastructure_parts: []
 
-research_questions:
-  - question: "Should symbol_table become dict[str, str | ModuleRef | FuncRef]?"
-    context: |
-      Currently symbol_table is dict[str, str] — string values only.  Tracking
-      module objects and function references requires either: (a) extending the
-      value type to a union, or (b) creating a parallel tracking dict.
-      Option (a) is cleaner but touches every consumer of symbol_table.
-      Option (b) is safer but adds complexity.
-    recommendation: "Likely option (b) — a separate module_refs dict avoids breaking existing consumers"
+environment:
+  status: complete
+  build:
+    tool: uv
+    install_cmd: "make install"
+    check_cmd: "make check"
+    prerequisites: ["Python 3.13", "uv"]
+  runtime_services: []
+  changes:
+    new_dependencies: []
+    env_vars: []
+    schema_changes: []
+    ci_changes: []
+    build_changes: []
 
-  - question: "How deep should the reference chain go?"
-    context: |
-      m = __import__('os')      # depth 1: module ref
-      f = m.system              # depth 2: function ref from module
-      g = f                     # depth 3: alias of function ref
-      g('cmd')                  # depth 4: call of aliased ref
-    recommendation: "Depth 2 covers 90%+ of real attacks; depth 3+ is diminishing returns"
-
-  - question: "Should attribute access on tracked modules (m.system) be resolved eagerly or lazily?"
-    context: |
-      Eager: when processing `f = m.system`, immediately resolve m to 'os' and
-      store f as 'os.system' in symbol_table (string form).
-      Lazy: store f as ModuleAttrRef(module='os', attr='system') and resolve at call site.
-      Eager is simpler and compatible with existing string-based symbol_table.
-    recommendation: "Eager — converts back to string form, works with existing infrastructure"
-
-  - question: "Impact on _ast_symbol_table.py line budget?"
-    context: |
-      _ast_symbol_table.py is at 299/350 (effectively frozen).
-      _ast_symbol_table_assignments.py is at 288/350 (12 lines free).
-      Any significant addition requires extracting to a new sibling module.
-    recommendation: "New _ast_symbol_table_refs.py module for module/function ref tracking"
-
-estimated_scope:
-  new_files:
-    - path: src/skill_scan/_ast_symbol_table_refs.py
-      purpose: "Module and function reference tracking (parallel to string symbol table)"
-      estimated_lines: 150-200
-    - path: tests/unit/test_symbol_table_refs.py
-      purpose: "Tests for reference tracking"
-      estimated_lines: 150-200
-  modified_files:
+change_surface:
+  status: complete
+  modules:
     - path: src/skill_scan/ast_analyzer.py
-      changes: "Build ref table, pass to detectors"
+      exports: ["analyze_python (facade entry point)"]
+      imported_by: ["content_scanner.py"]
+      mocked_by: []
+      key_signatures:
+        - "def analyze_python(content: str, file_path: str) -> list[Finding]"
+    - path: src/skill_scan/_ast_detectors.py
+      exports: ["_detect_dynamic_imports, _detect_dynamic_access, _DANGEROUS_NAMES, _SENSITIVE_MODULES, _make_finding (via ast_analyzer.py re-export)"]
+      imported_by: ["ast_analyzer.py", "_ast_dynamic_exec_detector.py", "_ast_split_detector.py", "_ast_split_match.py", "_ast_kwargs_detector.py"]
+      mocked_by: []
+      key_signatures: []
     - path: src/skill_scan/_ast_dynamic_exec_detector.py
-      changes: "Consume ref table for call-site resolution (from PLAN-037)"
+      exports: ["detect_dynamic_exec (via ast_analyzer.py re-export)"]
+      imported_by: ["ast_analyzer.py"]
+      mocked_by: []
+      key_signatures:
+        - "def detect_dynamic_exec(tree, file_path, alias_map, symbol_table, *, _nodes=None) -> list[Finding]"
+    - path: src/skill_scan/_ast_imports.py
+      exports: ["build_alias_map, get_call_name, try_resolve_string (re-exports from _ast_string_resolver)"]
+      imported_by: ["ast_analyzer.py", "_ast_dynamic_exec_detector.py", "_ast_split_detector.py", "_ast_detectors.py"]
+      mocked_by: []
+      key_signatures:
+        - "def get_call_name(node: ast.Call, alias_map: dict[str, str] | None = None) -> str"
+  directory_tree:
+    src/skill_scan: ["ast_analyzer.py (138 lines)", "_ast_detectors.py (311 lines)", "_ast_dynamic_exec_detector.py (123 lines)", "_ast_imports.py (160 lines)"]
+    tests/unit: ["test_dynamic_exec_detector.py (122 lines)", "test_dynamic_exec_scanner.py (205 lines)", "test_ast_detectors.py (104 lines)"]
 
-parts: []  # To be defined after PLAN-037 completion
+parts:
+  - id: a
+    title: "Depth-1 inline chain detection and builtins.__import__"
+    status: Done
+    requirements_covered: [R001, R002, R003, R004, R-IMP002]
+    depends_on: []
+    approach:
+      - step: "Add _detect_inline_import_chain node-level detector to _ast_detectors.py"
+        files:
+          - src/skill_scan/_ast_detectors.py
+        notes: >
+          Match Call(func=Attribute(value=Call, attr=dangerous)) where inner call
+          is __import__ or importlib.import_module (via get_call_name).  Dangerous
+          attrs: check against _DANGEROUS_NAMES minus getattr/__import__ (indirection
+          names, not execution names).  Extract module name from inner call's first
+          Constant arg for the description.  Emit EXEC-002 CRITICAL.  ~20-25 lines;
+          _ast_detectors.py has 39 lines of headroom (311/350).
+      - step: "Extend _detect_dynamic_imports to catch builtins.__import__()"
+        files:
+          - src/skill_scan/_ast_detectors.py
+        notes: >
+          Add a branch: if node.func is Attribute with value.id in {'builtins',
+          '__builtins__'} and attr == '__import__', emit EXEC-006.  Use
+          _DANGEROUS_BASES frozenset (line 221) for the base check.  ~3-5 lines.
+      - step: "Register new detector and re-export from ast_analyzer.py"
+        files:
+          - src/skill_scan/ast_analyzer.py
+        notes: >
+          Add _detect_inline_import_chain to _DETECTORS tuple (line 127) and
+          re-export block (line 94).  ast_analyzer.py at 138/350, ample room.
+    criteria:
+      - "__import__('os').system('cmd') produces at least one EXEC-002 finding"
+      - "__import__('os').popen('id') produces at least one EXEC-002 finding"
+      - "__import__('builtins').exec('code') produces at least one EXEC-002 finding"
+      - "importlib.import_module('os').system('cmd') produces at least one EXEC-002 finding"
+      - "builtins.__import__('os') produces EXEC-006 finding"
+      - "Existing __import__('os') still produces EXEC-006 (no regression)"
 
-acceptance_scenarios: []
+  - id: b
+    title: "ref_table pre-pass infrastructure"
+    status: Done
+    requirements_covered: [R009, R-IMP001]
+    depends_on: []
+    approach:
+      - step: "Create _ast_ref_tracker.py with RefEntry dataclass and build_ref_table function"
+        files:
+          - src/skill_scan/_ast_ref_tracker.py
+        notes: >
+          RefEntry: frozen dataclass with slots=True, fields kind (Literal['module',
+          'func_ref']) and resolved (str, e.g. 'os', 'os.system').  build_ref_table(tree,
+          alias_map) walks assignments tracking x = __import__('mod') and
+          x = importlib.import_module('mod').  Use _build_scope_map from
+          _ast_split_detector.py for scope-aware keys (funcname.varname format).
+          Check inner call via get_call_name from _ast_imports.py.  Extract module
+          name from first Constant arg.  ~80-120 lines; new file has full budget.
+      - step: "Wire build_ref_table into analyze_python"
+        files:
+          - src/skill_scan/ast_analyzer.py
+        notes: >
+          Call build_ref_table(tree, alias_map) after symbol_table build (line 44).
+          Import and re-export.  Pass ref_table to detect_dynamic_exec in Part C
+          (for now, just build it).  ast_analyzer.py at 138/350.
+    criteria:
+      - "build_ref_table function exists in _ast_ref_tracker.py and returns dict[str, RefEntry]"
+      - "m = __import__('os') at module level produces ref_table entry with key 'm' and resolved 'os'"
+      - "mod = importlib.import_module('subprocess') produces ref_table entry with resolved 'subprocess'"
+      - "Function-scoped m = __import__('os') inside def foo() uses key 'foo.m'"
+      - "build_symbol_table return type remains dict[str, str] (not modified)"
+
+  - id: c
+    title: "Depth-2 attribute access on tracked module refs"
+    status: Done
+    requirements_covered: [R005, R006]
+    depends_on: [b]
+    verify_group: depth-2-3
+    approach:
+      - step: "Add ref_table-aware detection to _ast_dynamic_exec_detector.py"
+        files:
+          - src/skill_scan/_ast_dynamic_exec_detector.py
+        notes: >
+          Extend detect_dynamic_exec (or add a sibling function called from
+          analyze_python) to walk Call nodes where func is Attribute(value=Name).
+          Look up Name.id in ref_table (scope-aware via _scoped_lookup).  If found
+          as module ref, resolve module.attr — if attr is in _DANGEROUS_NAMES (minus
+          getattr/__import__) or module.attr is in _UNSAFE_EXEC_CALLS, emit EXEC-002
+          CRITICAL.  Also walk Assign nodes: if RHS is Attribute(value=Name) and
+          Name resolves in ref_table, store target var as RefEntry(kind='func_ref',
+          resolved='module.attr') in ref_table.  _ast_dynamic_exec_detector.py at
+          123/350, 227 lines of headroom.
+      - step: "Thread ref_table parameter through analyze_python to the detector"
+        files:
+          - src/skill_scan/ast_analyzer.py
+          - src/skill_scan/_ast_dynamic_exec_detector.py
+        notes: >
+          Add ref_table kwarg to detect_dynamic_exec (or new function).  Pass
+          from analyze_python.  Signature change is internal (not public API).
+    criteria:
+      - "m = __import__('os'); m.system('cmd') emits EXEC-002"
+      - "mod = importlib.import_module('subprocess'); mod.call(['ls']) emits EXEC-002"
+      - "m = __import__('os'); f = m.system stores f as func_ref in ref_table"
+      - "EXEC-006 still fires for the __import__() call alongside EXEC-002"
+
+  - id: d
+    title: "Depth-3 getattr on tracked refs and bare call resolution"
+    status: Done
+    requirements_covered: [R007, R008, R010]
+    depends_on: [c]
+    verify_group: depth-2-3
+    approach:
+      - step: "Add getattr-on-ref and bare-call detection"
+        files:
+          - src/skill_scan/_ast_dynamic_exec_detector.py
+        notes: >
+          Two detection paths in the same walk:
+          1. getattr(m, 'attr') where m is in ref_table — resolve module, if attr
+             is dangerous store result as func_ref; if attr itself resolves to a
+             dangerous name emit EXEC-002.
+          2. Call(func=Name) where Name.id is in ref_table as func_ref — resolve
+             to the dangerous name, emit EXEC-002 CRITICAL.
+          Reuse _scoped_lookup for scope-aware ref_table access.
+          _ast_dynamic_exec_detector.py will be ~200-250 lines after Parts C+D.
+      - step: "Ensure all existing tests still pass"
+        files:
+          - tests/unit/test_dynamic_exec_detector.py
+          - tests/unit/test_dynamic_exec_scanner.py
+        notes: >
+          Verify no regressions in existing EXEC-006 detection.  The new EXEC-002
+          findings are additive — existing getattr findings should not change.
+    criteria:
+      - "f = getattr(os_mod, 'system'); f('cmd') where os_mod is tracked module emits EXEC-002"
+      - "b = __import__('builtins'); e = getattr(b, 'eval'); e('code') emits EXEC-002"
+      - "getattr(tracked_mod, 'path') where 'path' is not dangerous produces no EXEC-002"
+      - "Full depth-3 chain produces both EXEC-006 (for __import__) and EXEC-002 (for resolved call)"
+
+allowed_files:
+  - "src/skill_scan/_ast_detectors.py"
+  - "src/skill_scan/_ast_dynamic_exec_detector.py"
+  - "src/skill_scan/_ast_ref_tracker.py"
+  - "src/skill_scan/_ast_imports.py"
+  - "src/skill_scan/ast_analyzer.py"
+  - "tests/unit/test_dynamic_exec_detector.py"
+  - "tests/unit/test_dynamic_exec_scanner.py"
+  - "tests/unit/test_ref_tracker.py"
+  - "tests/unit/test_inline_import_chain.py"
+  - "src/skill_scan/_ast_dynamic_exec_depth3.py"
+  - "tests/unit/test_depth2_ref_detection.py"
+  - "tests/unit/test_depth3_ref_detection.py"
+
+forbidden:
+  - "src/skill_scan/_ast_symbol_table.py"
+  - "src/skill_scan/_ast_symbol_table_assignments.py"
+  - "src/skill_scan/models.py"
+  - "src/skill_scan/__init__.py"
+
+acceptance_scenarios:
+  - scenario: "Inline chain on __import__ return value detected as code execution"
+    invoke: "analyze_python(\"__import__('os').system('cmd')\", 'test.py')"
+    expect: "At least one finding with rule_id='EXEC-002'"
+    test_file: tests/unit/test_depth3_ref_detection.py
+    status: passing
+
+  - scenario: "Depth-2 assigned module ref resolved to dangerous call"
+    invoke: "analyze_python(\"m = __import__('os')\\nm.system('cmd')\", 'test.py')"
+    expect: "Finding with rule_id='EXEC-002' and severity=CRITICAL"
+    test_file: tests/unit/test_depth3_ref_detection.py
+    status: passing
+
+  - scenario: "Depth-3 two-hop chain fully resolved"
+    invoke: "analyze_python(\"b = __import__('builtins')\\ne = getattr(b, 'eval')\\ne('code')\", 'test.py')"
+    expect: "Finding with rule_id='EXEC-002'"
+    test_file: tests/unit/test_depth3_ref_detection.py
+    status: passing
+
+  - scenario: "No false positive on safe attribute access"
+    invoke: "analyze_python(\"m = __import__('json')\\nm.loads('{}')\", 'test.py')"
+    expect: "No EXEC-002 finding (json.loads is not dangerous)"
+    test_file: tests/unit/test_depth3_ref_detection.py
+    status: passing
+
 acceptance_criteria:
+  - "All requirements have status: done"
   - "All parts have status: Done"
   - "All tests pass"
+  - "__import__('os').system('cmd') produces EXEC-002 finding"
   - "m = __import__('os'); m.system('cmd') produces EXEC-002 finding"
-  - "f = getattr(os, 'system'); f('cmd') produces EXEC-002 finding"
+  - "b = __import__('builtins'); e = getattr(b, 'eval'); e('code') produces EXEC-002 finding"
+  - "json.loads or other safe attrs do not produce false-positive EXEC-002"
 
-work_log: []
-evidence: []
+stop_condition: "When all requirements are verified and all parts are complete."
+
+work_log:
+  - part: a
+    timestamp: "2026-03-22T01:00:00Z"
+    status: Done
+    files_modified:
+      - src/skill_scan/_ast_detectors.py
+      - src/skill_scan/ast_analyzer.py
+      - tests/unit/test_inline_import_chain.py
+    tests_added: 16
+    total_tests: 3725
+    signals: []
+    notes: "_ast_detectors.py now at 348/350 — effectively frozen"
+  - part: b
+    timestamp: "2026-03-22T01:30:00Z"
+    status: Done
+    files_modified:
+      - src/skill_scan/_ast_ref_tracker.py
+      - src/skill_scan/ast_analyzer.py
+      - tests/unit/test_ref_tracker.py
+    tests_added: 21
+    total_tests: 3746
+    signals:
+      - "DEBT: build_ref_table output not yet consumed — wired in Parts C/D"
+    notes: "refine-and-confirm removed dead _ref_table assignment from analyze_python"
+  - part: c
+    timestamp: "2026-03-22T02:00:00Z"
+    status: Implemented
+    files_modified:
+      - src/skill_scan/_ast_dynamic_exec_detector.py
+      - src/skill_scan/ast_analyzer.py
+      - tests/unit/test_depth2_ref_detection.py
+    tests_added: 16
+    total_tests: 3762
+    signals: []
+    notes: "verify_group depth-2-3 — deferred verification until Part D completes Steps 1-2; _ast_dynamic_exec_detector.py at 232/350"
+  - part: d
+    timestamp: "2026-03-22T02:30:00Z"
+    status: Done
+    files_modified:
+      - src/skill_scan/_ast_dynamic_exec_detector.py
+      - src/skill_scan/_ast_dynamic_exec_depth3.py
+      - tests/unit/test_depth3_ref_detection.py
+    tests_added: 20
+    total_tests: 3782
+    signals: []
+    notes: "depth-3 helpers extracted to _ast_dynamic_exec_depth3.py; circular import eliminated by refine-and-confirm; grouped verify C+D PASSED 8/8"
+  - part: docs
+    timestamp: "2026-03-22T03:00:00Z"
+    status: Done
+    files_modified:
+      - CLAUDE.md
+      - README.md
+      - .agent/standards/CODE-PATTERNS.md
+    tests_added: 0
+    total_tests: 3782
+    signals: []
+    notes: "Updated Project Structure (2 new modules), Registration patterns (new ref_table / inline chain entries), detect_dynamic_exec signature, Known debt line counts; updated README.md AST feature list; added Parallel Pre-Pass Tables pattern to CODE-PATTERNS.md"
+evidence:
+  - type: manual_verification
+    command: "grep -n 'ref_table' CLAUDE.md | wc -l"
+    result: "ref_table appears in architecture notes, invariants, and known debt sections"
+  - type: manual_verification
+    command: "grep -n '_ast_ref_tracker' CLAUDE.md"
+    result: "New module entry in Project Structure and Registration patterns"
+  - type: manual_verification
+    command: "grep -n '_ast_dynamic_exec_depth3' CLAUDE.md"
+    result: "New module entry in Project Structure and Registration patterns"
 errors: []

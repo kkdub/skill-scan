@@ -1,0 +1,8 @@
+stopped_at: "docs"
+next_steps:
+  - Commit changes and open PR (all 4 implementation parts + docs complete; 3782 tests passing)
+  - Consider extracting a helper from _ast_detectors.py before any future PLAN touches it — it is at 349/350 lines
+active_signals:
+  - _INLINE_CHAIN_ATTRS is missing subprocess family names (call, run, Popen) — filed as improvement; depth-2 ref_table detection covers these cases
+  - build_ref_table tracks only simple single-assignment patterns — augmented assignment, tuple unpack, and walrus not tracked
+blockers: []
