@@ -220,6 +220,23 @@ _DECORATOR_RULE: dict[str, tuple[str, Severity, str]] = {
 
 _DANGEROUS_BASES = frozenset({"builtins", "__builtins__"})
 
+# Modules where dynamic attribute access is security-sensitive
+_SENSITIVE_MODULES = frozenset(
+    {
+        "os",
+        "sys",
+        "subprocess",
+        "shutil",
+        "socket",
+        "builtins",
+        "__builtins__",
+        "importlib",
+        "ctypes",
+        "code",
+        "codeop",
+    }
+)
+
 
 def _resolve_decorator_name(decorator: ast.expr, am: dict[str, str]) -> str | None:
     """Extract dangerous name from a decorator node, resolving aliases.

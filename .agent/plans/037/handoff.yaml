@@ -1,0 +1,9 @@
+stopped_at: null
+next_steps:
+  - "Run end-of-plan gates (9 gates) before merging to main"
+  - "Consider PLAN-038: module return value and function reference tracking (unlocked by PLAN-037)"
+active_signals:
+  - "DEBT: _ast_split_comprehension import ordering in ast_analyzer.py (pre-existing, not introduced by PLAN-037)"
+  - "Known FP: getattr(os.path, var) fires MEDIUM because _resolve_first_arg returns 'os' (intentional)"
+  - "Known FP: getattr(sys, var) fires MEDIUM — sys has benign attrs but is in _SENSITIVE_MODULES (intentional)"
+blockers: []

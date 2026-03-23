@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import ast
 
+from skill_scan._ast_dynamic_exec_detector import detect_dynamic_exec as detect_dynamic_exec
 from skill_scan._ast_exfil_detector import _detect_dns_exfil as _detect_dns_exfil
 from skill_scan._ast_exfil_detector import _detect_subprocess_list_exfil as _detect_subprocess_list_exfil
 from skill_scan._ast_imports import build_alias_map
@@ -54,6 +55,7 @@ def analyze_python(content: str, file_path: str) -> list[Finding]:
             )
         )
         findings.extend(detect_kwargs_unpacking(tree, file_path, alias_map, symbol_table, _nodes=all_nodes))
+        findings.extend(detect_dynamic_exec(tree, file_path, alias_map, symbol_table, _nodes=all_nodes))
         for node in all_nodes:
             if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef):
                 findings.extend(_detect_custom_rot13(node, file_path))
@@ -93,6 +95,7 @@ from skill_scan._ast_detectors import (  # noqa: E402
     _CATEGORY as _CATEGORY,
     _DANGEROUS_NAMES as _DANGEROUS_NAMES,
     _DECORATOR_RULE as _DECORATOR_RULE,
+    _SENSITIVE_MODULES as _SENSITIVE_MODULES,
     _RECOMMENDATIONS as _RECOMMENDATIONS,
     _UNSAFE_DESER_CALLS as _UNSAFE_DESER_CALLS,
     _UNSAFE_EXEC_CALLS as _UNSAFE_EXEC_CALLS,

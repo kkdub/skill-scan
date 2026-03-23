@@ -88,13 +88,13 @@ class TestDeduplication:
         line1 = [f for f in exec002 if f.line == 1]
         assert len(line1) == 1, f"Expected 1 EXEC-002 on line 1, got {len(line1)}"
 
-    def test_regex_finding_takes_priority(self, default_rules: list[Rule]) -> None:
-        """When both engines detect the same thing, the regex finding is kept."""
+    def test_ast_finding_takes_priority(self, default_rules: list[Rule]) -> None:
+        """When both engines detect the same thing, the AST finding is kept."""
         findings = _apply_rules("eval(data)\n", "tool.py", default_rules)
         exec002 = [f for f in filter_by_rule("EXEC-002", findings) if f.line == 1]
         assert len(exec002) == 1
-        # Regex findings do NOT contain "AST" in description
-        assert "AST" not in exec002[0].description
+        # AST findings contain "AST" in description and are preferred over regex
+        assert "AST" in exec002[0].description
 
 
 # ---------------------------------------------------------------------------
@@ -134,12 +134,12 @@ class TestDeduplicateHelper:
         merged = _deduplicate(regex, ast)
         assert len(merged) == 2
 
-    def test_overlap_keeps_regex(self) -> None:
+    def test_overlap_keeps_ast(self) -> None:
         regex = [make_finding(rule_id="R1", line=1, description="regex")]
         ast = [make_finding(rule_id="R1", line=1, description="ast")]
         merged = _deduplicate(regex, ast)
         assert len(merged) == 1
-        assert merged[0].description == "regex"
+        assert merged[0].description == "ast"
 
 
 # ---------------------------------------------------------------------------
