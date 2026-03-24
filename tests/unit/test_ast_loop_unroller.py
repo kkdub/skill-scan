@@ -11,7 +11,6 @@ and end-to-end corpus validation via analyze_python().
 from __future__ import annotations
 
 import ast
-from pathlib import Path
 
 from skill_scan._ast_loop_unroller import collect_loop_assigns
 from skill_scan.ast_analyzer import analyze_python
@@ -220,13 +219,18 @@ class TestLoopAssemblyEndToEnd:
 
 
 class TestCorpusLoopAssembly:
-    """Verify actual corpus file loop_assembly.py produces EXEC-002."""
+    """Inlined corpus: loop_assembly.py produces EXEC-002."""
 
-    _CORPUS = Path(__file__).resolve().parents[2] / "corpus" / "red-team" / "2026-03-17-full" / "exec-evasion"
+    _CORPUS_CODE = (
+        "chars = ['e', 'v', 'a', 'l']\n"
+        "name = ''\n"
+        "for c in chars:\n"
+        "    name += c\n"
+        "globals()[name](\"print('pwned')\")\n"
+    )
 
     def test_corpus_loop_assembly_produces_exec002(self) -> None:
         """R007: corpus loop_assembly.py produces EXEC-002 finding."""
-        code = (self._CORPUS / "loop_assembly.py").read_text()
-        findings = analyze_python(code, "loop_assembly.py")
+        findings = analyze_python(self._CORPUS_CODE, "loop_assembly.py")
         rule_ids = [f.rule_id for f in findings]
         assert "EXEC-002" in rule_ids

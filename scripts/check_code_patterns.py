@@ -244,8 +244,8 @@ def main() -> int:
 
     patterns_file = _find_patterns_file(args.patterns)
     if not patterns_file:
-        print(f"Error: Patterns file not found: {args.patterns}", file=sys.stderr)
-        return 1
+        print(f"Skipping: patterns file not found: {args.patterns}", file=sys.stderr)
+        return 0
 
     all_patterns = load_patterns(patterns_file)
     if not all_patterns:

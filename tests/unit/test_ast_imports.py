@@ -7,8 +7,6 @@ and star import expansion for known-dangerous modules.
 from __future__ import annotations
 
 import ast
-from pathlib import Path
-
 from skill_scan._ast_imports import build_alias_map
 from skill_scan.ast_analyzer import analyze_python
 
@@ -230,19 +228,10 @@ class TestStarImportEvasionDetection:
 
 
 class TestCorpusStarImportEvasion:
-    _CORPUS_PATH = (
-        Path(__file__).resolve().parents[2]
-        / "corpus"
-        / "red-team"
-        / "2026-03-17-full"
-        / "exec-evasion"
-        / "star_import_evasion.py"
-    )
+    _CORPUS_CODE = "from os import *\nsystem('echo pwned')\n"
 
     def test_corpus_star_import_produces_exec_finding(self) -> None:
-        assert self._CORPUS_PATH.exists(), f"Corpus file not found: {self._CORPUS_PATH}"
-        content = self._CORPUS_PATH.read_text(encoding="utf-8")
-        findings = analyze_python(content, str(self._CORPUS_PATH))
+        findings = analyze_python(self._CORPUS_CODE, "star_import_evasion.py")
         exec_findings = [f for f in findings if f.rule_id in ("EXEC-002", "EXEC-003")]
         assert len(exec_findings) >= 1, (
             f"Expected EXEC-002 or EXEC-003 finding, got: {[f.rule_id for f in findings]}"
