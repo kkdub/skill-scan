@@ -7,7 +7,6 @@ and tracked int-list variable resolution via int_list_table.
 from __future__ import annotations
 
 import ast
-from pathlib import Path
 
 
 from skill_scan._ast_split_detector import detect_split_evasion
@@ -190,13 +189,16 @@ class TestCorpusSplitMapLambda:
 
 
 class TestCorpusSplitMapLambdaFile:
-    """Verify actual corpus file split_map_lambda.py produces EXEC-002."""
+    """Inlined corpus: split_map_lambda.py produces EXEC-002."""
 
-    _CORPUS = Path(__file__).resolve().parents[2] / ("corpus/red-team/2026-03-17-full/split-kwargs-evasion")
+    _CORPUS_CODE = (
+        "codes = [101, 118, 97, 108]\n"
+        "name = ''.join(map(lambda c: chr(c), codes))\n"
+        "globals()[name](\"print('pwned')\")\n"
+    )
 
     def test_corpus_split_map_lambda(self) -> None:
         """R-EFF001: corpus split_map_lambda.py produces EXEC-002 finding."""
-        code = (self._CORPUS / "split_map_lambda.py").read_text()
-        findings = analyze_python(code, "split_map_lambda.py")
+        findings = analyze_python(self._CORPUS_CODE, "split_map_lambda.py")
         rule_ids = [f.rule_id for f in findings]
         assert "EXEC-002" in rule_ids

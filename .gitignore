@@ -47,9 +47,13 @@ Thumbs.db
 # MCP logs
 mcp_*.log
 
+# Internal dev tooling
+.agent/
+corpus/
+tools/
+.repomap*/
+.repomap/
+
 # Temporary
 *.tmp
 *.bak
-.claude/settings.local.json
-tools/repomap/.venv/
-tools/repomap/.repomap/index.json

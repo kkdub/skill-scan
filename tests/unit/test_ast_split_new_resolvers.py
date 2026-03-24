@@ -7,7 +7,6 @@ and corpus red-team verification for the three corresponding evasion vectors.
 from __future__ import annotations
 
 import ast
-import pathlib
 import unittest
 
 from skill_scan._ast_split_detector import detect_split_evasion
@@ -149,39 +148,32 @@ class TestAcceptanceScenariosNewResolvers:
 
 
 class TestCorpusRedTeam:
-    _SPLIT_DIR = (
-        pathlib.Path(__file__).resolve().parent.parent.parent
-        / "corpus"
-        / "red-team"
-        / "2026-03-17-full"
-        / "split-kwargs-evasion"
+    _FORMAT_KEYWORDS_CODE = (
+        "name = '{prefix}{suffix}'.format(prefix='ev', suffix='al')\nglobals()[name](\"print('pwned')\")\n"
     )
-    _EXEC_DIR = (
-        pathlib.Path(__file__).resolve().parent.parent.parent
-        / "corpus"
-        / "red-team"
-        / "2026-03-17-full"
-        / "exec-evasion"
+    _FORMAT_MAP_CODE = (
+        "template = '{a}{b}'\n"
+        "parts = {'a': 'ev', 'b': 'al'}\n"
+        "name = template.format_map(parts)\n"
+        "globals()[name](\"print('pwned')\")\n"
     )
+    _REVERSE_CODE = "backward = 'lave'\nname = backward[::-1]\nglobals()[name](\"print('pwned')\")\n"
 
     def test_corpus_split_format_keywords(self) -> None:
-        """Corpus split_format_keywords.py produces EXEC-002 finding."""
-        code = (self._SPLIT_DIR / "split_format_keywords.py").read_text()
-        findings = analyze_python(code, "split_format_keywords.py")
+        """Inlined corpus: split_format_keywords.py produces EXEC-002."""
+        findings = analyze_python(self._FORMAT_KEYWORDS_CODE, "split_format_keywords.py")
         exec002 = [f for f in findings if f.rule_id == "EXEC-002"]
         assert len(exec002) >= 1
 
     def test_corpus_format_map_evasion(self) -> None:
-        """Corpus format_map_evasion.py produces EXEC-002 finding."""
-        code = (self._EXEC_DIR / "format_map_evasion.py").read_text()
-        findings = analyze_python(code, "format_map_evasion.py")
+        """Inlined corpus: format_map_evasion.py produces EXEC-002."""
+        findings = analyze_python(self._FORMAT_MAP_CODE, "format_map_evasion.py")
         exec002 = [f for f in findings if f.rule_id == "EXEC-002"]
         assert len(exec002) >= 1
 
     def test_corpus_split_reverse(self) -> None:
-        """Corpus split_reverse.py produces EXEC-002 finding."""
-        code = (self._SPLIT_DIR / "split_reverse.py").read_text()
-        findings = analyze_python(code, "split_reverse.py")
+        """Inlined corpus: split_reverse.py produces EXEC-002."""
+        findings = analyze_python(self._REVERSE_CODE, "split_reverse.py")
         exec002 = [f for f in findings if f.rule_id == "EXEC-002"]
         assert len(exec002) >= 1
 
