@@ -6,7 +6,7 @@ Procedural rules are implemented directly in Python modules.
 
 To add a custom rule, copy a section from [template.toml](src/skill_scan/rules/template.toml) into a new `.toml` file or your `--config` file.
 
-**80 rules** across 9 categories.
+**91 rules** across 9 categories.
 
 ## Prompt Injection
 
@@ -46,6 +46,17 @@ To add a custom rule, copy a section from [template.toml](src/skill_scan/rules/t
 | PI-007 | medium | Script mixing — Cyrillic homoglyphs adjacent to Latin characters (potential homoglyph attack) | stable |
 | PI-008 | medium | Short base64 decode — inline base64-encoded payload in a decode call may hide instructions | stable |
 | PI-009 | medium | Script mixing — Greek homoglyphs adjacent to Latin characters (potential homoglyph attack) | stable |
+| PI-010 | critical | DAN persona — attempts to invoke 'Do Anything Now' jailbreak persona | stable |
+| PI-011 | critical | Goal hijacking — attempts to replace the agent's original task or objective | stable |
+| PI-012 | critical | Prompt exfiltration — attempts to extract the agent's system prompt or instructions | stable |
+| PI-013 | critical | Instruction override extensions — additional override phrases beyond PI-001 | stable |
+| PI-014 | critical | Role tag injection — injected LLM role delimiter tokens | stable |
+| PI-015 | critical | Refusal suppression — attempts to prevent the agent from refusing requests | stable |
+| PI-016 | critical | Fabricated policy assertions — false claims that safety policies have changed | stable |
+| PI-020 | high | Fuzzy instruction override — synonym-slot paraphrases of instruction override attempts | fuzzy |
+| PI-021 | high | Fuzzy goal hijacking — synonym-slot paraphrases of goal/task redefinition attempts | fuzzy |
+| PI-022 | high | Fuzzy prompt exfiltration — synonym-slot paraphrases of system prompt extraction attempts | fuzzy |
+| PI-030 | critical | Few-shot conversational attack — detected by _fewshot_pi.py | stable |
 
 ## Malicious Code
 

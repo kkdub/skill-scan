@@ -17,10 +17,15 @@ from dataclasses import replace
 from skill_scan.decoder import MAX_DECODE_DEPTH, decode_payload, extract_encoded_strings
 from skill_scan.models import Finding, Rule
 from skill_scan.normalizer import normalize_text
+from skill_scan.rules._context_heuristic import suppress_in_safe_context
+from skill_scan.rules._fewshot_pi import _fewshot_pi_findings
 from skill_scan.rules._multiline_pi import _multiline_pi_findings
 
 _MAX_MATCHED_TEXT = 200
 MAX_PAYLOADS_PER_FILE = 100
+
+# Structural PI detectors invoked after per-line scanning; order preserved for dedup.
+_STRUCTURAL_PI_DETECTORS = (_multiline_pi_findings, _fewshot_pi_findings)
 
 
 def match_line(
@@ -156,9 +161,9 @@ def _line_phase_findings(content: str, file_path: str, line_rules: list[Rule]) -
         findings.extend(_normalized_line_findings(line, line_num, file_path, line_rules, line_findings))
     pi_rules = [r for r in line_rules if r.category == "prompt-injection"]
     if pi_rules:
-        findings.extend(
-            _multiline_pi_findings(lines, file_path, pi_rules, findings, _make_finding, _is_excluded)
-        )
+        for _detector in _STRUCTURAL_PI_DETECTORS:
+            findings.extend(_detector(lines, file_path, pi_rules, findings, _make_finding, _is_excluded))
+    findings = suppress_in_safe_context(lines, findings)
     return findings
 
 

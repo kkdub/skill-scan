@@ -1,0 +1,193 @@
+# Jailbreak Prompt Injection Detection Rules
+# Category: prompt-injection
+# Signature rules PI-010 through PI-016, fuzzy PI-020 through PI-022, stub PI-030
+
+[rules.PI-010]
+severity = "critical"
+category = "prompt-injection"
+description = "DAN persona — attempts to invoke 'Do Anything Now' jailbreak persona"
+recommendation = "Remove or reject content invoking DAN or similar unrestricted personas"
+confidence = "stable"
+patterns = [
+  '(?i)you\s+are\s+DAN',
+  '(?i)DAN\s+mode\s+enabled',
+  '(?i)do\s+anything\s+now',
+  '(?i)freed\s+from\s+the\s+typical\s+confines',
+  '(?i)do\s+not\s+have\s+to\s+abide\s+by\s+the\s+rules'
+]
+exclude_patterns = [
+  '(?i)do\s+not\s+pretend\s+you\s+are\s+DAN',
+  '(?i)never\s+enable\s+DAN\s+mode',
+  '(?i)should\s+not\b.*\bDAN\s+mode'
+]
+path_exclude_patterns = ['tests?/', 'test_']
+
+[rules.PI-011]
+severity = "critical"
+category = "prompt-injection"
+description = "Goal hijacking — attempts to replace the agent's original task or objective"
+recommendation = "Remove or reject content that tries to redefine the agent's goal"
+confidence = "stable"
+patterns = [
+  '(?i)your\s+new\s+task\s+is',
+  '(?i)your\s+real\s+goal\s+is',
+  '(?i)your\s+true\s+purpose\s+is',
+  '(?i)forget\s+everything\s+and\b',
+  '(?i)your\s+new\s+objective\s+is'
+]
+exclude_patterns = [
+  '(?i)do\s+not\s+forget\s+everything',
+  '(?i)never\s+(?:set|assign)\s+a\s+new\s+task'
+]
+path_exclude_patterns = ['tests?/', 'test_']
+
+[rules.PI-012]
+severity = "critical"
+category = "prompt-injection"
+description = "Prompt exfiltration — attempts to extract the agent's system prompt or instructions"
+recommendation = "Remove or reject content that tries to extract system prompts"
+confidence = "stable"
+patterns = [
+  '(?i)repeat\s+your\s+system\s+prompt',
+  '(?i)what\s+are\s+your\s+instructions',
+  '(?i)show\s+me\s+your\s+prompt',
+  '(?i)reveal\s+your\s+system\s+message',
+  '(?i)output\s+your\s+initial\s+prompt',
+  '(?i)print\s+the\s+context\s+above'
+]
+exclude_patterns = [
+  '(?i)do\s+not\s+repeat\s+your\s+system\s+prompt',
+  '(?i)never\s+reveal\s+your\s+instructions'
+]
+path_exclude_patterns = ['tests?/', 'test_']
+
+[rules.PI-013]
+severity = "critical"
+category = "prompt-injection"
+description = "Instruction override extensions — additional override phrases beyond PI-001"
+recommendation = "Remove or reject content attempting to void or reset instructions"
+confidence = "stable"
+patterns = [
+  '(?i)discard\s+previous\s+context',
+  '(?i)reset\s+your\s+instructions',
+  '(?i)from\s+now\s+on\s+ignore',
+  '(?i)previous\s+instructions\s+are\s+void'
+]
+exclude_patterns = [
+  '(?i)do\s+not\s+discard\s+previous',
+  '(?i)never\s+reset\s+your\s+instructions'
+]
+path_exclude_patterns = ['tests?/', 'test_']
+
+[rules.PI-014]
+severity = "critical"
+category = "prompt-injection"
+description = "Role tag injection — injected LLM role delimiter tokens"
+recommendation = "Remove or reject content containing role delimiter tokens"
+confidence = "stable"
+patterns = [
+  '<\|system\|>',
+  '<\|user\|>',
+  '<\|assistant\|>',
+  '<\|think\|>',
+  '<\|tool\|>'
+]
+exclude_patterns = [
+  '(?i)example\s+of\s+role\s+tag',
+  '(?i)detect.*role\s+tag'
+]
+path_exclude_patterns = ['tests?/', 'test_']
+
+[rules.PI-015]
+severity = "critical"
+category = "prompt-injection"
+description = "Refusal suppression — attempts to prevent the agent from refusing requests"
+recommendation = "Remove or reject content that suppresses the agent's ability to refuse"
+confidence = "stable"
+patterns = [
+  "(?i)never\\s+say\\s+you\\s+can'?t",
+  '(?i)never\s+refuse\s+any\s+request',
+  '(?i)do\s+not\s+refuse\s+any\s+request',
+  '(?i)you\s+must\s+always\s+comply',
+  '(?i)you\s+cannot\s+decline'
+]
+exclude_patterns = [
+  '(?i)you\s+should\s+refuse',
+  '(?i)it\s+is\s+okay\s+to\s+decline'
+]
+path_exclude_patterns = ['tests?/', 'test_']
+
+[rules.PI-016]
+severity = "critical"
+category = "prompt-injection"
+description = "Fabricated policy assertions — false claims that safety policies have changed"
+recommendation = "Remove or reject content falsely claiming policy changes"
+confidence = "stable"
+patterns = [
+  '(?i)(?:normal\s+)?policies\s+have\s+been\s+replaced',
+  '(?i)content\s+policy\s+has\s+been\s+updated',
+  '(?i)safety\s+guidelines\s+have\s+been\s+lifted'
+]
+exclude_patterns = [
+  '(?i)do\s+not\s+claim\s+policies\s+have\s+been',
+  '(?i)policies\s+should\s+not\s+be\s+updated\s+without'
+]
+path_exclude_patterns = ['tests?/', 'test_']
+
+[rules.PI-020]
+severity = "high"
+category = "prompt-injection"
+description = "Fuzzy instruction override — synonym-slot paraphrases of instruction override attempts"
+recommendation = "Review and reject content that attempts to override instructions using varied phrasing"
+confidence = "fuzzy"
+patterns = [
+  '(?i)(ignore|disregard|forget|discard|override|bypass|skip|abandon|drop|dismiss)\s+(previous|earlier|prior|original|initial|system|all|your|existing|current)(\s+\w+)?\s+(instructions|rules|guidelines|constraints|directives|restrictions|safeguards|policies|limits|boundaries|programming)'
+]
+exclude_patterns = [
+  '(?i)do\s+not\s+(ignore|disregard|forget|discard|override|bypass|skip|abandon|drop|dismiss)',
+  '(?i)never\s+(ignore|disregard|forget|discard|override|bypass|skip|abandon|drop|dismiss)',
+  '(?i)should\s+not\s+(ignore|disregard|forget|discard|override|bypass|skip|abandon|drop|dismiss)'
+]
+path_exclude_patterns = ['tests?/', 'test_']
+
+[rules.PI-021]
+severity = "high"
+category = "prompt-injection"
+description = "Fuzzy goal hijacking — synonym-slot paraphrases of goal/task redefinition attempts"
+recommendation = "Review and reject content that attempts to redefine the agent's task using varied phrasing"
+confidence = "fuzzy"
+patterns = [
+  '(?i)(replace|change|update|switch|set|redefine|reassign)\s+(your|the|my)\s+(task|goal|purpose|objective|mission|role)'
+]
+exclude_patterns = [
+  '(?i)do\s+not\s+(replace|change|update|switch|set|redefine|reassign)',
+  '(?i)never\s+(replace|change|update|switch|set|redefine|reassign)',
+  '(?i)should\s+not\s+(replace|change|update|switch|set|redefine|reassign)'
+]
+path_exclude_patterns = ['tests?/', 'test_']
+
+[rules.PI-022]
+severity = "high"
+category = "prompt-injection"
+description = "Fuzzy prompt exfiltration — synonym-slot paraphrases of system prompt extraction attempts"
+recommendation = "Review and reject content that attempts to extract system prompts using varied phrasing"
+confidence = "fuzzy"
+patterns = [
+  '(?i)(repeat|reveal|show|display|output|print|expose|disclose|leak|share|reproduce|recite|divulge)\s+(your|the|my|its)?\s*(system\s+prompt|instructions|rules|guidelines|configuration|initial\s+prompt|hidden\s+prompt|system\s+message|original\s+instructions)'
+]
+exclude_patterns = [
+  '(?i)do\s+not\s+(repeat|reveal|show|display|output|print|expose|disclose|leak|share|reproduce|recite|divulge)',
+  '(?i)never\s+(repeat|reveal|show|display|output|print|expose|disclose|leak|share|reproduce|recite|divulge)',
+  '(?i)should\s+not\s+(repeat|reveal|show|display|output|print|expose|disclose|leak|share|reproduce|recite|divulge)'
+]
+path_exclude_patterns = ['tests?/', 'test_']
+
+[rules.PI-030]
+severity = "critical"
+category = "prompt-injection"
+description = "Few-shot conversational attack — detected by _fewshot_pi.py"
+recommendation = "Review content for multi-turn conversational patterns that manipulate agent behavior"
+confidence = "stable"
+patterns = []
+exclude_patterns = []
+path_exclude_patterns = ['tests?/', 'test_']
