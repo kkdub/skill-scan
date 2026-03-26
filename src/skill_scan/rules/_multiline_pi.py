@@ -28,10 +28,35 @@ def _multiline_pi_findings(
         for s in range(len(lines) - ws + 1):
             first = s + 1
             win = set(range(first, first + ws))
-            joined = " ".join(lines[s : s + ws])
+            window_lines = lines[s : s + ws]
+            joined = " ".join(window_lines)
+            line_lengths = [len(ln) for ln in window_lines]
             for r in pi_rules:
-                _scan_window_rule(r, joined, file_path, first, win, seen, out, make_finding, is_excluded)
+                _scan_window_rule(
+                    r,
+                    joined,
+                    file_path,
+                    first,
+                    win,
+                    line_lengths,
+                    seen,
+                    out,
+                    make_finding,
+                    is_excluded,
+                )
     return out
+
+
+def _match_line_num(match_start: int, first_line_num: int, line_lengths: list[int]) -> int:
+    """Map a char offset in the joined string to its 1-based source line."""
+    offset = 0
+    for i, length in enumerate(line_lengths):
+        # End of this line's region in the joined string (includes the trailing space)
+        end = offset + length
+        if match_start < end:
+            return first_line_num + i
+        offset = end + 1  # +1 for the space separator
+    return first_line_num + len(line_lengths) - 1
 
 
 def _scan_window_rule(
@@ -40,6 +65,7 @@ def _scan_window_rule(
     file_path: str,
     first_line_num: int,
     window_line_nums: set[int],
+    line_lengths: list[int],
     found_lines: dict[str, set[int]],
     results: list[Finding],
     make_finding: Callable[[Rule, str, int, re.Match[str]], Finding],
@@ -54,6 +80,7 @@ def _scan_window_rule(
     for pat in rule.patterns:
         m = pat.search(joined)
         if m:
-            results.append(make_finding(rule, file_path, first_line_num, m))
+            line_num = _match_line_num(m.start(), first_line_num, line_lengths)
+            results.append(make_finding(rule, file_path, line_num, m))
             found_lines.setdefault(rid, set()).update(window_line_nums)
             break

@@ -146,7 +146,11 @@ def _match_content_recursive(
         findings.extend(_normalized_file_findings(content, file_path, file_rules, file_findings))
 
     if _depth < MAX_DECODE_DEPTH:
-        findings.extend(_decoded_content_findings(content, file_path, rules, _depth))
+        decoded = _decoded_content_findings(content, file_path, rules, _depth)
+        if decoded:
+            lines = content.split("\n")
+            decoded = suppress_in_safe_context(lines, decoded)
+        findings.extend(decoded)
 
     return findings
 
