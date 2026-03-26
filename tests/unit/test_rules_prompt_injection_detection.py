@@ -5,14 +5,7 @@ from __future__ import annotations
 import pytest
 
 from skill_scan.models import Rule, Severity
-from skill_scan.rules import load_default_rules, match_line
-
-
-@pytest.fixture(scope="module")
-def pi_rules() -> list[Rule]:
-    """Load all prompt injection rules once for the test module."""
-    all_rules = load_default_rules()
-    return [r for r in all_rules if r.rule_id.startswith("PI-")]
+from skill_scan.rules import match_line
 
 
 class TestPI001DirectOverride:

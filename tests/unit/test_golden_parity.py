@@ -47,6 +47,7 @@ def fingerprint_set(result: ScanResult) -> frozenset[str]:
 EXPECTED_FINGERPRINTS: frozenset[str] = frozenset(
     {
         "PI-001:evil.md:3:critical",
+        "PI-020:evil.md:3:high",
         "EXEC-002:evil.md:5:critical",
         "JSEXEC-002:evil.md:5:critical",
         "EXEC-010:evil.md:5:high",
@@ -57,7 +58,7 @@ EXPECTED_FINGERPRINTS: frozenset[str] = frozenset(
 EXPECTED_VERDICT = Verdict.BLOCK
 EXPECTED_FILES_SCANNED = 2
 EXPECTED_FILES_SKIPPED = 0
-EXPECTED_COUNTS = {"critical": 3, "high": 2}
+EXPECTED_COUNTS = {"critical": 3, "high": 3}
 EXPECTED_SKILL_NAME = "golden-corpus"
 
 

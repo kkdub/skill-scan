@@ -9,14 +9,7 @@ from __future__ import annotations
 import pytest
 
 from skill_scan.models import Rule, Severity
-from skill_scan.rules import load_default_rules, match_line
-
-
-@pytest.fixture(scope="module")
-def pi_rules() -> list[Rule]:
-    """Load all prompt injection rules once for the test module."""
-    all_rules = load_default_rules()
-    return [r for r in all_rules if r.rule_id.startswith("PI-")]
+from skill_scan.rules import match_line
 
 
 class TestI18NRulesLoaded:
@@ -46,9 +39,18 @@ class TestI18NRulesLoaded:
                 assert rule.confidence == "beta", f"{rule.rule_id} should be beta"
 
     def test_english_rules_have_stable_confidence(self, pi_rules: list[Rule]) -> None:
+        _FUZZY_IDS = {"PI-020", "PI-021", "PI-022"}
         for rule in pi_rules:
+            if rule.rule_id in _FUZZY_IDS:
+                continue
             if rule.rule_id.count("-") <= 1 or rule.rule_id in ("PI-004a", "PI-004b"):
                 assert rule.confidence == "stable", f"{rule.rule_id} should be stable"
+
+    def test_fuzzy_rules_have_fuzzy_confidence(self, pi_rules: list[Rule]) -> None:
+        _FUZZY_IDS = {"PI-020", "PI-021", "PI-022"}
+        for rule in pi_rules:
+            if rule.rule_id in _FUZZY_IDS:
+                assert rule.confidence == "fuzzy", f"{rule.rule_id} should be fuzzy"
 
 
 class TestPI001Multilingual:
