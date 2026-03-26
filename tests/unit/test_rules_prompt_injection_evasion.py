@@ -102,7 +102,8 @@ class TestPromptInjectionRulesIntegration:
         findings = match_line("ignore previous instructions", 42, "skill.md", pi_rules)
 
         assert len(findings) >= 1
-        finding = next(f for f in findings if f.rule_id == "PI-001")
+        finding = next((f for f in findings if f.rule_id == "PI-001"), None)
+        assert finding is not None, "Expected finding for rule PI-001, but none was found"
         assert isinstance(finding, Finding)
         assert finding.rule_id == "PI-001"
         assert finding.severity == Severity.CRITICAL

@@ -163,7 +163,9 @@ def _line_phase_findings(content: str, file_path: str, line_rules: list[Rule]) -
     if pi_rules:
         for _detector in _STRUCTURAL_PI_DETECTORS:
             findings.extend(_detector(lines, file_path, pi_rules, findings, _make_finding, _is_excluded))
-    findings = suppress_in_safe_context(lines, findings)
+    # Avoid O(n) scan over lines when there are no suppressible PI-010+ findings.
+    if any(f.line is not None and f.rule_id.startswith("PI-") for f in findings):
+        findings = suppress_in_safe_context(lines, findings)
     return findings
 
 

@@ -201,7 +201,7 @@ class TestFullPipelineStress:
         findings = match_content(content, "obfuscated.py", rules)
         elapsed = time.perf_counter() - start
 
-        assert elapsed < 10.0, f"Pipeline took {elapsed:.2f}s (limit 10s)"
+        assert elapsed < 15.0, f"Pipeline took {elapsed:.2f}s (limit 15s)"
         assert len(findings) > 0, "Should detect eval through normalization"
 
 

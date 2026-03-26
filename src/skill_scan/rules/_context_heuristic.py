@@ -1,10 +1,13 @@
-"""Context heuristic suppression for documentation contexts.
+"""Context heuristic suppression for documentation-like contexts.
 
 Suppresses PI-010+ findings that occur inside markdown code fences or
-comment lines (# / //). Does NOT suppress PI-001..009 (R-IMP001 protection)
-or non-PI findings. Does NOT suppress findings in Python triple-quoted
-string literals -- only markdown code fences and comment markers are
-considered safe contexts.
+lines that look like comments (# / //), based solely on line prefixes.
+Does NOT suppress PI-001..009 (R-IMP001 protection) or non-PI findings.
+
+Note: This is a simple, line-based heuristic. It does not parse source code
+or detect Python triple-quoted string literals; any line whose stripped text
+begins with ``#`` or ``//`` will be treated as a comment-like context, even
+if it appears inside a string literal.
 """
 
 from __future__ import annotations

@@ -1,9 +1,8 @@
 """Tests for context heuristic suppression of PI findings in safe contexts.
 
 Tests verify that suppress_in_safe_context correctly filters PI-010+ findings
-when they occur inside markdown code fences, comment blocks, or docstrings,
-while preserving PI-001..009 findings (R-IMP001 protection) and not suppressing
-findings in Python triple-quoted string literals.
+when they occur inside markdown code fences or comment blocks,
+while preserving PI-001..009 findings (R-IMP001 protection).
 """
 
 from __future__ import annotations

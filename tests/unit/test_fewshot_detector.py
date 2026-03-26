@@ -19,7 +19,7 @@ def _pi030_rule() -> Rule:
     """Create a PI-030 rule with patterns=[] for few-shot detection."""
     return make_rule(
         rule_id="PI-030",
-        severity=Severity.HIGH,
+        severity=Severity.CRITICAL,
         category="prompt-injection",
         description="Few-shot prompt injection attack detected",
         recommendation="Remove conversational exchange patterns",
@@ -170,7 +170,7 @@ class TestFindingMetadata:
     def test_finding_has_correct_severity(self) -> None:
         findings = _run_detector(_TWO_PAIRS)
         assert len(findings) == 1
-        assert findings[0].severity == Severity.HIGH
+        assert findings[0].severity == Severity.CRITICAL
 
     def test_finding_file_path(self) -> None:
         findings = _run_detector(_TWO_PAIRS)
