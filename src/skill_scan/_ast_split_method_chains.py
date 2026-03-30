@@ -10,6 +10,7 @@ import ast
 
 from skill_scan._ast_split_format import _scoped_lookup
 from skill_scan._ast_split_resolve import (
+    _label_from_call_return,
     resolve_binop_chain,
     resolve_call,
     resolve_expr,
@@ -110,7 +111,8 @@ def _resolve_replace_chain(
     # Apply replacements left-to-right (first collected = innermost)
     for old_val, new_val in reversed(replacements):
         base = base.replace(old_val, new_val)
-    return (base, "split variable")
+    label = "call-return" if _label_from_call_return(cur, symbol_table, scope) else "split variable"
+    return (base, label)
 
 
 _CASE_METHODS = frozenset({"lower", "upper", "title", "swapcase", "capitalize", "casefold"})
@@ -150,4 +152,5 @@ def _resolve_case_method_chain(
         return None
     for method_name in reversed(methods):
         base = getattr(base, method_name)()
-    return (base, "split variable")
+    label = "call-return" if _label_from_call_return(cur, symbol_table, scope) else "split variable"
+    return (base, label)

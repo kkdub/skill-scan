@@ -14,12 +14,26 @@ from skill_scan._ast_split_format import _resolve_subscript_expr, _scoped_lookup
 _MAX_BINOP_DEPTH = 50
 
 
+def _joinedstr_has_call_return(node: ast.JoinedStr, st: dict[str, str], sc: str) -> bool:
+    """True when any f-string interpolation resolves via call-return tracking."""
+    return any(
+        isinstance(v, ast.FormattedValue)
+        and isinstance(v.value, ast.Call)
+        and resolve_call_return(v.value, st, sc) is not None
+        for v in node.values
+    )
+
+
 def _label_from_call_return(node: ast.expr, st: dict[str, str], sc: str) -> bool:
     """True when any leaf of *node* resolves via call-return tracking."""
     if isinstance(node, ast.Call):
         return resolve_call_return(node, st, sc) is not None
     if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
         return _label_from_call_return(node.left, st, sc) or _label_from_call_return(node.right, st, sc)
+    if isinstance(node, ast.Tuple):
+        return any(_label_from_call_return(e, st, sc) for e in node.elts)
+    if isinstance(node, ast.JoinedStr):
+        return _joinedstr_has_call_return(node, st, sc)
     return False
 
 
@@ -167,7 +181,10 @@ def resolve_percent_format(
 ) -> tuple[str, str] | None:
     """Resolve BinOp(Mod) %-format expressions. Registry-compatible wrapper."""
     result = _resolve_percent_format(node, symbol_table, scope)
-    return (result, "split variable") if result is not None else None
+    if result is None:
+        return None
+    label = "call-return" if _label_from_call_return(node.right, symbol_table, scope) else "split variable"
+    return (result, label)
 
 
 def resolve_call(

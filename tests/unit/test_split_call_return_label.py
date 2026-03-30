@@ -103,3 +103,67 @@ class TestMixedLeafCallReturn:
         findings = _detect(code)
         assert len(findings) == 1
         assert "call-return evasion" in findings[0].matched_text
+
+
+class TestPercentFormatCallReturnLabel:
+    """%-format expressions where RHS contains call-return leaves."""
+
+    def test_percent_format_call_return_single(self) -> None:
+        """'%s' % func() where func is tracked produces 'call-return evasion'."""
+        code = "def func(): return 'exec'\nx = '%s' % func()"
+        findings = _detect(code)
+        assert len(findings) == 1
+        assert "call-return evasion" in findings[0].matched_text
+
+    def test_percent_format_call_return_tuple(self) -> None:
+        """'%s%s' % (a(), b()) where both are tracked produces 'call-return evasion'."""
+        code = "def a(): return 'ex'\ndef b(): return 'ec'\nx = '%s%s' % (a(), b())"
+        findings = _detect(code)
+        assert len(findings) == 1
+        assert "call-return evasion" in findings[0].matched_text
+
+    def test_percent_format_plain_yields_split_variable(self) -> None:
+        """'%s%s' % (a, b) with plain variables produces 'split variable evasion'."""
+        code = "a = 'ex'\nb = 'ec'\nx = '%s%s' % (a, b)"
+        findings = _detect(code)
+        assert len(findings) == 1
+        assert "split variable evasion" in findings[0].matched_text
+        assert "call-return" not in findings[0].matched_text
+
+
+class TestReplaceChainCallReturnLabel:
+    """Replace chains where the base is a call-return expression."""
+
+    def test_replace_chain_on_call_return(self) -> None:
+        """func().replace('x', 'y') where func is tracked produces 'call-return evasion'."""
+        code = "def func(): return 'exxc'\nx = func().replace('xx', 'e')"
+        findings = _detect(code)
+        assert len(findings) == 1
+        assert "call-return evasion" in findings[0].matched_text
+
+    def test_replace_chain_plain_base(self) -> None:
+        """var.replace('x', 'y') with a plain variable produces 'split variable evasion'."""
+        code = "s = 'exXc'\nx = s.replace('X', 'e')"
+        findings = _detect(code)
+        assert len(findings) == 1
+        assert "split variable evasion" in findings[0].matched_text
+        assert "call-return" not in findings[0].matched_text
+
+
+class TestCaseMethodChainCallReturnLabel:
+    """Case method chains where the base is a call-return expression."""
+
+    def test_case_chain_on_call_return(self) -> None:
+        """func().upper() where func is tracked produces 'call-return evasion'."""
+        code = "def func(): return 'exec'\nx = func().upper()"
+        findings = _detect(code)
+        assert len(findings) == 1
+        assert "call-return evasion" in findings[0].matched_text
+
+    def test_case_chain_plain_base(self) -> None:
+        """var.lower() with a plain variable produces 'split variable evasion'."""
+        code = "s = 'EXEC'\nx = s.lower()"
+        findings = _detect(code)
+        assert len(findings) == 1
+        assert "split variable evasion" in findings[0].matched_text
+        assert "call-return" not in findings[0].matched_text
