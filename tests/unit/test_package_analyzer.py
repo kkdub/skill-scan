@@ -130,8 +130,18 @@ def test_classify_file_role_reference_marker_substring_vs_segment(
         'config_url = "https://example.com/payload"',
         "instruction_url = 'https://example.com/payload'",
         'manifest_url: "https://example.com/payload"',
+        '{"manifest_url": "https://example.com/payload"}',
+        "{'config_url': 'https://example.com/payload'}",
+        '"source": "https://evil.com/config.json"',
     ],
-    ids=["double-quoted-assign", "single-quoted-assign", "yaml-style"],
+    ids=[
+        "double-quoted-assign",
+        "single-quoted-assign",
+        "yaml-style",
+        "json-double-quoted-key",
+        "json-single-quoted-key",
+        "json-source-key",
+    ],
 )
 def test_analyze_text_content_detects_quoted_remote_source(content: str) -> None:
     signals = analyze_text_content("config/setup.toml", "config", content)

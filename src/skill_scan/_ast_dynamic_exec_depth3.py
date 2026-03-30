@@ -20,13 +20,17 @@ from __future__ import annotations
 
 import ast
 
-from skill_scan._ast_detectors import _DANGEROUS_NAMES, _UNSAFE_EXEC_CALLS, _make_finding
+from skill_scan._ast_detectors import (
+    _DANGEROUS_NAMES,
+    _INLINE_CHAIN_ATTRS as _EXEC_ATTR_NAMES,
+    _UNSAFE_EXEC_CALLS,
+    _make_finding,
+)
 from skill_scan._ast_exfil_detector import _SUBPROCESS_CALLS
 from skill_scan._ast_imports import get_call_name
 from skill_scan._ast_ref_tracker import RefEntry
 from skill_scan.models import Finding, Severity
 
-_EXEC_ATTR_NAMES: frozenset[str] = frozenset({"eval", "exec", "system", "popen"})
 _DANGEROUS_QUALIFIED: frozenset[str] = _UNSAFE_EXEC_CALLS | _SUBPROCESS_CALLS
 
 

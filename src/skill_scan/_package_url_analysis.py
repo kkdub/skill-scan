@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from urllib.parse import parse_qs, urlparse
 
+from skill_scan._package_text_patterns import REMOTE_SOURCE_RE as _REMOTE_SOURCE_RE
 from skill_scan._package_url_patterns import (
     ENCODED_VALUE_RE as _ENCODED_VALUE_RE,
     EXECUTION_CONTEXT_RE as _EXECUTION_CONTEXT_RE,
     PASTE_MARKERS as _PASTE_MARKERS,
     RAW_HOST_MARKERS as _RAW_HOST_MARKERS,
-    REMOTE_SOURCE_RE as _REMOTE_SOURCE_RE,
     SHORTENER_DOMAINS as _SHORTENER_DOMAINS,
     SUSPICIOUS_EXTENSIONS as _SUSPICIOUS_EXTENSIONS,
     SUSPICIOUS_QUERY_KEY_RE as _SUSPICIOUS_QUERY_KEY_RE,

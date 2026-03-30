@@ -8,9 +8,6 @@ URL_RE = re.compile(r"https?://[^\s<>()\"'`]+")
 EXECUTION_CONTEXT_RE = re.compile(
     r"(?is)\b(run|execute|install|bootstrap|download|fetch|load|source|invoke|curl|wget|iwr|irm)\b"
 )
-REMOTE_SOURCE_RE = re.compile(
-    r"(?is)(source|config[_-]?url|instruction[_-]?url|skill[_-]?url|manifest[_-]?url)\s*[:=]\s*https?://"
-)
 WEBHOOK_HINT_RE = re.compile(r"(?i)(webhook|callback|beacon|c2|exfil|collect)")
 SUSPICIOUS_QUERY_KEY_RE = re.compile(
     r"(?i)(token|secret|key|password|cookie|callback|webhook|beacon|session)"
