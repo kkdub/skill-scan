@@ -8,33 +8,15 @@ from __future__ import annotations
 
 import ast
 
+from skill_scan._ast_split_call_return import (
+    _joinedstr_has_call_return as _joinedstr_has_call_return,
+    _label_from_call_return as _label_from_call_return,
+    resolve_call_return as resolve_call_return,
+)
 from skill_scan._ast_split_chr import _resolve_chr_call
 from skill_scan._ast_split_format import _resolve_subscript_expr, _scoped_lookup
 
 _MAX_BINOP_DEPTH = 50
-
-
-def _joinedstr_has_call_return(node: ast.JoinedStr, st: dict[str, str], sc: str) -> bool:
-    """True when any f-string interpolation resolves via call-return tracking."""
-    return any(
-        isinstance(v, ast.FormattedValue)
-        and isinstance(v.value, ast.Call)
-        and resolve_call_return(v.value, st, sc) is not None
-        for v in node.values
-    )
-
-
-def _label_from_call_return(node: ast.expr, st: dict[str, str], sc: str) -> bool:
-    """True when any leaf of *node* resolves via call-return tracking."""
-    if isinstance(node, ast.Call):
-        return resolve_call_return(node, st, sc) is not None
-    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
-        return _label_from_call_return(node.left, st, sc) or _label_from_call_return(node.right, st, sc)
-    if isinstance(node, ast.Tuple):
-        return any(_label_from_call_return(e, st, sc) for e in node.elts)
-    if isinstance(node, ast.JoinedStr):
-        return _joinedstr_has_call_return(node, st, sc)
-    return False
 
 
 def resolve_binop_chain(
@@ -98,33 +80,6 @@ def resolve_fstring(
         else:
             return None
     return ("".join(parts), "call-return" if has_cr else "split variable")
-
-
-def resolve_call_return(
-    node: ast.Call,
-    symbol_table: dict[str, str],
-    scope: str,
-) -> str | None:
-    """Resolve a Call node via tracked return-value composite key."""
-    func = node.func
-    if isinstance(func, ast.Name):
-        # Try scoped key first (nested functions: outer.inner()), then bare
-        if scope:
-            scoped = symbol_table.get(f"{scope}.{func.id}()")
-            if scoped is not None:
-                return scoped
-        return symbol_table.get(f"{func.id}()")
-    if isinstance(func, ast.Attribute) and isinstance(func.value, ast.Name):
-        base, attr = func.value.id, func.attr
-        # Direct ClassName.method() lookup
-        direct_key = f"{base}.{attr}()"
-        if direct_key in symbol_table:
-            return symbol_table[direct_key]
-        # self/cls.method() -> look up as scope.method()
-        if scope and base in ("self", "cls"):
-            return symbol_table.get(f"{scope}.{attr}()")
-        return None
-    return None
 
 
 def _resolve_call_expr(node: ast.Call, st: dict[str, str], sc: str, am: dict[str, str] | None) -> str | None:

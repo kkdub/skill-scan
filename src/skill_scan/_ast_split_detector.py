@@ -26,7 +26,6 @@ from skill_scan._ast_split_resolve import (
 from skill_scan.models import Finding
 
 _INTROSPECTION_FUNCS = frozenset({"vars", "globals", "locals"})  # dynamic dispatch detection
-_Predicate = Callable[[ast.AST], bool]
 _Resolver = Callable[..., tuple[str, str] | None]
 
 
@@ -59,7 +58,7 @@ def _is_subscript(n: ast.AST) -> bool:
     return isinstance(n, ast.Subscript)
 
 
-_RESOLVERS: tuple[tuple[_Predicate, _Resolver], ...] = (
+_RESOLVERS = (
     (_is_binop_add, resolve_binop_chain),
     (_is_binop_mod, resolve_percent_format),
     (_is_fstr, resolve_fstring),
@@ -84,45 +83,63 @@ def detect_split_evasion(
     scope_map = _build_scope_map(tree)
     il_scope_map = _build_scope_map(tree, method_scope=True) if int_list_table else scope_map
     bytes_table = _build_bytes_table(tree)
+    consumed: set[int] = set()  # child nodes of matched parents — skip to avoid duplicates
     for node in _nodes if _nodes is not None else ast.walk(tree):
-        scope = scope_map.get(id(node), "")
-        # Dynamic dispatch via introspection subscripts
-        dd = _check_dynamic_dispatch(node, symbol_table, scope, file_path)
-        if dd is not None:
-            findings.append(dd)
+        if id(node) in consumed:
             continue
-        # bytes.fromhex() concat: (bytes.fromhex('XX') + ...).decode()
-        if isinstance(node, ast.Call):
-            fh = resolve_fromhex_concat(node, bytes_table, symbol_table)
-            if fh is not None:
-                finding = _check_dangerous(fh, file_path, node, label="split variable")
-                if finding is not None:
-                    findings.append(finding)
-                    continue
+        scope = scope_map.get(id(node), "")
         il_scope = il_scope_map.get(id(node), "")
-        pair = _try_resolve_split(
+        finding = _match_node(
             node,
             symbol_table,
             scope,
+            file_path,
             alias_map,
-            int_list_table=int_list_table,
-            int_list_scope=il_scope,
+            bytes_table,
+            int_list_table,
+            il_scope,
         )
-        if pair is None:
-            continue
-        resolved, label = pair
-        finding = _check_dangerous(resolved, file_path, node, label=label)
         if finding is not None:
             findings.append(finding)
+            consumed.update(id(c) for c in ast.walk(node))
     return findings
 
 
-def _build_scope_map(tree: ast.Module, *, method_scope: bool = False) -> dict[int, str]:
-    """Map node id -> scope name.
+def _match_node(
+    node: ast.AST,
+    symbol_table: dict[str, str],
+    scope: str,
+    file_path: str,
+    alias_map: dict[str, str],
+    bytes_table: dict[str, bytes],
+    int_list_table: dict[str, list[int]] | None,
+    il_scope: str,
+) -> Finding | None:
+    """Try all split-evasion matchers on a single node in priority order."""
+    dd = _check_dynamic_dispatch(node, symbol_table, scope, file_path)
+    if dd is not None:
+        return dd
+    if isinstance(node, ast.Call):
+        fh = resolve_fromhex_concat(node, bytes_table, symbol_table)
+        if fh is not None:
+            result = _check_dangerous(fh, file_path, node, label="split variable")
+            if result is not None:
+                return result
+    pair = _try_resolve_split(
+        node,
+        symbol_table,
+        scope,
+        alias_map,
+        int_list_table=int_list_table,
+        int_list_scope=il_scope,
+    )
+    if pair is not None:
+        return _check_dangerous(pair[0], file_path, node, label=pair[1])
+    return None
 
-    When *method_scope* is True, class methods get ``ClassName.method``
-    instead of just ``ClassName``, giving per-method granularity.
-    """
+
+def _build_scope_map(tree: ast.Module, *, method_scope: bool = False) -> dict[int, str]:
+    """Map node id -> scope name (method_scope gives per-method granularity)."""
     result: dict[int, str] = {}
     pairs: list[tuple[ast.AST, str]] = []
     for node in tree.body:
@@ -198,11 +215,7 @@ def _try_resolve_split(
     int_list_table: dict[str, list[int]] | None = None,
     int_list_scope: str = "",
 ) -> tuple[str, str] | None:
-    """Try each resolver; returns (resolved, label) or None.
-
-    Label is 'call-return' when resolution came from call-return tracking,
-    'split variable' otherwise.
-    """
+    """Try each resolver; returns (resolved, label) or None."""
     for pred, resolver in _RESOLVERS:
         if not pred(node):
             continue
@@ -210,7 +223,7 @@ def _try_resolve_split(
         if resolver is resolve_call:
             kw["int_list_table"] = int_list_table
             kw["int_list_scope"] = int_list_scope
-        result = resolver(node, symbol_table, scope, **kw)
+        result = resolver(node, symbol_table, scope, **kw)  # type: ignore[arg-type]
         if result is not None:
             return result
     return None

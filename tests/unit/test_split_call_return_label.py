@@ -135,8 +135,8 @@ class TestReplaceChainCallReturnLabel:
     """Replace chains where the base is a call-return expression."""
 
     def test_replace_chain_on_call_return(self) -> None:
-        """func().replace('x', 'y') where func is tracked produces 'call-return evasion'."""
-        code = "def func(): return 'exxc'\nx = func().replace('xx', 'e')"
+        """func().replace('X', 'e') where func is tracked produces 'call-return evasion'."""
+        code = "def func(): return 'exXc'\nx = func().replace('X', 'e')"
         findings = _detect(code)
         assert len(findings) == 1
         assert "call-return evasion" in findings[0].matched_text
