@@ -146,7 +146,7 @@ class TestResolveCallStillDispatches:
         node = tree.body
         assert isinstance(node, ast.Call)
         result = resolve_call(node, {}, "")
-        assert result == "eval"
+        assert result == ("eval", "split variable")
 
     def test_existing_format_map_tests_still_pass_e2e(self) -> None:
         """End-to-end: format_map detection still works through analyze_python."""
