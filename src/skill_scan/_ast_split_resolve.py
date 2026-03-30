@@ -1,14 +1,18 @@
 """AST split resolver -- expression resolution helpers for the split detector.
 
 Resolves Name, Attribute, Subscript, Call, f-string, BinOp(Add), .replace(),
-and case-method (.lower()/.upper()/etc.) chain expressions to string values
-via the symbol table.
+and case-method chain expressions to string values via the symbol table.
 """
 
 from __future__ import annotations
 
 import ast
 
+from skill_scan._ast_split_call_return import (
+    _joinedstr_has_call_return as _joinedstr_has_call_return,
+    _label_from_call_return as _label_from_call_return,
+    resolve_call_return as resolve_call_return,
+)
 from skill_scan._ast_split_chr import _resolve_chr_call
 from skill_scan._ast_split_format import _resolve_subscript_expr, _scoped_lookup
 
@@ -22,7 +26,7 @@ def resolve_binop_chain(
     *,
     _depth: int = 0,
     alias_map: dict[str, str] | None = None,
-) -> str | None:
+) -> tuple[str, str] | None:
     """Recursively resolve BinOp(Add) chains, bounded by _MAX_BINOP_DEPTH."""
     if _depth > _MAX_BINOP_DEPTH:
         return None
@@ -32,7 +36,8 @@ def resolve_binop_chain(
     right = resolve_operand(node.right, symbol_table, scope, _depth=_depth + 1, alias_map=alias_map)
     if right is None:
         return None
-    return left + right
+    label = "call-return" if _label_from_call_return(node, symbol_table, scope) else "split variable"
+    return (left + right, label)
 
 
 def resolve_operand(
@@ -45,7 +50,8 @@ def resolve_operand(
 ) -> str | None:
     """Resolve a single BinOp operand: nested BinOp, expr lookup, or Constant."""
     if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
-        return resolve_binop_chain(node, symbol_table, scope, _depth=_depth + 1, alias_map=alias_map)
+        result = resolve_binop_chain(node, symbol_table, scope, _depth=_depth + 1, alias_map=alias_map)
+        return result[0] if result is not None else None
     if isinstance(node, ast.Constant) and isinstance(node.value, str):
         return node.value
     return resolve_expr(node, symbol_table, scope, alias_map=alias_map)
@@ -57,9 +63,10 @@ def resolve_fstring(
     scope: str,
     *,
     alias_map: dict[str, str] | None = None,
-) -> str | None:
+) -> tuple[str, str] | None:
     """Resolve an f-string where all interpolated values are tracked variables."""
     parts: list[str] = []
+    has_cr = False
     for value in node.values:
         if isinstance(value, ast.Constant) and isinstance(value.value, str):
             parts.append(value.value)
@@ -68,43 +75,20 @@ def resolve_fstring(
             if resolved is None:
                 return None
             parts.append(resolved)
+            if isinstance(value.value, ast.Call):
+                has_cr = has_cr or resolve_call_return(value.value, symbol_table, scope) is not None
         else:
             return None
-    return "".join(parts)
+    return ("".join(parts), "call-return" if has_cr else "split variable")
 
 
-def resolve_call_return(
-    node: ast.Call,
-    symbol_table: dict[str, str],
-    scope: str,
-) -> str | None:
-    """Resolve a Call node to a string via tracked return-value composite key.
-
-    Looks up the function's return value in the symbol table using the
-    parentheses-suffix convention established by build_symbol_table():
-    - ``func()`` for plain function calls
-    - ``ClassName.method()`` for self/cls.method() or ClassName.method() calls
-    Returns None for unknown/untracked functions.
-    """
-    func = node.func
-    if isinstance(func, ast.Name):
-        # Try scoped key first (nested functions: outer.inner()), then bare
-        if scope:
-            scoped = symbol_table.get(f"{scope}.{func.id}()")
-            if scoped is not None:
-                return scoped
-        return symbol_table.get(f"{func.id}()")
-    if isinstance(func, ast.Attribute) and isinstance(func.value, ast.Name):
-        base, attr = func.value.id, func.attr
-        # Direct ClassName.method() lookup
-        direct_key = f"{base}.{attr}()"
-        if direct_key in symbol_table:
-            return symbol_table[direct_key]
-        # self/cls.method() -> look up as scope.method()
-        if scope and base in ("self", "cls"):
-            return symbol_table.get(f"{scope}.{attr}()")
-        return None
-    return None
+def _resolve_call_expr(node: ast.Call, st: dict[str, str], sc: str, am: dict[str, str] | None) -> str | None:
+    """Resolve a Call expression: chr(), bytes constructor, or call-return."""
+    cr = _resolve_chr_call(node)
+    if cr is not None:
+        return cr
+    br = resolve_bytes_constructor(node, am)
+    return br if br is not None else resolve_call_return(node, st, sc)
 
 
 def resolve_expr(
@@ -118,7 +102,6 @@ def resolve_expr(
         return _scoped_lookup(node.id, symbol_table, scope)
     if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name):
         base, attr = node.value.id, node.attr
-        # Only resolve self/cls.attr or ClassName.attr (not arbitrary obj.attr)
         key = f"{base}.{attr}"
         if key in symbol_table:
             return symbol_table[key]
@@ -126,21 +109,10 @@ def resolve_expr(
             return symbol_table.get(f"{scope}.{attr}")
         return None
     if isinstance(node, ast.Call):
-        chr_result = _resolve_chr_call(node)
-        if chr_result is not None:
-            return chr_result
-        bytes_result = resolve_bytes_constructor(node, alias_map)
-        if bytes_result is not None:
-            return bytes_result
-        return resolve_call_return(node, symbol_table, scope)
-    return _resolve_subscript_lookup(node, symbol_table, scope)
-
-
-def _resolve_subscript_lookup(node: ast.expr, symbol_table: dict[str, str], scope: str) -> str | None:
-    """Resolve ast.Subscript (string key or int index) via composite key lookup."""
-    if not isinstance(node, ast.Subscript):
-        return None
-    return _resolve_subscript_expr(node, symbol_table, scope)
+        return _resolve_call_expr(node, symbol_table, scope, alias_map)
+    if isinstance(node, ast.Subscript):
+        return _resolve_subscript_expr(node, symbol_table, scope)
+    return None
 
 
 def resolve_subscript(
@@ -149,9 +121,10 @@ def resolve_subscript(
     scope: str,
     *,
     alias_map: dict[str, str] | None = None,
-) -> str | None:
+) -> tuple[str, str] | None:
     """Resolve ast.Subscript (key lookup or slice). Registry-compatible wrapper."""
-    return _resolve_subscript_expr(node, symbol_table, scope)
+    result = _resolve_subscript_expr(node, symbol_table, scope)
+    return (result, "split variable") if result is not None else None
 
 
 def resolve_percent_format(
@@ -160,9 +133,13 @@ def resolve_percent_format(
     scope: str,
     *,
     alias_map: dict[str, str] | None = None,
-) -> str | None:
+) -> tuple[str, str] | None:
     """Resolve BinOp(Mod) %-format expressions. Registry-compatible wrapper."""
-    return _resolve_percent_format(node, symbol_table, scope)
+    result = _resolve_percent_format(node, symbol_table, scope)
+    if result is None:
+        return None
+    label = "call-return" if _label_from_call_return(node.right, symbol_table, scope) else "split variable"
+    return (result, label)
 
 
 def resolve_call(
@@ -173,11 +150,8 @@ def resolve_call(
     alias_map: dict[str, str] | None = None,
     int_list_table: dict[str, list[int]] | None = None,
     int_list_scope: str = "",
-) -> str | None:
-    """Resolve Call nodes: join, format, format_map, bytes, reduce, or call-return.
-
-    Registry-compatible wrapper that chains all Call sub-resolvers.
-    """
+) -> tuple[str, str] | None:
+    """Resolve Call nodes: join, format, format_map, bytes, reduce, or call-return."""
     am = alias_map or {}
     result = _resolve_join_call(
         node,
@@ -192,14 +166,15 @@ def resolve_call(
     if result is None:
         result = _resolve_format_map_call(node, symbol_table, scope)
     if result is not None:
-        return result
+        return (result, "split variable")
     bytes_result = resolve_bytes_constructor(node, am)
     if bytes_result is not None:
-        return bytes_result
+        return (bytes_result, "split variable")
     reduce_result = _resolve_reduce_concat(node, symbol_table, scope, alias_map=am)
     if reduce_result is not None:
-        return reduce_result
-    return resolve_call_return(node, symbol_table, scope)
+        return (reduce_result, "split variable")
+    cr = resolve_call_return(node, symbol_table, scope)
+    return (cr, "call-return") if cr is not None else None
 
 
 # re-export at BOTTOM -- Facade Re-export Pattern
@@ -207,7 +182,6 @@ from skill_scan._ast_split_bytes import resolve_bytes_constructor as resolve_byt
 from skill_scan._ast_split_format import (  # noqa: E402
     _resolve_format_call as _resolve_format_call,
     _resolve_percent_format as _resolve_percent_format,
-    _substitute_format as _substitute_format,
 )
 from skill_scan._ast_split_comprehension import _resolve_join_call as _resolve_join_call  # noqa: E402
 from skill_scan._ast_split_method_chains import (  # noqa: E402

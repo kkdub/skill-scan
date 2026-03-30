@@ -10,11 +10,15 @@ import ast
 
 from skill_scan._ast_split_format import _scoped_lookup
 from skill_scan._ast_split_resolve import (
+    _label_from_call_return,
     resolve_binop_chain,
     resolve_call,
     resolve_expr,
     resolve_fstring,
 )
+
+
+_MAX_CHAIN_DEPTH = 20
 
 
 def _is_replace_call(node: ast.expr) -> bool:
@@ -41,6 +45,26 @@ def _extract_replace_pair(call: ast.Call) -> tuple[str, str] | None:
     return None
 
 
+def _resolve_base_tuple(
+    node: ast.expr,
+    symbol_table: dict[str, str],
+    scope: str,
+    *,
+    alias_map: dict[str, str] | None = None,
+) -> tuple[str, str] | None:
+    """Try tuple-returning resolvers for base expression dispatch."""
+    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
+        return resolve_binop_chain(node, symbol_table, scope, alias_map=alias_map)
+    if isinstance(node, ast.JoinedStr):
+        return resolve_fstring(node, symbol_table, scope, alias_map=alias_map)
+    if _is_replace_call(node):
+        assert isinstance(node, ast.Call)  # narrowed by _is_replace_call
+        return _resolve_replace_chain(node, symbol_table, scope, alias_map=alias_map)
+    if isinstance(node, ast.Call):
+        return resolve_call(node, symbol_table, scope, alias_map=alias_map)
+    return None
+
+
 def _resolve_base_string(
     node: ast.expr,
     symbol_table: dict[str, str],
@@ -53,15 +77,9 @@ def _resolve_base_string(
         return node.value
     if isinstance(node, ast.Name):
         return _scoped_lookup(node.id, symbol_table, scope)
-    if isinstance(node, ast.BinOp) and isinstance(node.op, ast.Add):
-        return resolve_binop_chain(node, symbol_table, scope, alias_map=alias_map)
-    if isinstance(node, ast.JoinedStr):
-        return resolve_fstring(node, symbol_table, scope, alias_map=alias_map)
-    if _is_replace_call(node):
-        assert isinstance(node, ast.Call)  # narrowed by _is_replace_call
-        return _resolve_replace_chain(node, symbol_table, scope, alias_map=alias_map)
-    if isinstance(node, ast.Call):
-        return resolve_call(node, symbol_table, scope, alias_map=alias_map)
+    pair = _resolve_base_tuple(node, symbol_table, scope, alias_map=alias_map)
+    if pair is not None:
+        return pair[0]
     return resolve_expr(node, symbol_table, scope, alias_map=alias_map)
 
 
@@ -71,11 +89,11 @@ def _resolve_replace_chain(
     scope: str,
     *,
     alias_map: dict[str, str] | None = None,
-) -> str | None:
+) -> tuple[str, str] | None:
     """Resolve chained .replace(old, new) calls to a final string."""
     replacements: list[tuple[str, str]] = []
     cur: ast.expr = node
-    for _ in range(20):  # MAX_REPLACE_DEPTH
+    for _ in range(_MAX_CHAIN_DEPTH):
         if not _is_replace_call(cur):
             break
         assert isinstance(cur, ast.Call)  # narrowing for mypy
@@ -93,7 +111,8 @@ def _resolve_replace_chain(
     # Apply replacements left-to-right (first collected = innermost)
     for old_val, new_val in reversed(replacements):
         base = base.replace(old_val, new_val)
-    return base
+    label = "call-return" if _label_from_call_return(cur, symbol_table, scope) else "split variable"
+    return (base, label)
 
 
 _CASE_METHODS = frozenset({"lower", "upper", "title", "swapcase", "capitalize", "casefold"})
@@ -116,11 +135,11 @@ def _resolve_case_method_chain(
     scope: str,
     *,
     alias_map: dict[str, str] | None = None,
-) -> str | None:
+) -> tuple[str, str] | None:
     """Resolve chained .lower()/.upper()/etc. calls to a final string."""
     methods: list[str] = []
     cur: ast.expr = node
-    for _ in range(20):  # MAX_REPLACE_DEPTH
+    for _ in range(_MAX_CHAIN_DEPTH):
         if not _is_case_method(cur):
             break
         assert isinstance(cur, ast.Call) and isinstance(cur.func, ast.Attribute)
@@ -133,4 +152,5 @@ def _resolve_case_method_chain(
         return None
     for method_name in reversed(methods):
         base = getattr(base, method_name)()
-    return base
+    label = "call-return" if _label_from_call_return(cur, symbol_table, scope) else "split variable"
+    return (base, label)
