@@ -10,6 +10,7 @@ import ast
 import textwrap
 
 from skill_scan._ast_split_detector import detect_split_evasion
+from skill_scan._ast_split_method_chains import _resolve_base_string
 from skill_scan._ast_split_resolve import _resolve_replace_chain
 from skill_scan._ast_symbol_table import build_symbol_table
 from skill_scan.models import Finding
@@ -25,7 +26,7 @@ def _detect(code: str) -> list[Finding]:
     return detect_split_evasion(tree, _FILE, {}, st)
 
 
-def _resolve(code: str) -> str | None:
+def _resolve(code: str) -> tuple[str, str] | None:
     """Helper: extract the last assignment whose RHS is a .replace() call."""
     tree = _PARSE(code)
     st = build_symbol_table(tree)
@@ -48,11 +49,11 @@ class TestResolveReplaceChainDirect:
 
     def test_two_step_literal_base(self) -> None:
         result = _resolve("x = 'eXYl'.replace('X', 'va').replace('Y', '')")
-        assert result == "eval"
+        assert result == ("eval", "split variable")
 
     def test_three_step_literal_base(self) -> None:
         result = _resolve("x = 'abbc'.replace('a', 'e').replace('bb', 'xe').replace('c', 'c')")
-        assert result == "exec"
+        assert result == ("exec", "split variable")
 
     def test_variable_base_from_symbol_table(self) -> None:
         code = textwrap.dedent("""\
@@ -60,15 +61,15 @@ class TestResolveReplaceChainDirect:
             x = base.replace("ZZ", "st")
         """)
         result = _resolve(code)
-        assert result == "system"
+        assert result == ("system", "split variable")
 
     def test_single_replace_literal_base(self) -> None:
         result = _resolve("x = 'evXl'.replace('X', 'a')")
-        assert result == "eval"
+        assert result == ("eval", "split variable")
 
     def test_safe_replace_returns_safe_string(self) -> None:
         result = _resolve("x = 'hello'.replace('h', 'j')")
-        assert result == "jello"
+        assert result == ("jello", "split variable")
 
     def test_untracked_variable_returns_none(self) -> None:
         code = "x = unknown.replace('a', 'b')"
@@ -153,15 +154,45 @@ class TestReplaceChainEdgeCases:
     def test_empty_replace_args(self) -> None:
         """Replace with empty string args is valid Python."""
         result = _resolve("x = 'eval'.replace('', '')")
-        assert result == "eval"
+        assert result == ("eval", "split variable")
 
     def test_replace_chain_popen(self) -> None:
         """Builds 'popen' via replace chain."""
         result = _resolve("x = 'pXpen'.replace('X', 'o')")
-        assert result == "popen"
+        assert result == ("popen", "split variable")
 
     def test_replace_preserves_order(self) -> None:
         """Replacements apply left-to-right as in Python."""
         # First replace: 'aXc' -> 'abc', second: 'abc' -> 'axc'
         result = _resolve("x = 'aXc'.replace('X', 'b').replace('b', 'x')")
-        assert result == "axc"
+        assert result == ("axc", "split variable")
+
+
+class TestResolveBaseStringUnpacking:
+    """_resolve_base_string must unpack tuple returns from registry functions (Criterion 7)."""
+
+    def test_binop_base_returns_str(self) -> None:
+        """_resolve_base_string on BinOp base unpacks to str, not tuple."""
+        tree = _PARSE("'ev' + 'al'")
+        node = tree.body[0].value  # type: ignore[attr-defined]
+        assert isinstance(node, ast.BinOp)
+        result = _resolve_base_string(node, {}, "")
+        assert result == "eval"
+        assert isinstance(result, str)
+
+    def test_fstring_base_returns_str(self) -> None:
+        """_resolve_base_string on JoinedStr base unpacks to str, not tuple."""
+        tree = _PARSE("a = 'ev'\nb = 'al'\nc = f'{a}{b}'")
+        st = build_symbol_table(tree)
+        node = tree.body[2].value  # type: ignore[attr-defined]
+        result = _resolve_base_string(node, st, "")
+        assert result == "eval"
+        assert isinstance(result, str)
+
+    def test_call_base_returns_str(self) -> None:
+        """_resolve_base_string on Call base unpacks to str, not tuple."""
+        tree = _PARSE("''.join(['ev', 'al'])")
+        node = tree.body[0].value  # type: ignore[attr-defined]
+        result = _resolve_base_string(node, {}, "")
+        assert result == "eval"
+        assert isinstance(result, str)

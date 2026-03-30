@@ -19,7 +19,6 @@ from skill_scan._ast_split_resolve import (
     _resolve_replace_chain,
     resolve_binop_chain,
     resolve_call,
-    resolve_call_return,
     resolve_fstring,
     resolve_percent_format,
     resolve_subscript,
@@ -28,7 +27,7 @@ from skill_scan.models import Finding
 
 _INTROSPECTION_FUNCS = frozenset({"vars", "globals", "locals"})  # dynamic dispatch detection
 _Predicate = Callable[[ast.AST], bool]
-_Resolver = Callable[..., str | None]
+_Resolver = Callable[..., tuple[str, str] | None]
 
 
 def _is_binop_add(n: ast.AST) -> bool:
@@ -213,10 +212,5 @@ def _try_resolve_split(
             kw["int_list_scope"] = int_list_scope
         result = resolver(node, symbol_table, scope, **kw)
         if result is not None:
-            label = "split variable"
-            if isinstance(node, ast.Call):
-                cr = resolve_call_return(node, symbol_table, scope)
-                if cr == result:
-                    label = "call-return"
-            return result, label
+            return result
     return None
