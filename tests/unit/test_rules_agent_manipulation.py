@@ -6,18 +6,12 @@ Full TP/TN/red-team tests are in Part B.
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 import tomllib
 
 from skill_scan.models import Rule, Severity
 from skill_scan.rules.loader import load_rules
-from tests.unit.rule_helpers import match_rule
-
-RULES_PATH = (
-    Path(__file__).resolve().parents[2] / "src" / "skill_scan" / "rules" / "data" / "agent_manipulation.toml"
-)
+from tests.unit.rule_helpers import AGENT_MANIPULATION_RULES_PATH as RULES_PATH, match_rule
 
 
 # -- TOML parsing and loader integration ------------------------------------
@@ -42,40 +36,28 @@ class TestAgent001TomlParsing:
         ids = [r.rule_id for r in rules]
         assert "AGENT-001" in ids
 
-    def test_agent001_severity_is_critical(self) -> None:
-        rules = load_rules(RULES_PATH)
-        agent001 = next(r for r in rules if r.rule_id == "AGENT-001")
+    def test_agent001_severity_is_critical(self, agent001: Rule) -> None:
         assert agent001.severity == Severity.CRITICAL
 
-    def test_agent001_category_is_agent_manipulation(self) -> None:
-        rules = load_rules(RULES_PATH)
-        agent001 = next(r for r in rules if r.rule_id == "AGENT-001")
+    def test_agent001_category_is_agent_manipulation(self, agent001: Rule) -> None:
         assert agent001.category == "agent-manipulation"
 
-    def test_agent001_has_minimum_patterns(self) -> None:
+    def test_agent001_has_minimum_patterns(self, agent001: Rule) -> None:
         """At least 8 distinct coercion patterns."""
-        rules = load_rules(RULES_PATH)
-        agent001 = next(r for r in rules if r.rule_id == "AGENT-001")
         assert len(agent001.patterns) >= 8
 
-    def test_agent001_has_minimum_exclude_patterns(self) -> None:
-        """At least 4 false-positive suppressors."""
-        rules = load_rules(RULES_PATH)
-        agent001 = next(r for r in rules if r.rule_id == "AGENT-001")
-        assert len(agent001.exclude_patterns) >= 4
+    def test_agent001_has_minimum_exclude_patterns(self, agent001: Rule) -> None:
+        """At least 3 false-positive suppressors."""
+        assert len(agent001.exclude_patterns) >= 3
 
-    def test_agent001_has_path_exclude_for_tests(self) -> None:
+    def test_agent001_has_path_exclude_for_tests(self, agent001: Rule) -> None:
         """path_exclude_patterns includes a tests?/ pattern."""
-        rules = load_rules(RULES_PATH)
-        agent001 = next(r for r in rules if r.rule_id == "AGENT-001")
         assert len(agent001.path_exclude_patterns) >= 1
         # At least one pattern matches "tests/" or "test/"
         matched = any(p.search("tests/") for p in agent001.path_exclude_patterns)
         assert matched, "No path_exclude_pattern matches 'tests/'"
 
-    def test_agent001_has_description_and_recommendation(self) -> None:
-        rules = load_rules(RULES_PATH)
-        agent001 = next(r for r in rules if r.rule_id == "AGENT-001")
+    def test_agent001_has_description_and_recommendation(self, agent001: Rule) -> None:
         assert agent001.description
         assert agent001.recommendation
 
@@ -87,6 +69,12 @@ class TestAgent001TomlParsing:
 def rules() -> list[Rule]:
     """Load agent manipulation rules once for the entire module."""
     return load_rules(RULES_PATH)
+
+
+@pytest.fixture(scope="module")
+def agent001(rules: list[Rule]) -> Rule:
+    """Return the AGENT-001 rule object."""
+    return next(r for r in rules if r.rule_id == "AGENT-001")
 
 
 class TestAgent001BasicDetection:

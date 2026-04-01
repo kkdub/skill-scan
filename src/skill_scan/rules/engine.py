@@ -17,6 +17,7 @@ from dataclasses import replace
 from skill_scan.decoder import MAX_DECODE_DEPTH, decode_payload, extract_encoded_strings
 from skill_scan.models import Finding, Rule
 from skill_scan.normalizer import normalize_text
+from skill_scan.rules._agent_context_heuristic import suppress_agent_findings
 from skill_scan.rules._context_heuristic import suppress_in_safe_context
 from skill_scan.rules._fewshot_pi import _fewshot_pi_findings
 from skill_scan.rules._multiline_pi import _multiline_pi_findings
@@ -26,6 +27,10 @@ MAX_PAYLOADS_PER_FILE = 100
 
 # Structural PI detectors invoked after per-line scanning; order preserved for dedup.
 _STRUCTURAL_PI_DETECTORS = (_multiline_pi_findings, _fewshot_pi_findings)
+
+# Structural post-filter detectors invoked after PI structural detectors.
+# Each detector receives (lines, file_path, findings) and returns the filtered list.
+_STRUCTURAL_DETECTORS = (suppress_agent_findings,)
 
 
 def match_line(
@@ -167,6 +172,8 @@ def _line_phase_findings(content: str, file_path: str, line_rules: list[Rule]) -
     if pi_rules:
         for _detector in _STRUCTURAL_PI_DETECTORS:
             findings.extend(_detector(lines, file_path, pi_rules, findings, _make_finding, _is_excluded))
+    for _post_filter in _STRUCTURAL_DETECTORS:
+        findings = _post_filter(lines, file_path, findings)
     # Avoid O(n) scan over lines when there are no suppressible PI-010+ findings.
     if any(f.line is not None and f.rule_id.startswith("PI-") for f in findings):
         findings = suppress_in_safe_context(lines, findings)
