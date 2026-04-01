@@ -74,6 +74,7 @@ src/skill_scan/
   rules/_context_heuristic.py    # Context suppression: suppresses PI-010+ inside code fences/comments
   rules/data/obfuscation.toml    # OBFS-001..005 (OBFS-001, EXEC-011 have patterns=[]; AST-only)
   rules/data/prompt_injection_jailbreak.toml  # PI-010..016 signatures, PI-020..022 fuzzy, PI-030 stub
+  rules/data/agent_manipulation.toml          # AGENT-001 (file-write coercion; category=agent-manipulation)
 tests/                           # Mirrors src/ structure; unit/ for unit tests
 scripts/                         # Quality & analysis scripts
 .agent/                          # Plans, standards, workflow
@@ -92,6 +93,7 @@ For detailed module-level docs, see `.agent/ARCHITECTURE-REFERENCE.md`.
 - Tree-level detectors needing full symbol table go in `analyze_python()` directly
 - Table-driven configs (`_DANGEROUS_KWARGS`, `_CORRELATION_RULES`, `_SUBPROCESS_CALLS`, etc.) — extend by adding entries
 - New jailbreak TOML rules: add to `rules/data/prompt_injection_jailbreak.toml`; signatures use `confidence='stable'`, fuzzy synonym-slot patterns use `confidence='fuzzy'`; code-only detectors use `patterns=[]` stub (PI-030 pattern)
+- New `agent-manipulation` TOML rules: add to `rules/data/agent_manipulation.toml`; no `confidence` field needed (loader defaults to `stable`); field order: severity, category, description, recommendation, patterns, exclude_patterns, path_exclude_patterns
 
 **Critical invariants** (violating these causes silent bugs):
 - `_SHADOW` identity: always `existing is _SHADOW`, never `==` — because `_SHADOW == []` is True
