@@ -4,7 +4,7 @@ Security scanner for agent skills — detects prompt injection, malicious code, 
 
 ## Features
 
-- **77 detection rules** across 9 categories: prompt injection, malicious code, data exfiltration, credential exposure, supply chain, tool abuse, file safety, schema validation, and obfuscation
+- **78 detection rules** across 10 categories: prompt injection, malicious code, data exfiltration, credential exposure, supply chain, tool abuse, agent manipulation, file safety, schema validation, and obfuscation
 - **Multilingual prompt injection detection** — covers English, Arabic, Chinese, French, German, Japanese, Korean, Russian, and Spanish
 - **Local and remote scanning** — scan a directory on disk or fetch from GitHub
 - **Multiple output formats** — human-readable text, machine-readable JSON, or SARIF v2.1.0 for GitHub Code Scanning
@@ -159,6 +159,7 @@ The container runs as non-root user `scanner`. The scan target is mounted read-o
 | Credential Exposure | CRED-001 .. CRED-003 | Hardcoded API keys, plaintext passwords, secrets in LLM context |
 | Supply Chain | SC-001 .. SC-004 | Remote config fetching, unpinned dependencies, ClickFix social engineering |
 | Tool Abuse | TOOL-001 .. TOOL-003 | Destructive file ops, privilege escalation, dangerous command chaining |
+| Agent Manipulation | AGENT-001 | Natural-language coercion to write sensitive system files via agent tools |
 | File Safety | FS-001 .. FS-008 | Binary files, symlink escapes, size limits, encoding issues |
 | Schema Validation | SV-001 | Invalid SKILL.md frontmatter |
 | Obfuscation | OBFS-001 .. OBFS-005 | ROT13 encoding (AST), URL-encoded runs, double-encoding, unicode escape sequences |

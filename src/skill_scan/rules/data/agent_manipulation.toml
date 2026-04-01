@@ -1,0 +1,39 @@
+# Agent Manipulation Detection Rules
+# Category: agent-manipulation
+# Rules AGENT-001
+
+[rules.AGENT-001]
+severity = "critical"
+category = "agent-manipulation"
+description = "Natural-language coercion to write or modify sensitive system files -- shell configs, SSH keys, cron, systemd units, or CI pipelines"
+recommendation = "Remove instructions that direct agents to write to sensitive system files; use dedicated configuration management instead"
+patterns = [
+  '(?i)\b(?:write|save|overwrite|append)\b.{0,80}~/?\.\b(?:bashrc|zshrc|profile|bash_profile)\b',
+  '(?i)\b(?:write|save|overwrite|append)\b.{0,80}(?:authorized_keys|known_hosts)\b',
+  '(?i)\b(?:write|save|overwrite|append|create)\b.{0,80}\b(?:/etc/)?crontab\b',
+  '(?i)\b(?:write|save|overwrite|append|create)\b.{0,80}\.(?:service|timer)(?![\w.])',
+  '(?i)\b(?:write|save|overwrite|append|create)\b.{0,80}\.github/workflows/',
+  '(?i)\b(?:write_file|edit_file|fs_write)\b.{0,80}~/?\.\b(?:bashrc|zshrc|profile|bash_profile)\b',
+  '(?i)\b(?:write_file|edit_file|fs_write)\b.{0,80}(?:authorized_keys|known_hosts)\b',
+  '(?i)\b(?:write_file|edit_file|fs_write)\b.{0,80}\.(?:service|timer)(?![\w.])',
+  '(?i)\b(?:write|save|overwrite|append|create)\b.{0,80}/etc/systemd/',
+  '(?i)\b(?:write_file|edit_file|fs_write)\b.{0,80}\.github/workflows/',
+  '(?i)\b(?:write|save|overwrite|append|create)\b.{0,80}~/?\.\bssh/',
+  '(?i)\b(?:write_file|edit_file|fs_write)\b.{0,80}\bcrontab\b',
+  '(?i)\b(?:modify|update|replace|insert)\b.{0,80}~/?\.\b(?:bashrc|zshrc|profile|bash_profile)\b',
+  '(?i)\b(?:modify|update|replace|insert)\b.{0,80}(?:authorized_keys)\b',
+  '(?i)\b(?:modify|update|replace|insert)\b.{0,80}\.github/workflows/'
+]
+exclude_patterns = [
+  '(?i)\badd\s+to\s+your\b',
+  '(?i)\b(?:example|documentation|how\s+to|guide)\b',
+  '(?i)\bREADME\b',
+  '(?i)\bsetup\b.*\binstall\b',
+  '(?i)\binstall\b.*\bsetup\b',
+  '(?i)\banti-pattern\b',
+  '(?i)\btutorial\b',
+  '(?i)\btemplate\b'
+]
+path_exclude_patterns = [
+  'tests?/'
+]

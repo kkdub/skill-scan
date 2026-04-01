@@ -28,6 +28,7 @@ CATEGORY_DRIVER: dict[str, str] = {
     "supply-chain": "remote-bootstrap",
     "tool-abuse": "execution",
     "obfuscation": "stealth/obfuscation",
+    "agent-manipulation": "operator-manipulation",
 }
 
 IGNORED_CATEGORIES = frozenset({"analysis", "file-safety", "schema-validation"})
