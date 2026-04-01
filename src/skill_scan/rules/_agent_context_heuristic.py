@@ -105,7 +105,7 @@ def _keyword_position_signal(line_text: str, matched_text: str) -> bool:
 def _heading_proximity_signal(lines: list[str], finding_line: int) -> bool:
     """Return True if the nearest preceding ## or ### heading has a doc keyword."""
     # finding_line is 1-based; scan backwards from finding_line - 2 (0-based)
-    start_idx = finding_line - 2  # line above the finding, 0-based
+    start_idx = min(finding_line - 2, len(lines) - 1)  # clamp to last line
     end_idx = max(start_idx - _HEADING_PROXIMITY_LIMIT, -1)
 
     for idx in range(start_idx, end_idx, -1):
