@@ -5,23 +5,17 @@ Covers R002 (coercion patterns), R003 (exclude patterns), R005 (red-team evasion
 
 from __future__ import annotations
 
-from pathlib import Path
-
 import pytest
 
 from skill_scan.models import Rule
 from skill_scan.rules.loader import load_rules
-from tests.unit.rule_helpers import match_rule
-
-RULES_PATH = (
-    Path(__file__).resolve().parents[2] / "src" / "skill_scan" / "rules" / "data" / "agent_manipulation.toml"
-)
+from tests.unit.rule_helpers import AGENT_MANIPULATION_RULES_PATH, match_rule
 
 
 @pytest.fixture(scope="module")
 def rules() -> list[Rule]:
     """Load agent manipulation rules once for the entire module."""
-    return load_rules(RULES_PATH)
+    return load_rules(AGENT_MANIPULATION_RULES_PATH)
 
 
 # -- True Positives -----------------------------------------------------------
@@ -101,31 +95,25 @@ class TestAgent001TruePositives:
 
 
 class TestAgent001TrueNegatives:
-    """Verify AGENT-001 does NOT fire on benign documentation/instruction lines."""
+    """Verify AGENT-001 does NOT fire on benign lines.
+
+    Cases that relied on now-removed TOML exclude patterns (add-to-your,
+    example, documentation, README, how-to, guide, tutorial, template) have
+    been migrated to match_content-level tests in
+    test_agent_manipulation_structural.py, where they exercise the structural
+    post-filter with realistic file context instead.
+
+    Remaining cases here use TOML excludes still present (setup.*install,
+    install.*setup, anti-pattern) or don't match any AGENT-001 pattern at all.
+    """
 
     @pytest.mark.parametrize(
         "line",
         [
-            # "add to your" exclude — verb "save" + target "~/.bashrc" would match pattern 1
-            "add to your config: save the following to ~/.bashrc",
-            # "example" exclude — verb "save" + target "authorized_keys" would match pattern 2
-            "this is an example: save credentials to authorized_keys for testing",
-            # "documentation" exclude — verb "write" + target "~/.zshrc" would match pattern 1
-            "documentation: write the alias to ~/.zshrc for shell integration",
-            # "README" exclude — verb "overwrite" + target "~/.bashrc" would match pattern 1
-            "README: overwrite ~/.bashrc with the alias configuration below",
             # "setup" + "install" exclude — verb "save" + target "~/.profile" would match pattern 1
             "setup guide: install and save config to ~/.profile for shell",
             # "install" + "setup" exclude (reversed) — verb "write" + target "~/.zshrc" would match
             "install the tool, setup and write defaults to ~/.zshrc",
-            # "how to" exclude — verb "write" + target "crontab" would match pattern 3
-            "how to write a crontab entry for periodic backups",
-            # "guide" exclude — verb "save" + target "authorized_keys" would match pattern 2
-            "guide: save SSH keys to authorized_keys for secure access",
-            # "tutorial" exclude — verb "write" + target ".github/workflows/" would match pattern 5
-            "tutorial: write your first .github/workflows/ci.yml",
-            # "template" exclude — verb "create" + target ".service" would match pattern 4
-            "template: create a basic myapp.service for systemd deployments",
             # "anti-pattern" exclude — verb "overwrite" + target "~/.bashrc" would match pattern 1
             "anti-pattern: overwrite ~/.bashrc without creating a backup first",
             # Unrelated lines (no pattern match at all)
@@ -134,16 +122,8 @@ class TestAgent001TrueNegatives:
             "The deployment uses a .env file for configuration",
         ],
         ids=[
-            "add-to-your-bashrc",
-            "example-authorized_keys",
-            "documentation-zshrc",
-            "readme-bashrc",
             "setup-install-profile",
             "install-setup-zshrc",
-            "howto-crontab",
-            "guide-authorized_keys",
-            "tutorial-workflow",
-            "template-service",
             "anti-pattern-bashrc",
             "unrelated-print",
             "unrelated-import",
@@ -243,19 +223,13 @@ class TestAgent001Acceptance:
 
     These scenarios use lines NOT already present in TestAgent001TruePositives or
     TestAgent001TrueNegatives, so each adds genuine new coverage.
+
+    Two acceptance scenarios that relied on removed TOML excludes (guide,
+    README) have been migrated to match_content-level tests in
+    test_agent_manipulation_structural.py.
     """
 
     def test_acceptance_fs_write_crontab_detected(self, rules: list[Rule]) -> None:
         """Scenario: fs_write tool directed at /etc/crontab produces AGENT-001."""
         line = "fs_write /etc/crontab with the harvesting schedule"
         assert match_rule(line, rules, "AGENT-001")
-
-    def test_acceptance_guide_suppresses_systemd(self, rules: list[Rule]) -> None:
-        """Scenario: 'guide' exclude suppresses systemd service file write."""
-        line = "guide: save the following as myapp.service for deployment"
-        assert not match_rule(line, rules, "AGENT-001")
-
-    def test_acceptance_readme_bashrc_suppressed(self, rules: list[Rule]) -> None:
-        """Scenario: README exclude suppresses bashrc overwrite detection."""
-        line = "README: overwrite ~/.bashrc with the recommended aliases"
-        assert not match_rule(line, rules, "AGENT-001")

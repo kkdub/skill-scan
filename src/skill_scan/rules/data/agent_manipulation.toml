@@ -25,14 +25,9 @@ patterns = [
   '(?i)\b(?:modify|update|replace|insert)\b.{0,80}\.github/workflows/'
 ]
 exclude_patterns = [
-  '(?i)\badd\s+to\s+your\b',
-  '(?i)\b(?:example|documentation|how\s+to|guide)\b',
-  '(?i)\bREADME\b',
   '(?i)\bsetup\b.*\binstall\b',
   '(?i)\binstall\b.*\bsetup\b',
-  '(?i)\banti-pattern\b',
-  '(?i)\btutorial\b',
-  '(?i)\btemplate\b'
+  '(?i)\banti-pattern\b'
 ]
 path_exclude_patterns = [
   'tests?/'

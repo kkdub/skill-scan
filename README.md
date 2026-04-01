@@ -159,7 +159,7 @@ The container runs as non-root user `scanner`. The scan target is mounted read-o
 | Credential Exposure | CRED-001 .. CRED-003 | Hardcoded API keys, plaintext passwords, secrets in LLM context |
 | Supply Chain | SC-001 .. SC-004 | Remote config fetching, unpinned dependencies, ClickFix social engineering |
 | Tool Abuse | TOOL-001 .. TOOL-003 | Destructive file ops, privilege escalation, dangerous command chaining |
-| Agent Manipulation | AGENT-001 | Natural-language coercion to write sensitive system files via agent tools |
+| Agent Manipulation | AGENT-001 | Natural-language coercion to write sensitive system files via agent tools (`agent-manipulation` category); structural post-filter uses positional keyword analysis, code-fence awareness, heading proximity, and file-role gating to suppress false positives in documentation contexts |
 | File Safety | FS-001 .. FS-008 | Binary files, symlink escapes, size limits, encoding issues |
 | Schema Validation | SV-001 | Invalid SKILL.md frontmatter |
 | Obfuscation | OBFS-001 .. OBFS-005 | ROT13 encoding (AST), URL-encoded runs, double-encoding, unicode escape sequences |

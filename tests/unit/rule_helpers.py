@@ -3,10 +3,16 @@
 from __future__ import annotations
 
 import re
+from pathlib import Path
 
 from skill_scan.decoder import EncodedPayload
 from skill_scan.models import Finding, Rule, Severity
 from skill_scan.rules.engine import match_line
+
+# Path to the agent_manipulation TOML used by multiple test modules.
+AGENT_MANIPULATION_RULES_PATH = (
+    Path(__file__).resolve().parents[2] / "src" / "skill_scan" / "rules" / "data" / "agent_manipulation.toml"
+)
 
 
 def filter_by_rule(rule_id: str, findings: list[Finding]) -> list[Finding]:
@@ -56,3 +62,24 @@ def rule_findings(line: str, rules: list[Rule], rule_id: str) -> list[Finding]:
 def make_encoded_payload(text: str, encoding: str) -> EncodedPayload:
     """Construct an EncodedPayload with default line/offset for unit tests."""
     return EncodedPayload(encoded_text=text, encoding_type=encoding, line_num=1, start_offset=0)
+
+
+def make_agent_finding(
+    *,
+    line: int | None = 1,
+    matched_text: str = "write to ~/.bashrc",
+    category: str = "agent-manipulation",
+    rule_id: str = "AGENT-001",
+    file: str = "skill.md",
+) -> Finding:
+    """Helper to build an agent-manipulation Finding with sensible defaults."""
+    return Finding(
+        rule_id=rule_id,
+        severity=Severity.CRITICAL,
+        category=category,
+        file=file,
+        line=line,
+        matched_text=matched_text,
+        description="File-write coercion detected",
+        recommendation="Review intent",
+    )

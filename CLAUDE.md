@@ -72,6 +72,7 @@ src/skill_scan/
   rules/_multiline_pi.py         # Multiline PI scanning
   rules/_fewshot_pi.py           # Few-shot conversational attack detector (PI-030)
   rules/_context_heuristic.py    # Context suppression: suppresses PI-010+ inside code fences/comments
+  rules/_agent_context_heuristic.py  # AGENT-category post-filter: 4-signal scoring (keyword-position, code-fence, heading-proximity, file-role)
   rules/data/obfuscation.toml    # OBFS-001..005 (OBFS-001, EXEC-011 have patterns=[]; AST-only)
   rules/data/prompt_injection_jailbreak.toml  # PI-010..016 signatures, PI-020..022 fuzzy, PI-030 stub
   rules/data/agent_manipulation.toml          # AGENT-001 (file-write coercion; category=agent-manipulation)
@@ -90,6 +91,7 @@ For detailed module-level docs, see `.agent/ARCHITECTURE-REFERENCE.md`.
 - `_DETECTORS` tuple in `ast_analyzer.py` — node-level detectors (one finding per node)
 - `_RESOLVERS` tuple in `_ast_split_detector.py` — split-evasion string resolvers; each resolver must return `tuple[str, str] | None` (value, label)
 - `_STRUCTURAL_PI_DETECTORS` tuple in `engine.py` — structural PI detectors (full-content, callback injection pattern); add new PI detectors here alongside `_multiline_pi_findings` and `_fewshot_pi_findings`
+- `_STRUCTURAL_DETECTORS` tuple in `engine.py` — structural post-filter detectors invoked after PI structural detectors; callback signature: `(lines, file_path, findings) -> list[Finding]` (full typed form in invariants below); each detector handles its own category filtering
 - Tree-level detectors needing full symbol table go in `analyze_python()` directly
 - Table-driven configs (`_DANGEROUS_KWARGS`, `_CORRELATION_RULES`, `_SUBPROCESS_CALLS`, etc.) — extend by adding entries
 - New jailbreak TOML rules: add to `rules/data/prompt_injection_jailbreak.toml`; signatures use `confidence='stable'`, fuzzy synonym-slot patterns use `confidence='fuzzy'`; code-only detectors use `patterns=[]` stub (PI-030 pattern)
@@ -107,6 +109,8 @@ For detailed module-level docs, see `.agent/ARCHITECTURE-REFERENCE.md`.
 - `suppress_in_safe_context` in `_context_heuristic.py` only suppresses PI-010+ rules — PI-001..009 are intentionally unaffected (R-IMP001); normalized file-scope findings added after `_line_phase_findings` bypass this suppression (known debt)
 - Structural PI detector callback signature: `(lines, file_path, pi_rules, existing, make_finding, is_excluded) -> list[Finding]` — all detectors in `_STRUCTURAL_PI_DETECTORS` must use this exact signature
 - `_RESOLVERS` resolver contract: registry-facing resolvers return `tuple[str, str] | None` (value, label); internal helpers (`resolve_expr`, `resolve_operand`, `resolve_call_return`, `resolve_fromhex_concat`) keep `str | None`; label is `"call-return"` if any leaf resolved via `resolve_call_return`, `"split variable"` otherwise — `_label_from_call_return` in `_ast_split_resolve.py` is the predicate for this check
+- Dispatch order in `_line_phase_findings`: PI structural detectors (`_STRUCTURAL_PI_DETECTORS`) run first, then general structural post-filters (`_STRUCTURAL_DETECTORS`), then PI context suppression (`suppress_in_safe_context`) — do NOT reorder
+- `_STRUCTURAL_DETECTORS` callback signature: `(lines: list[str], file_path: str, findings: list[Finding]) -> list[Finding]` — all detectors in `_STRUCTURAL_DETECTORS` must use this exact signature; category filtering is internal to each detector
 
 ## Code Indexing
 
