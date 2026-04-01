@@ -139,7 +139,11 @@ def _should_suppress(
     """Evaluate 4 signals for a single AGENT finding and apply policy.
 
     Returns True when the finding should be suppressed (false positive).
+
+    Callers must ensure ``f.line is not None`` before invoking.
     """
+    assert f.line is not None
+
     in_fence = f.line in fence_set
 
     # Signal 2: code-fence (single-signal exception)
@@ -149,13 +153,13 @@ def _should_suppress(
     score = 0
 
     # Signal 1: keyword-position
-    line_idx = f.line - 1  # type: ignore[operator]  # 0-based
+    line_idx = f.line - 1  # 0-based
     if 0 <= line_idx < len(lines):
         if _keyword_position_signal(lines[line_idx], f.matched_text):
             score += 1
 
     # Signal 3: heading-proximity
-    if _heading_proximity_signal(lines, f.line):  # type: ignore[arg-type]
+    if _heading_proximity_signal(lines, f.line):
         score += 1
 
     # Signal 4: file-role
@@ -192,6 +196,10 @@ def suppress_agent_findings(
     """
     if not findings:
         return []
+
+    # Early return if no agent-manipulation findings to filter
+    if not any(f.category == "agent-manipulation" for f in findings):
+        return findings
 
     # Pre-compute once per file
     fence_set = _build_fence_line_set(lines)
