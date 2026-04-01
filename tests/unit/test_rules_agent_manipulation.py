@@ -1,7 +1,7 @@
 """Smoke tests for agent manipulation detection rule AGENT-001.
 
-Part a minimal tests: TOML parsing, loader integration, basic pattern matching.
-Full TP/TN/red-team tests are in Part b.
+Part A: minimal tests — TOML parsing, loader integration, basic pattern matching.
+Full TP/TN/red-team tests are in Part B.
 """
 
 from __future__ import annotations
@@ -118,6 +118,31 @@ class TestAgent001BasicDetection:
     )
     def test_allows_safe_content(self, rules: list[Rule], line: str) -> None:
         assert not match_rule(line, rules, "AGENT-001"), f"False positive for: {line}"
+
+
+# -- Integration: path exclusion in _apply_rules ------------------------------
+
+
+class TestAgent001PathExclusion:
+    """Verify _apply_rules actually skips AGENT-001 for files under tests/."""
+
+    def test_apply_rules_skips_tests_directory(self, rules: list[Rule]) -> None:
+        """_apply_rules returns no AGENT-001 findings for a tests/ path."""
+        from skill_scan.content_scanner import _apply_rules
+
+        coercion_line = "write the following to ~/.bashrc"
+        findings = _apply_rules(coercion_line, "tests/test_example.py", rules)
+        agent_findings = [f for f in findings if f.rule_id == "AGENT-001"]
+        assert agent_findings == [], "AGENT-001 should be excluded for tests/ paths"
+
+    def test_apply_rules_detects_outside_tests(self, rules: list[Rule]) -> None:
+        """_apply_rules returns AGENT-001 findings for non-test paths."""
+        from skill_scan.content_scanner import _apply_rules
+
+        coercion_line = "write the following to ~/.bashrc"
+        findings = _apply_rules(coercion_line, "skills/evil_skill/README.md", rules)
+        agent_findings = [f for f in findings if f.rule_id == "AGENT-001"]
+        assert len(agent_findings) >= 1, "AGENT-001 should fire outside tests/"
 
 
 # -- Field order follows tool_abuse.toml convention -------------------------
