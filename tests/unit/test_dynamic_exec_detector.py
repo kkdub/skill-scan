@@ -120,3 +120,95 @@ class TestSkipCases:
         # The matched_text from node-level includes the constant
         matched = [f for f in high_findings if "'system'" in (f.matched_text or "")]
         assert len(matched) == 1
+
+
+# ---------------------------------------------------------------------------
+# Helpers for EXEC-002 depth-2 detection
+# ---------------------------------------------------------------------------
+
+
+def _exec002_findings(code: str) -> list[Finding]:
+    """Return only EXEC-002 findings from analyze_python."""
+    return [f for f in analyze_python(code, "test.py") if f.rule_id == "EXEC-002"]
+
+
+# ---------------------------------------------------------------------------
+# Method-scoped depth-2 detection (Part B)
+# ---------------------------------------------------------------------------
+
+
+class TestMethodScopedDepth2:
+    """Depth-2 detection with method_scope=True in detect_dynamic_exec."""
+
+    def test_same_method_depth2_emits_exec002(self) -> None:
+        """Import + dangerous call in same method -> EXEC-002 CRITICAL."""
+        code = "class C:\n    def run(self):\n        m = __import__('os')\n        m.system('ls')\n"
+        findings = _exec002_findings(code)
+        critical = [f for f in findings if f.severity == Severity.CRITICAL]
+        assert len(critical) >= 1, "Same-method __import__ + .system() must emit EXEC-002 CRITICAL"
+
+    def test_cross_method_no_false_positive(self) -> None:
+        """os import in method a, json.loads in method b -> no EXEC-002 for b.
+
+        json.loads is not dangerous, and the os import is scoped to method a.
+        """
+        code = (
+            "class C:\n"
+            "    def a(self):\n"
+            "        m = __import__('os')\n"
+            "    def b(self):\n"
+            "        m = __import__('json')\n"
+            "        m.loads('{}')\n"
+        )
+        findings = _exec002_findings(code)
+        # json.loads is not dangerous -- no EXEC-002 expected
+        assert len(findings) == 0, f"json.loads() should not trigger EXEC-002, got {findings}"
+
+    def test_cross_method_same_varname_isolation(self) -> None:
+        """os import in method a, bare m.system in method b -> no cross-method leak.
+
+        Method b's m has no ref_table entry (no import there), so m.system()
+        should NOT resolve through method a's ref.
+        """
+        code = (
+            "class C:\n"
+            "    def a(self):\n"
+            "        m = __import__('os')\n"
+            "    def b(self):\n"
+            "        m.system('ls')\n"
+        )
+        findings = _exec002_findings(code)
+        # m in method b is unresolved -- should not pick up method a's import
+        assert len(findings) == 0, f"Cross-method variable should not leak ref_table entry, got {findings}"
+
+    def test_depth3_getattr_method_scoped(self) -> None:
+        """__import__ + getattr + call in same method -> EXEC-002 CRITICAL."""
+        code = (
+            "class C:\n"
+            "    def run(self):\n"
+            "        m = __import__('os')\n"
+            "        e = getattr(m, 'system')\n"
+            "        e('ls')\n"
+        )
+        findings = _exec002_findings(code)
+        critical = [f for f in findings if f.severity == Severity.CRITICAL]
+        assert len(critical) >= 1, "Depth-3 getattr chain must emit EXEC-002 CRITICAL"
+
+
+# ---------------------------------------------------------------------------
+# Rebinding suppresses EXEC-002 (Part B)
+# ---------------------------------------------------------------------------
+
+
+class TestRebindingSuppressesFinding:
+    """Rebinding with Call RHS clears ref_table, preventing false EXEC-002."""
+
+    def test_rebind_then_dangerous_call_no_finding(self) -> None:
+        """m = __import__('os'); m = SafeWrapper(); m.system('ls') -> no EXEC-002.
+
+        The Call reassignment deletes the ref_table entry for m, so the
+        subsequent m.system() call has no tracked module to resolve against.
+        """
+        code = "m = __import__('os')\nm = SafeWrapper()\nm.system('ls')\n"
+        findings = _exec002_findings(code)
+        assert len(findings) == 0, f"Rebinding should suppress EXEC-002, got {findings}"

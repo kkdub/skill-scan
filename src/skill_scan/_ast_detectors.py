@@ -92,17 +92,15 @@ def _detect_unsafe_calls(
     return []
 
 
-_IMPORT_CALL_NAMES = frozenset(
-    {"__import__", "importlib.import_module", "builtins.__import__", "__builtins__.__import__"},
-)
-
-
 def _detect_dynamic_imports(
     node: ast.AST, file_path: str, *, alias_map: dict[str, str] | None = None
 ) -> list[Finding]:
     """Detect __import__() and importlib.import_module()."""
     if not isinstance(node, ast.Call):
         return []
+
+    # Deferred import to avoid circular dependency
+    from skill_scan._ast_inline_chain_detector import _IMPORT_CALL_NAMES
 
     name = get_call_name(node, alias_map)
     if name in _IMPORT_CALL_NAMES:
@@ -287,39 +285,6 @@ def _detect_decorator_evasion(
                 )
             )
     return findings
-
-
-# Dangerous attrs for inline import chains (__import__('os').system())
-_INLINE_CHAIN_ATTRS = frozenset({"eval", "exec", "system", "popen"})
-
-
-def _detect_inline_import_chain(
-    node: ast.AST, file_path: str, *, alias_map: dict[str, str] | None = None
-) -> list[Finding]:
-    """Detect __import__('mod').dangerous() and importlib.import_module('mod').dangerous()."""
-    if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
-        return []
-    inner = node.func.value
-    if not isinstance(inner, ast.Call):
-        return []
-    attr = node.func.attr
-    if attr not in _INLINE_CHAIN_ATTRS:
-        return []
-    inner_name = get_call_name(inner, alias_map)
-    if inner_name not in _IMPORT_CALL_NAMES:
-        return []
-    arg0 = inner.args[0] if inner.args else None
-    mod = str(arg0.value) if isinstance(arg0, ast.Constant) and isinstance(arg0.value, str) else "?"
-    return [
-        _make_finding(
-            rule_id="EXEC-002",
-            severity=Severity.CRITICAL,
-            file=file_path,
-            line=node.lineno,
-            matched_text=f"{inner_name}('{mod}').{attr}(",
-            description=f"Inline import chain -- {inner_name}('{mod}').{attr}() detected via AST",
-        )
-    ]
 
 
 # ---------------------------------------------------------------------------

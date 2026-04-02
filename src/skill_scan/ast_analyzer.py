@@ -18,6 +18,11 @@ from skill_scan._ast_dynamic_exec_detector import detect_dynamic_exec as detect_
 from skill_scan._ast_exfil_detector import _detect_dns_exfil as _detect_dns_exfil
 from skill_scan._ast_exfil_detector import _detect_subprocess_list_exfil as _detect_subprocess_list_exfil
 from skill_scan._ast_imports import build_alias_map
+from skill_scan._ast_inline_chain_detector import (
+    _IMPORT_CALL_NAMES as _IMPORT_CALL_NAMES,
+    _INLINE_CHAIN_ATTRS as _INLINE_CHAIN_ATTRS,
+    _detect_inline_import_chain as _detect_inline_import_chain,
+)
 from skill_scan._ast_kwargs_detector import detect_kwargs_unpacking as detect_kwargs_unpacking
 from skill_scan._ast_loop_unroller import collect_loop_assigns as collect_loop_assigns
 from skill_scan._ast_ref_tracker import RefEntry as RefEntry
@@ -115,7 +120,6 @@ from skill_scan._ast_detectors import (  # noqa: E402
     _detect_decorator_evasion as _detect_decorator_evasion,
     _detect_dynamic_access as _detect_dynamic_access,
     _detect_dynamic_imports as _detect_dynamic_imports,
-    _detect_inline_import_chain as _detect_inline_import_chain,
     _detect_string_concat_evasion as _detect_string_concat_evasion,
     _detect_unsafe_calls as _detect_unsafe_calls,
     _detect_unsafe_deserialization as _detect_unsafe_deserialization,

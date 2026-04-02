@@ -54,6 +54,7 @@ src/skill_scan/
   _ast_kwargs_detector.py        # Kwargs unpacking detector (facade)
   _ast_kwargs_dict_tracker.py    # Dict-collection pre-pass
   _ast_exfil_detector.py         # Subprocess list-arg + DNS exfil
+  _ast_inline_chain_detector.py  # Inline import chain detector (_detect_inline_import_chain, _INLINE_CHAIN_ATTRS, _IMPORT_CALL_NAMES)
   _ast_dynamic_exec_detector.py  # Dynamic exec detector (depth 1-3)
   _ast_ref_tracker.py            # Ref-table pre-pass (RefEntry + build_ref_table)
   _ast_dynamic_exec_depth3.py    # Depth-3 detection helpers
@@ -102,8 +103,8 @@ For detailed module-level docs, see `.agent/ARCHITECTURE-REFERENCE.md`.
 - Bare `# noqa` does NOT suppress — security scanner requires explicit `# noqa: RULE-ID`
 - `_deduplicate()` in `content_scanner.py` prefers AST findings over regex for same `(rule_id, line)` — do not revert
 - `Finding()` directly for non-`malicious-code` categories — `_make_finding` hardcodes that category; ROT13 uses `obfuscation`, exfil uses `data-exfiltration`
-- `ref_table` (`dict[str, RefEntry]`) is parallel to `symbol_table` (`dict[str, str]`) — never merged; same scope-key convention, different value types
-- `ast.walk` BFS order: `detect_dynamic_exec` relies on Assign visited before sibling Call for `ref_table` population
+- `ref_table` (`dict[str, RefEntry]`) is parallel to `symbol_table` (`dict[str, str]`) — never merged; same scope-key convention, different value types; method-scoped keys have the form `ClassName.method.var` (from `method_scope=True` in `_build_scope_map`)
+- `build_ref_table` uses `_walk_body` (linear source-order walk), not `ast.walk` — source-order is required for last-assignment-wins rebinding; non-import `Call` assignments delete the existing ref_table entry for that scope key
 - Deferred imports in `_ast_symbol_table.py` break circular deps — don't reorganize without checking
 - `_process_nested` in `_ast_symbol_table.py`: recurses into inner bodies BEFORE routing nonlocal declarations — do NOT reorder
 - `suppress_in_safe_context` in `_context_heuristic.py` only suppresses PI-010+ rules — PI-001..009 are intentionally unaffected (R-IMP001); normalized file-scope findings added after `_line_phase_findings` bypass this suppression (known debt)
