@@ -36,7 +36,7 @@ class TestFrozenModuleHeadroom:
     _TARGETS: ClassVar[dict[str, int]] = {
         "_ast_split_resolve.py": 225,
         "_ast_rot13.py": 250,
-        "rules/engine.py": 265,
+        "rules/engine.py": 275,
         "_ast_imports.py": 160,
     }
 

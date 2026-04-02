@@ -81,7 +81,7 @@ class TestMultilinePIExtraction:
             pathlib.Path(__file__).resolve().parents[2] / "src" / "skill_scan" / "rules" / "engine.py"
         )
         line_count = len(engine_path.read_text(encoding="utf-8").splitlines())
-        assert line_count <= 265, f"engine.py has {line_count} lines, expected <=265"
+        assert line_count <= 275, f"engine.py has {line_count} lines, expected <=275"
 
     def test_multiline_pi_line_count(self) -> None:
         """_multiline_pi.py is <=100 lines."""

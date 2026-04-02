@@ -29,8 +29,9 @@ MAX_PAYLOADS_PER_FILE = 100
 # Structural PI detectors invoked after per-line scanning; order preserved for dedup.
 _STRUCTURAL_PI_DETECTORS = (_multiline_pi_findings, _fewshot_pi_findings)
 
-# Structural post-filter detectors invoked after PI structural detectors.
-# Each detector receives (lines, file_path, findings) and returns the filtered list.
+# Structural detectors invoked after PI structural detectors.
+# Each detector receives (lines, file_path, findings) and returns the resulting
+# findings list, which may be filtered and/or augmented with new findings.
 _STRUCTURAL_DETECTORS = (suppress_agent_findings, detect_compound_attack)
 
 
@@ -161,6 +162,17 @@ def _match_content_recursive(
     return findings
 
 
+def _gate_by_active_rules(findings: list[Finding], line_rules: list[Rule]) -> list[Finding]:
+    """Remove findings whose rule_id is not in the active rule set.
+
+    Structural detectors like ``detect_compound_attack`` emit findings
+    unconditionally; this filter enforces rule activation (suppress_rules,
+    path filtering) after the fact.
+    """
+    active_ids = {r.rule_id for r in line_rules}
+    return [f for f in findings if f.rule_id in active_ids]
+
+
 def _line_phase_findings(content: str, file_path: str, line_rules: list[Rule]) -> list[Finding]:
     """Run per-line and multiline (PI) matching for all line-scope rules."""
     lines = content.split("\n")
@@ -175,6 +187,7 @@ def _line_phase_findings(content: str, file_path: str, line_rules: list[Rule]) -
             findings.extend(_detector(lines, file_path, pi_rules, findings, _make_finding, _is_excluded))
     for _post_filter in _STRUCTURAL_DETECTORS:
         findings = _post_filter(lines, file_path, findings)
+    findings = _gate_by_active_rules(findings, line_rules)
     # Avoid O(n) scan over lines when there are no suppressible PI-010+ findings.
     if any(f.line is not None and f.rule_id.startswith("PI-") for f in findings):
         findings = suppress_in_safe_context(lines, findings)

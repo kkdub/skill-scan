@@ -115,20 +115,6 @@ def _stage_hits(lines: Sequence[str], start: int, end: int) -> frozenset[str]:
     return frozenset(matched)
 
 
-def _is_covered(
-    start: int,
-    hits: frozenset[str],
-    seen: set[tuple[int, frozenset[str]]],
-) -> bool:
-    """Return True if a prior finding already covers these stages nearby."""
-    for prev_start, prev_hits in seen:
-        if prev_start == start:
-            continue
-        if hits <= prev_hits and abs(prev_start - start) < _WINDOW_SIZE:
-            return True
-    return False
-
-
 def _make_agent006(file_path: str, start: int, hits: frozenset[str]) -> Finding:
     """Build an AGENT-006 finding for a compound attack window."""
     stages_label = " + ".join(sorted(hits))
@@ -149,29 +135,58 @@ def _make_agent006(file_path: str, start: int, hits: frozenset[str]) -> Finding:
     )
 
 
+def _sliding_window_candidates(line_hits: list[frozenset[str]], n: int) -> list[tuple[int, frozenset[str]]]:
+    """Two-pointer sliding window — collect positions with 2+ stage hits."""
+    candidates: list[tuple[int, frozenset[str]]] = []
+    stage_counts: dict[str, int] = {}
+    end = 0
+
+    for start in range(n):
+        target_end = min(start + _WINDOW_SIZE, n)
+        while end < target_end:
+            for stage in line_hits[end]:
+                stage_counts[stage] = stage_counts.get(stage, 0) + 1
+            end += 1
+
+        hits = frozenset(s for s, c in stage_counts.items() if c > 0)
+        if len(hits) >= 2:
+            candidates.append((start, hits))
+
+        for stage in line_hits[start]:
+            stage_counts[stage] -= 1
+            if stage_counts[stage] == 0:
+                del stage_counts[stage]
+
+    return candidates
+
+
+def _deduplicate_candidates(
+    candidates: list[tuple[int, frozenset[str]]],
+) -> list[tuple[int, frozenset[str]]]:
+    """Remove subset windows within proximity of a superset."""
+    keep: list[tuple[int, frozenset[str]]] = []
+    for start, hits in candidates:
+        keep = [(ps, ph) for ps, ph in keep if not (ph < hits and abs(ps - start) < _WINDOW_SIZE)]
+        if any(hits <= ph and abs(start - ps) < _WINDOW_SIZE for ps, ph in keep):
+            continue
+        keep.append((start, hits))
+    return keep
+
+
 def _compound_findings(lines: list[str], file_path: str) -> list[Finding]:
-    """Slide a window over *lines* and emit AGENT-006 for 2+ stage hits."""
+    """Slide a window over *lines* and emit AGENT-006 for 2+ stage hits.
+
+    Uses precomputed per-line stage flags with a two-pointer sliding window
+    for O(n) scanning, then deduplicates subset windows in a second pass.
+    """
     n = len(lines)
     if n == 0:
         return []
 
-    new_findings: list[Finding] = []
-    seen: set[tuple[int, frozenset[str]]] = set()
-
-    for start in range(n):
-        end = min(start + _WINDOW_SIZE, n)
-        hits = _stage_hits(lines, start, end)
-        if len(hits) < 2:
-            continue
-
-        seen.add((start, hits))
-
-        if _is_covered(start, hits, seen):
-            continue
-
-        new_findings.append(_make_agent006(file_path, start, hits))
-
-    return new_findings
+    line_hits = [_stage_hits(lines, i, i + 1) for i in range(n)]
+    candidates = _sliding_window_candidates(line_hits, n)
+    keep = _deduplicate_candidates(candidates)
+    return [_make_agent006(file_path, start, hits) for start, hits in keep]
 
 
 # ---------------------------------------------------------------------------

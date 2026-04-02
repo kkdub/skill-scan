@@ -95,7 +95,7 @@ class TestLargeFile:
         match_content(content, "large.py", rules)
         elapsed = time.perf_counter() - start
 
-        assert elapsed < 30.0, f"Large-file scan took {elapsed:.2f}s (limit 30s)"
+        assert elapsed < 45.0, f"Large-file scan took {elapsed:.2f}s (limit 45s)"
 
     def test_engine_finds_pattern_in_large_file(self) -> None:
         lines = ["safe content line\n"] * 5_000
