@@ -8,6 +8,7 @@ Scope keys follow the same convention as ``build_symbol_table``:
 - Module-level: bare name (e.g. ``m``)
 - Function-scoped: ``funcname.varname`` (e.g. ``foo.m``)
 - Class body: ``ClassName.varname``
+- Method-scoped: ``ClassName.method.varname`` (e.g. ``MyClass.run.m``)
 """
 
 from __future__ import annotations
@@ -43,7 +44,8 @@ def _sub_bodies(node: ast.stmt) -> list[list[ast.stmt]]:
     if isinstance(node, ast.If | ast.For | ast.While | ast.AsyncFor):
         return [node.body, node.orelse]
     if isinstance(node, ast.Try):
-        return [node.body, node.orelse, node.finalbody, *[h.body for h in node.handlers]]
+        handler_bodies = [h.body for h in node.handlers]
+        return [node.body, *handler_bodies, node.orelse, node.finalbody]
     return []
 
 
