@@ -241,7 +241,7 @@ def detect_dynamic_exec(
     ``_track_func_ref`` and ``_track_getattr_ref``).  Callers that need an
     unmodified copy should pass ``dict(ref_table)`` instead.
     """
-    scope_map = _build_scope_map(tree)
+    scope_map = _build_scope_map(tree, method_scope=True)
     nodes = _nodes if _nodes is not None else list(ast.walk(tree))
     findings: list[Finding] = []
 

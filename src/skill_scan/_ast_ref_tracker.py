@@ -16,7 +16,7 @@ import ast
 from dataclasses import dataclass
 from typing import Literal
 
-from skill_scan._ast_detectors import _IMPORT_CALL_NAMES
+from skill_scan._ast_inline_chain_detector import _IMPORT_CALL_NAMES
 from skill_scan._ast_imports import get_call_name
 from skill_scan._ast_split_detector import _build_scope_map
 
@@ -36,6 +36,57 @@ class RefEntry:
     resolved: str
 
 
+def _sub_bodies(node: ast.stmt) -> list[list[ast.stmt]]:
+    """Return the sub-bodies of a compound statement for recursive walking."""
+    if isinstance(node, ast.FunctionDef | ast.AsyncFunctionDef | ast.ClassDef | ast.With | ast.AsyncWith):
+        return [node.body]
+    if isinstance(node, ast.If | ast.For | ast.While | ast.AsyncFor):
+        return [node.body, node.orelse]
+    if isinstance(node, ast.Try):
+        return [node.body, node.orelse, node.finalbody, *[h.body for h in node.handlers]]
+    return []
+
+
+def _process_assign(
+    node: ast.Assign,
+    scope_map: dict[int, str],
+    alias_map: dict[str, str],
+    result: dict[str, RefEntry],
+) -> None:
+    """Process a single Assign node for ref_table tracking."""
+    if len(node.targets) != 1 or not isinstance(node.targets[0], ast.Name):
+        return
+    if not isinstance(node.value, ast.Call):
+        return
+    scope = scope_map.get(id(node), "")
+    key = f"{scope}.{node.targets[0].id}" if scope else node.targets[0].id
+    entry = _try_extract_import(node.value, alias_map)
+    if entry is not None:
+        result[key] = entry
+    elif key in result:
+        del result[key]
+
+
+def _walk_body(
+    body: list[ast.stmt],
+    scope_map: dict[int, str],
+    alias_map: dict[str, str],
+    result: dict[str, RefEntry],
+) -> None:
+    """Walk statement bodies in source order, tracking import assignments.
+
+    Recurses into function/class definitions and compound statements
+    (if/for/while/try/with) to visit nested assignments.
+    """
+    for node in body:
+        children = _sub_bodies(node)
+        if children:
+            for child in children:
+                _walk_body(child, scope_map, alias_map, result)
+        elif isinstance(node, ast.Assign):
+            _process_assign(node, scope_map, alias_map, result)
+
+
 def build_ref_table(
     tree: ast.Module,
     alias_map: dict[str, str],
@@ -50,28 +101,9 @@ def build_ref_table(
 
     Returns a dict with scope-aware keys (e.g. ``'foo.m'`` for function-scoped).
     """
-    scope_map = _build_scope_map(tree)
+    scope_map = _build_scope_map(tree, method_scope=True)
     result: dict[str, RefEntry] = {}
-
-    for node in ast.walk(tree):
-        if not isinstance(node, ast.Assign):
-            continue
-        if len(node.targets) != 1:
-            continue
-        target = node.targets[0]
-        if not isinstance(target, ast.Name):
-            continue
-        if not isinstance(node.value, ast.Call):
-            continue
-
-        entry = _try_extract_import(node.value, alias_map)
-        if entry is None:
-            continue
-
-        scope = scope_map.get(id(node), "")
-        key = f"{scope}.{target.id}" if scope else target.id
-        result[key] = entry
-
+    _walk_body(tree.body, scope_map, alias_map, result)
     return result
 
 

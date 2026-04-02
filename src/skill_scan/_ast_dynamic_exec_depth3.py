@@ -22,7 +22,6 @@ import ast
 
 from skill_scan._ast_detectors import (
     _DANGEROUS_NAMES,
-    _INLINE_CHAIN_ATTRS as _EXEC_ATTR_NAMES,
     _UNSAFE_EXEC_CALLS,
     _make_finding,
 )
@@ -32,6 +31,11 @@ from skill_scan._ast_ref_tracker import RefEntry
 from skill_scan.models import Finding, Severity
 
 _DANGEROUS_QUALIFIED: frozenset[str] = _UNSAFE_EXEC_CALLS | _SUBPROCESS_CALLS
+
+# Original 4 dangerous attr names for depth-3 fast path.
+# Intentionally separate from _INLINE_CHAIN_ATTRS (which includes subprocess
+# family) to avoid false positives (e.g. json.call() -> EXEC-002).
+_EXEC_FAST_ATTRS = frozenset({"eval", "exec", "system", "popen"})
 
 
 def _ref_lookup(
@@ -49,7 +53,7 @@ def _ref_lookup(
 
 def _is_dangerous_ref_attr(module: str, attr: str) -> bool:
     """Check if module.attr is a dangerous execution target."""
-    if attr in _EXEC_ATTR_NAMES:
+    if attr in _EXEC_FAST_ATTRS:
         return True
     return f"{module}.{attr}" in _DANGEROUS_QUALIFIED
 

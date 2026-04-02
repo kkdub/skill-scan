@@ -1,18 +1,4 @@
-"""Tests for ref_table pre-pass infrastructure (build_ref_table + RefEntry).
-
-Tests cover:
-- RefEntry dataclass structure (frozen, slots)
-- build_ref_table recognizing __import__('mod') at module level
-- build_ref_table recognizing importlib.import_module('mod') at module level
-- build_ref_table recognizing builtins.__import__('mod')
-- build_ref_table recognizing __builtins__.__import__('mod')
-- Function-scoped keys (func.varname format)
-- Class-scoped keys (ClassName.varname format)
-- Non-import assignments ignored (no false positives)
-- build_ref_table returns dict[str, RefEntry] (type contract)
-- Integration via analyze_python (build_ref_table wired in)
-- build_symbol_table still returns dict[str, str] (R009)
-"""
+"""Tests for ref_table pre-pass infrastructure (build_ref_table + RefEntry)."""
 
 from __future__ import annotations
 
@@ -162,11 +148,6 @@ class TestFunctionScope:
         assert ref["baz.m"].resolved == "os"
 
 
-# ---------------------------------------------------------------------------
-# Class-scoped keys
-# ---------------------------------------------------------------------------
-
-
 class TestClassScope:
     """Class body assignments use ClassName.varname key format."""
 
@@ -178,11 +159,6 @@ class TestClassScope:
         """)
         assert "MyClass.m" in ref
         assert ref["MyClass.m"].resolved == "os"
-
-
-# ---------------------------------------------------------------------------
-# Non-import assignments (no false positives)
-# ---------------------------------------------------------------------------
 
 
 class TestNonImportAssignments:
@@ -214,11 +190,6 @@ class TestNonImportAssignments:
         assert len(ref) == 0
 
 
-# ---------------------------------------------------------------------------
-# Return type contract (R009)
-# ---------------------------------------------------------------------------
-
-
 class TestReturnTypeContract:
     """build_ref_table returns dict[str, RefEntry]; symbol_table stays dict[str, str]."""
 
@@ -244,3 +215,129 @@ class TestReturnTypeContract:
         """build_ref_table on empty source returns empty dict."""
         ref = _build("")
         assert ref == {}
+
+
+class TestMethodScope:
+    """build_ref_table with method_scope produces ClassName.method.var keys."""
+
+    def test_sibling_methods_distinct_keys(self) -> None:
+        """Two methods each importing -> distinct scope keys."""
+        ref = _build("""\
+            class C:
+                def method_a(self):
+                    m = __import__('os')
+                def method_b(self):
+                    m = __import__('json')
+        """)
+        assert "C.method_a.m" in ref, "method_a import should use method-scoped key"
+        assert "C.method_b.m" in ref, "method_b import should use method-scoped key"
+        assert ref["C.method_a.m"].resolved == "os"
+        assert ref["C.method_b.m"].resolved == "json"
+
+    def test_method_scope_does_not_leak_to_module(self) -> None:
+        """Method-scoped import should not appear as bare module-level key."""
+        ref = _build("""\
+            class C:
+                def run(self):
+                    m = __import__('os')
+        """)
+        assert "m" not in ref, "Method-scoped import must not leak to module-level key"
+        assert "C.run.m" in ref
+
+
+class TestRebinding:
+    """Non-import reassignment with Call RHS deletes ref_table entry."""
+
+    def test_rebind_import_to_non_import_call_clears(self) -> None:
+        """m = __import__('os') then m = SafeWrapper() -> entry deleted."""
+        ref = _build("""\
+            m = __import__('os')
+            m = SafeWrapper()
+        """)
+        assert "m" not in ref, "Call reassignment should delete ref_table entry"
+
+    def test_rebind_import_to_another_import_overwrites(self) -> None:
+        """m = __import__('os') then m = __import__('json') -> resolved is 'json'."""
+        ref = _build("""\
+            m = __import__('os')
+            m = __import__('json')
+        """)
+        assert "m" in ref
+        assert ref["m"].resolved == "json", "Second __import__ should overwrite first"
+
+    def test_rebind_to_literal_does_not_clear(self) -> None:
+        """m = __import__('os') then m = 'hello' -> entry preserved (not a Call)."""
+        ref = _build("""\
+            m = __import__('os')
+            m = 'hello'
+        """)
+        assert "m" in ref, "Literal reassignment must NOT clear ref_table entry"
+        assert ref["m"].resolved == "os"
+
+    def test_rebind_to_name_does_not_clear(self) -> None:
+        """m = __import__('os') then m = other_var -> entry preserved (not a Call)."""
+        ref = _build("""\
+            m = __import__('os')
+            m = other_var
+        """)
+        assert "m" in ref, "Name reassignment must NOT clear ref_table entry"
+        assert ref["m"].resolved == "os"
+
+    def test_rebind_in_method_scope(self) -> None:
+        """Method-scoped import cleared by Call reassignment."""
+        ref = _build("""\
+            class C:
+                def run(self):
+                    m = __import__('os')
+                    m = Wrapper()
+        """)
+        assert "C.run.m" not in ref, "Call rebind should delete method-scoped entry"
+        assert "C.m" not in ref, "Flat class key should also not exist"
+
+
+class TestCompoundStatementVisit:
+    """Linear body walk recurses into compound statement bodies."""
+
+    def test_import_inside_if_body(self) -> None:
+        """__import__ inside if block is tracked."""
+        ref = _build("""\
+            if True:
+                m = __import__('os')
+        """)
+        assert "m" in ref, "Import inside if body should be tracked"
+        assert ref["m"].resolved == "os"
+
+    def test_import_inside_for_body(self) -> None:
+        """__import__ inside for loop is tracked."""
+        ref = _build("""\
+            for x in [1]:
+                m = __import__('os')
+        """)
+        assert "m" in ref, "Import inside for body should be tracked"
+        assert ref["m"].resolved == "os"
+
+    def test_import_inside_try_body(self) -> None:
+        """__import__ inside try block is tracked."""
+        ref = _build("""\
+            try:
+                m = __import__('os')
+            except Exception:
+                pass
+        """)
+        assert "m" in ref, "Import inside try body should be tracked"
+        assert ref["m"].resolved == "os"
+
+    def test_import_inside_with_body(self) -> None:
+        """__import__ inside with block is tracked."""
+        ref = _build("with open('f') as fh:\n    m = __import__('os')\n")
+        assert "m" in ref, "Import inside with body should be tracked"
+        assert ref["m"].resolved == "os"
+
+    def test_rebind_inside_if_body_respects_order(self) -> None:
+        """Import then rebind inside if body -> entry cleared."""
+        ref = _build("""\
+            if True:
+                m = __import__('os')
+                m = Wrapper()
+        """)
+        assert "m" not in ref, "Rebind inside compound body should clear entry"
