@@ -43,9 +43,11 @@ def _sub_bodies(node: ast.stmt) -> list[list[ast.stmt]]:
         return [node.body]
     if isinstance(node, ast.If | ast.For | ast.While | ast.AsyncFor):
         return [node.body, node.orelse]
-    if isinstance(node, ast.Try):
+    if isinstance(node, ast.Try | ast.TryStar):
         handler_bodies = [h.body for h in node.handlers]
         return [node.body, *handler_bodies, node.orelse, node.finalbody]
+    if isinstance(node, ast.Match):
+        return [case.body for case in node.cases]
     return []
 
 
@@ -78,7 +80,7 @@ def _walk_body(
     """Walk statement bodies in source order, tracking import assignments.
 
     Recurses into function/class definitions and compound statements
-    (if/for/while/try/with) to visit nested assignments.
+    (if/for/while/try/with/match/try-except*) to visit nested assignments.
     """
     for node in body:
         children = _sub_bodies(node)

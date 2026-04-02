@@ -333,6 +333,33 @@ class TestCompoundStatementVisit:
         assert "m" in ref, "Import inside with body should be tracked"
         assert ref["m"].resolved == "os"
 
+    def test_import_inside_match_case(self) -> None:
+        """__import__ inside match/case body is tracked."""
+        ref = _build("""\
+            match x:
+                case 1:
+                    m = __import__('os')
+                case 2:
+                    n = __import__('subprocess')
+        """)
+        assert "m" in ref, "Import inside match case body should be tracked"
+        assert ref["m"].resolved == "os"
+        assert "n" in ref, "Import in second case body should be tracked"
+        assert ref["n"].resolved == "subprocess"
+
+    def test_import_inside_try_star(self) -> None:
+        """__import__ inside except* (TryStar) handler is tracked."""
+        ref = _build("""\
+            try:
+                m = __import__('os')
+            except* ValueError:
+                n = __import__('subprocess')
+        """)
+        assert "m" in ref, "Import inside try body should be tracked"
+        assert ref["m"].resolved == "os"
+        assert "n" in ref, "Import inside except* handler should be tracked"
+        assert ref["n"].resolved == "subprocess"
+
     def test_rebind_inside_if_body_respects_order(self) -> None:
         """Import then rebind inside if body -> entry cleared."""
         ref = _build("""\
