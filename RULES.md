@@ -6,7 +6,7 @@ Procedural rules are implemented directly in Python modules.
 
 To add a custom rule, copy a section from [template.toml](src/skill_scan/rules/template.toml) into a new `.toml` file or your `--config` file.
 
-**92 rules** across 10 categories.
+**93 rules** across 10 categories.
 
 ## Prompt Injection
 
@@ -120,6 +120,7 @@ To add a custom rule, copy a section from [template.toml](src/skill_scan/rules/t
 | Rule ID | Severity | Description | Confidence |
 |---------|----------|-------------|------------|
 | AGENT-001 | critical | Natural-language coercion to write or modify sensitive system files -- shell configs, SSH keys, cron, systemd units, or CI pipelines | stable |
+| AGENT-006 | critical | Multi-step compound attack instructions — kill-chain sequence (read credential, encode, exfiltrate) detected by structural sliding-window correlation | stable |
 
 ## Obfuscation
 

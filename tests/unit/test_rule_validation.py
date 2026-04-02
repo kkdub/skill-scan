@@ -28,7 +28,7 @@ class TestRuleFileValidation:
         assert len(rules) > 0, f"{toml_file.name} produced zero rules"
 
     # AST-only rules have detection in Python code, not regex patterns
-    _AST_ONLY_RULES = frozenset({"OBFS-001", "EXFIL-008", "EXEC-011", "PI-030"})
+    _AST_ONLY_RULES = frozenset({"OBFS-001", "EXFIL-008", "EXEC-011", "PI-030", "AGENT-006"})
 
     def test_rules_have_patterns(self, toml_file: Path) -> None:
         """Every rule must have at least one detection pattern (AST-only rules exempt)."""

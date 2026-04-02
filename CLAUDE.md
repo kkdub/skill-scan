@@ -74,6 +74,7 @@ src/skill_scan/
   rules/_fewshot_pi.py           # Few-shot conversational attack detector (PI-030)
   rules/_context_heuristic.py    # Context suppression: suppresses PI-010+ inside code fences/comments
   rules/_agent_context_heuristic.py  # AGENT-category post-filter: 4-signal scoring (keyword-position, code-fence, heading-proximity, file-role)
+  rules/_agent_compound_detector.py   # AGENT-006 sliding-window compound kill-chain detector
   rules/data/obfuscation.toml    # OBFS-001..005 (OBFS-001, EXEC-011 have patterns=[]; AST-only)
   rules/data/prompt_injection_jailbreak.toml  # PI-010..016 signatures, PI-020..022 fuzzy, PI-030 stub
   rules/data/agent_manipulation.toml          # AGENT-001 (file-write coercion; category=agent-manipulation)
@@ -92,7 +93,7 @@ For detailed module-level docs, see `.agent/ARCHITECTURE-REFERENCE.md`.
 - `_DETECTORS` tuple in `ast_analyzer.py` — node-level detectors (one finding per node)
 - `_RESOLVERS` tuple in `_ast_split_detector.py` — split-evasion string resolvers; each resolver must return `tuple[str, str] | None` (value, label)
 - `_STRUCTURAL_PI_DETECTORS` tuple in `engine.py` — structural PI detectors (full-content, callback injection pattern); add new PI detectors here alongside `_multiline_pi_findings` and `_fewshot_pi_findings`
-- `_STRUCTURAL_DETECTORS` tuple in `engine.py` — structural post-filter detectors invoked after PI structural detectors; callback signature: `(lines, file_path, findings) -> list[Finding]` (full typed form in invariants below); each detector handles its own category filtering
+- `_STRUCTURAL_DETECTORS` tuple in `engine.py` — structural post-filter detectors invoked after PI structural detectors; callback signature: `(lines, file_path, findings) -> list[Finding]` (full typed form in invariants below); each detector handles its own category filtering; detectors that append new findings (e.g. `detect_compound_attack`) also belong in this tuple alongside post-filters
 - Tree-level detectors needing full symbol table go in `analyze_python()` directly
 - Table-driven configs (`_DANGEROUS_KWARGS`, `_CORRELATION_RULES`, `_SUBPROCESS_CALLS`, etc.) — extend by adding entries
 - New jailbreak TOML rules: add to `rules/data/prompt_injection_jailbreak.toml`; signatures use `confidence='stable'`, fuzzy synonym-slot patterns use `confidence='fuzzy'`; code-only detectors use `patterns=[]` stub (PI-030 pattern)

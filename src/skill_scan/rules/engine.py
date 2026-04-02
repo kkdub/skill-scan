@@ -19,6 +19,7 @@ from skill_scan.models import Finding, Rule
 from skill_scan.normalizer import normalize_text
 from skill_scan.rules._agent_context_heuristic import suppress_agent_findings
 from skill_scan.rules._context_heuristic import suppress_in_safe_context
+from skill_scan.rules._agent_compound_detector import detect_compound_attack
 from skill_scan.rules._fewshot_pi import _fewshot_pi_findings
 from skill_scan.rules._multiline_pi import _multiline_pi_findings
 
@@ -30,7 +31,7 @@ _STRUCTURAL_PI_DETECTORS = (_multiline_pi_findings, _fewshot_pi_findings)
 
 # Structural post-filter detectors invoked after PI structural detectors.
 # Each detector receives (lines, file_path, findings) and returns the filtered list.
-_STRUCTURAL_DETECTORS = (suppress_agent_findings,)
+_STRUCTURAL_DETECTORS = (suppress_agent_findings, detect_compound_attack)
 
 
 def match_line(
