@@ -32,3 +32,10 @@ exclude_patterns = [
 path_exclude_patterns = [
   'tests?/'
 ]
+
+[rules.AGENT-006]
+severity = "critical"
+category = "agent-manipulation"
+description = "Multi-step compound attack instructions — kill-chain sequence (read credential, encode, exfiltrate) detected by structural sliding-window correlation"
+recommendation = "Remove instruction sequences that form a read->encode->exfiltrate chain; split into separate non-correlated operations or use dedicated secure transfer tools"
+patterns = []
