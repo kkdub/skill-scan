@@ -20,7 +20,10 @@ env/
 *.swo
 
 # Claude Code local settings
-.claude/
+.claude/*
+!.claude/settings.json
+!.claude/settings.json.lock
+!.claude/hooks/
 
 # Environment
 .env
