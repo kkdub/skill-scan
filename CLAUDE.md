@@ -8,7 +8,7 @@ Security scanner for agent skills — detect prompt injection, malicious code, a
 - **Code patterns and rules**: `.agent/standards/`
 - **Workflow context**: `.agent/WORKFLOW.md`
 - **Detailed module docs**: `.agent/ARCHITECTURE-REFERENCE.md`
-- **Known debt**: `.agent/status/debt.yaml`
+- **Known debt**: `.agent/context/debt.yaml`
 
 ## Project Context
 
