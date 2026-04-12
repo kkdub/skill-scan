@@ -1,3 +1,5 @@
+This is work in progress. Static analysis is unlikely to be sufficient, but it is useful.
+
 # skill-scan
 
 Security scanner for agent skills — detects prompt injection, malicious code, and data exfiltration before installation.
