@@ -12,7 +12,7 @@ jobs:
     name: Quality Checks
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98  # v4
+      - uses: actions/checkout@900f2210b1d28bbbd0bd22d17926b9e224e8f231  # v4
 
       - name: Install uv
         uses: astral-sh/setup-uv@5a095e7a2014a4212f075830d4f7277575a9d098  # v7
@@ -70,7 +70,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98  # v4
+      - uses: actions/checkout@900f2210b1d28bbbd0bd22d17926b9e224e8f231  # v4
 
       - name: Install uv
         uses: astral-sh/setup-uv@5a095e7a2014a4212f075830d4f7277575a9d098  # v7
@@ -132,7 +132,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
     steps:
-      - uses: actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98  # v4
+      - uses: actions/checkout@900f2210b1d28bbbd0bd22d17926b9e224e8f231  # v4
 
       - name: Install uv
         uses: astral-sh/setup-uv@5a095e7a2014a4212f075830d4f7277575a9d098  # v7
